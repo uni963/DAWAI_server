@@ -733,7 +733,7 @@ const DiffSingerTrack = ({
         
         // 相対パスの場合は完全なURLに変換
         if (audioUrl.startsWith('/')) {
-          audioUrl = `http://localhost:8001${audioUrl}`
+          audioUrl = `${audioUrl}`
         }
         
         console.log('DiffSingerTrack: 音声ファイルURL', audioUrl)

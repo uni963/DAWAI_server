@@ -126,7 +126,7 @@ const EnhancedMidiEditor = ({
       tempo: state.tempo
     },
     {
-      apiEndpoint: 'http://localhost:8001',
+      apiEndpoint: '/ai',
       debounceDelay: predictionSettings?.predictionDelay || 100,
       requestTimeout: 5000,
       maxRetries: 3,
@@ -161,7 +161,7 @@ const EnhancedMidiEditor = ({
         };
         
         // バックエンドに要約を送信（実際のAPIエンドポイントに応じて調整）
-        const response = await fetch('http://localhost:8001/update-summary', {
+        const response = await fetch('/ai/update-summary', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

@@ -7,7 +7,7 @@
 
 // Default API configuration
 const DEFAULT_CONFIG = {
-  baseUrl: 'http://localhost:8001/api/voice',
+  baseUrl: '/ai/voice',
   maxRetries: 3,
   retryDelay: 1000,
   timeout: 30000,

@@ -100,7 +100,7 @@ class MagentaGhostTextEngine {
         this.magentaConfig = {
           // Phi-2 - 高速予測（バックエンドAPI使用）
           phi2: {
-            url: 'http://localhost:8001/predict',
+            url: '/ai/predict',
             name: 'Phi-2 (高速)',
             description: 'Phi-2モデルによる高速予測',
             modelClass: null, // バックエンドAPIを使用するためnull
@@ -146,7 +146,7 @@ class MagentaGhostTextEngine {
         },
         // Phi-2 - 高速予測（バックエンドAPI使用）
         phi2: {
-          url: 'http://localhost:8001/predict',
+          url: '/ai/predict',
           name: 'Phi-2 (高速)',
           description: 'Phi-2モデルによる高速予測',
           modelClass: null, // バックエンドAPIを使用するためnull
@@ -191,7 +191,7 @@ class MagentaGhostTextEngine {
       if (this.modelType === 'phi2') {
         console.log('🔮 Phi-2: Checking backend availability...')
         try {
-          const response = await fetch('http://localhost:8001/health', {
+          const response = await fetch('/ai/health', {
             method: 'GET',
             headers: {
               'Content-Type': 'application/json',
@@ -647,7 +647,7 @@ class MagentaGhostTextEngine {
       
       console.log('🔮 Phi-2: Request data:', JSON.stringify(requestData, null, 2))
       
-      const response = await fetch('http://localhost:8001/predict', {
+      const response = await fetch('/ai/predict', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

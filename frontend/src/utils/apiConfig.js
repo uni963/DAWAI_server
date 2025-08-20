@@ -2,8 +2,8 @@
 const API_CONFIG = {
   // 開発環境
   development: {
-    baseURL: 'http://localhost:8001',
-    ghostTextURL: 'http://localhost:8002',
+    baseURL: '/ai',
+    ghostTextURL: '/ai',
     timeout: 30000,
     retries: 3
   },

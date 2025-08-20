@@ -6,7 +6,7 @@ import GhostPredictionRenderer from './GhostPredictionRenderer.js';
 export default class GhostTextSystem {
   constructor(options = {}) {
     this.options = {
-      apiEndpoint: options.apiEndpoint || 'http://localhost:8001',
+      apiEndpoint: options.apiEndpoint || '/ai',
       debounceDelay: options.debounceDelay || 100,
       requestTimeout: options.requestTimeout || 5000,
       maxRetries: options.maxRetries || 3,

@@ -29,7 +29,7 @@ export default function useGhostTextIntegration(midiEditor, options = {}) {
     const initializeSystem = async () => {
       try {
         const system = new GhostTextSystem({
-          apiEndpoint: options.apiEndpoint || 'http://localhost:8001',
+          apiEndpoint: options.apiEndpoint || '/ai',
           debounceDelay: options.debounceDelay || 100,
           requestTimeout: options.requestTimeout || 5000,
           maxRetries: options.maxRetries || 3,
