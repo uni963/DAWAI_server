@@ -161,7 +161,7 @@ const EnhancedMidiEditor = ({
         };
         
         // バックエンドに要約を送信（実際のAPIエンドポイントに応じて調整）
-        const response = await fetch('/ai/update-summary', {
+        const response = await fetch('/ai/api/update-summary', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

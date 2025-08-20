@@ -1,4 +1,4 @@
-const API_BASE_URL = '/ai/voice'; // DiffSingerサーバーのAPI
+const API_BASE_URL = '/ai/api/voice'; // DiffSingerサーバーのAPI
 
 const diffsingerClient = {
   async synthesize(trackData) {

@@ -168,7 +168,7 @@ ${actions}
   async requestSummary(prompt) {
     try {
       // AIエンジンを使用して要約を実行
-      const response = await fetch('/ai/chat', {
+      const response = await fetch('/ai/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

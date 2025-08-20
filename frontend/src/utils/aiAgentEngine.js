@@ -355,7 +355,7 @@ class AIAgentEngine {
       // バックエンドサーバーの接続確認（オプショナル）
       try {
         console.log('AIAgentEngine: Checking backend server health...')
-        const response = await fetch('/ai/health', {
+        const response = await fetch('/ai/api/health', {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
@@ -516,7 +516,7 @@ class AIAgentEngine {
       }
       console.log('AIAgentEngine: Sending request to backend:', requestBody)
 
-      const response = await fetch('/ai/generate', {
+      const response = await fetch('/ai/api/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -585,7 +585,7 @@ class AIAgentEngine {
     this.notifyListeners('streamingStarted', { message })
 
     try {
-      const response = await fetch('/ai/stream/chat', {
+      const response = await fetch('/ai/api/stream/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -792,7 +792,7 @@ class AIAgentEngine {
     const sensePrompt = this.generateSensePrompt(prompt, context)
     
     try {
-      const response = await fetch('/ai/stream/agent', {
+      const response = await fetch('/ai/api/stream/agent', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -892,7 +892,7 @@ class AIAgentEngine {
     const planPrompt = this.generatePlanPrompt(prompt, context, senseResult)
     
     try {
-      const response = await fetch('/ai/stream/agent', {
+      const response = await fetch('/ai/api/stream/agent', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -994,7 +994,7 @@ class AIAgentEngine {
     const actPrompt = this.generateActPrompt(prompt, context, planResult)
     
     try {
-      const response = await fetch('/ai/stream/agent', {
+      const response = await fetch('/ai/api/stream/agent', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -1995,7 +1995,7 @@ ${prompt}
       const agentPrompt = this.generateAgentPrompt(userPrompt, context)
       
       // バックエンドにリクエスト
-      const response = await fetch('/ai/agent', {
+      const response = await fetch('/ai/api/agent', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

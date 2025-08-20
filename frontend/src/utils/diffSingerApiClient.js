@@ -7,7 +7,7 @@
 
 // Default API configuration
 const DEFAULT_CONFIG = {
-  baseUrl: '/ai/voice',
+  baseUrl: '/ai/api/voice',
   maxRetries: 3,
   retryDelay: 1000,
   timeout: 30000,
