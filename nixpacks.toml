@@ -1,11 +1,27 @@
 [phases.setup]
-nixPkgs = ["python39", "python39Packages.pip"]
+nixPkgs = [
+    "python39", 
+    "python39Packages.pip", 
+    "python39Packages.setuptools",
+    "nodejs-18_x",
+    "npm"
+]
 
 [phases.install]
-cmds = ["pip install -r backend/requirements.txt"]
+cmds = [
+    "pip install --upgrade pip",
+    "pip install -r backend/requirements.txt",
+    "cd frontend && npm install"
+]
 
 [phases.build]
-cmds = ["echo 'Build completed'"]
+cmds = [
+    "echo 'Full-stack application setup completed'"
+]
 
 [start]
-cmd = "python backend/main.py"
+cmd = "python main.py"
+
+[variables]
+PYTHONPATH = "."
+NODE_ENV = "production"
