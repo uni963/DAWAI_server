@@ -13,6 +13,11 @@ import signal
 import uvicorn
 from pathlib import Path
 
+# 環境変数のデフォルト値を設定（.envファイルに依存しない）
+os.environ.setdefault("PORT", "3000")
+os.environ.setdefault("HOST", "0.0.0.0")
+os.environ.setdefault("NODE_ENV", "production")
+
 # バックエンドディレクトリをPythonパスに追加
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'backend'))
 
