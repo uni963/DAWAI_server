@@ -2706,7 +2706,7 @@ const App = () => {
       
       try {
         // FastAPI バックエンドにリクエストを送信
-        const response = await fetch('http://localhost:8001/api/chat', {
+        const response = await fetch('/ai/chat', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

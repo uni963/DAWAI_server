@@ -1995,7 +1995,7 @@ ${prompt}
       const agentPrompt = this.generateAgentPrompt(userPrompt, context)
       
       // バックエンドにリクエスト
-      const response = await fetch('http://localhost:8000/api/agent', {
+      const response = await fetch('/ai/agent', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

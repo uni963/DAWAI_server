@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:8001/api/voice'; // DiffSingerサーバーはポート8001で起動
+const API_BASE_URL = '/ai/voice'; // DiffSingerサーバーのAPI
 
 const diffsingerClient = {
   async synthesize(trackData) {
