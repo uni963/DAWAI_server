@@ -232,137 +232,88 @@ const AIAssistantChatBox = ({
     setNewMessage("");
 
           if (chatMode === "agent") {
-        // AI Agent モード（ストリーミング対応）
+        // AI Agent モード（シンプル化版）
         setProcessingState(PROCESSING_STATES.GENERATING);
-        
-        // ストリーミング状態をリセット
-        setStreamingMessage(null);
-        setStreamingPhase(null);
 
-      try {
-        // 重い処理を簡素化
-        const getTracksWithNotes = () => {
-          if (!existingTracks) return [];
-          return existingTracks.filter(track => track.midiData?.notes?.length > 0);
-        };
-
-        const context = {
-          currentTrack,
-          projectInfo,
-          existingTracks,
-          musicContext: {
-            projectName: projectInfo?.name,
-            tempo: projectInfo?.tempo,
-            key: projectInfo?.key,
-            timeSignature: projectInfo?.timeSignature,
-            currentTime: projectInfo?.currentTime,
-            totalDuration: projectInfo?.totalDuration,
-            isPlaying: projectInfo?.isPlaying,
-            tracksCount: projectInfo?.tracksCount,
-            activeTab: projectInfo?.activeTab,
-            tracksWithNotes: getTracksWithNotes().slice(0, 5), // 制限
-            currentTrackDetails: currentTrack ? {
-              id: currentTrack.id,
+        try {
+          // シンプルなコンテキスト
+          const context = {
+            projectName: projectInfo?.name || "無題のプロジェクト",
+            tempo: projectInfo?.tempo || 120,
+            key: projectInfo?.key || "C",
+            tracksCount: existingTracks?.length || 0,
+            currentTrack: currentTrack ? {
               name: currentTrack.name,
               type: currentTrack.type,
-              notesCount: currentTrack.midiData?.notes?.length || 0,
-              volume: currentTrack.volume,
-              pan: currentTrack.pan,
-              muted: currentTrack.muted,
-              solo: currentTrack.solo
-            } : null
-          },
-        };
+              notesCount: currentTrack.midiData?.notes?.length || 0
+            } : null,
+            // 過去の会話履歴を含める
+            chatHistory: getCurrentSectionMessages().slice(-3).map(m => 
+              `${m.sender}: ${m.text}`
+            ).join('\n')
+          };
 
         // AI Agent Engineの初期化状態を確認
         if (!window.aiAgentEngine) {
           throw new Error('AI Agent Engine not initialized');
         }
 
-        // AI Agent Engineに現在の設定を渡す
-        if (globalSettings?.aiAssistant) {
-          await window.aiAgentEngine.reinitialize({
-            apiKeys: globalSettings.aiAssistant.apiKeys || {},
-            models: globalSettings.aiAssistant.models || {}
-          });
-        }
-        
-        // 現在のモデルを設定
-        if (currentModel) {
-          window.aiAgentEngine.setModel(currentModel);
-        }
+          // 設定の更新
+          if (globalSettings?.aiAssistant && currentModel) {
+            window.aiAgentEngine.setModel(currentModel);
+          }
 
-        console.log('AIAssistantChatBox: Using streamAgentAction for agent mode');
+          // ストリーミングレスポンス用のメッセージを作成
+          const streamingMessage = {
+            id: Date.now() + Math.random(),
+            sender: "assistant",
+            text: "",
+            timestamp: new Date().toISOString(),
+            isStreaming: true
+          };
+          addMessageToCurrentSection(streamingMessage);
 
-        // ストリーミングレスポンス用のメッセージを作成
-        const streamingMessage = {
-          id: Date.now() + Math.random(),
-          sender: "assistant",
-          text: "",
-          timestamp: new Date().toISOString(),
-          isStreaming: true,
-          hasPendingChanges: false
-        };
-        addMessageToCurrentSection(streamingMessage);
+          // シンプルなストリーミングチャットを実行（エージェント用プロンプト付き）
+          const agentPrompt = `あなたは音楽制作のエキスパートアシスタントです。
+プロジェクト情報: ${JSON.stringify(context, null, 2)}
 
-        // ストリーミングAgent modeを実行
-        const result = await window.aiAgentEngine.streamAgentAction(
-          currentMessage, 
-          context,
-          (chunk, fullResponse) => {
-            // ストリーミング中のテキストを更新
-            setChatSections(prev => prev.map(section => 
-              section.id === currentSectionId 
-                ? {
-                    ...section,
-                    messages: section.messages.map(msg => 
-                      msg.id === streamingMessage.id 
-                        ? { ...msg, text: fullResponse }
-                        : msg
-                    )
-                  }
-                : section
-            ));
-          }
-        );
-        
-        // ストリーミング完了後、最終的なメッセージを更新
-        let displayText = '🤖 Agent Mode: 操作が完了しました';
-        
-        if (result && typeof result === 'object') {
-          if (result.summary) {
-            displayText = `🤖 Agent Mode: ${String(result.summary)}`;
-          }
-          if (result.nextSteps) {
-            displayText += `\n\n${String(result.nextSteps)}`;
-          }
-          if (result.error) {
-            displayText += `\n\nエラー: ${String(result.error)}`;
-          }
-        } else if (typeof result === 'string') {
-          displayText = `🤖 Agent Mode: ${result}`;
-        } else {
-          displayText = `🤖 Agent Mode: ${String(result)}`;
-        }
-        
-        // 最終的なメッセージに更新
-        setChatSections(prev => prev.map(section => 
-          section.id === currentSectionId 
-            ? {
-                ...section,
-                messages: section.messages.map(msg => 
-                  msg.id === streamingMessage.id 
-                    ? { 
-                        ...msg, 
-                        text: displayText,
-                        isStreaming: false,
-                        agentActions: Array.isArray(result?.actions) ? result.actions : []
-                      }
-                    : msg
-                )
-              }
-            : section
-        ));
+ユーザーの要求: ${currentMessage}
+
+具体的で実用的なアドバイスを提供してください。`;
+
+          const result = await window.aiAgentEngine.streamChat(
+            agentPrompt,
+            context.chatHistory,
+            (chunk, fullResponse) => {
+              // ストリーミング中のテキストを更新
+              setChatSections(prev => prev.map(section => 
+                section.id === currentSectionId 
+                  ? {
+                      ...section,
+                      messages: section.messages.map(msg => 
+                        msg.id === streamingMessage.id 
+                          ? { ...msg, text: fullResponse }
+                          : msg
+                      )
+                    }
+                  : section
+              ));
+            }
+          );
+
+          // ストリーミング完了後、最終的なメッセージに更新
+          setChatSections(prev => prev.map(section => 
+            section.id === currentSectionId 
+              ? {
+                  ...section,
+                  messages: section.messages.map(msg => 
+                    msg.id === streamingMessage.id 
+                      ? { ...msg, text: result, isStreaming: false }
+                      : msg
+                  )
+                }
+              : section
+          ));
         
       } catch (error) {
         console.error("AI Agent generation error:", error);
@@ -378,7 +329,7 @@ const AIAssistantChatBox = ({
       }
     } else {
       // Chat モード（ストリーミング対応）
-      setProcessingState(PROCESSING_STATES.THINKING);
+      setProcessingState(PROCESSING_STATES.GENERATING);
       
       try {
         if (!currentModel) {
@@ -395,61 +346,18 @@ const AIAssistantChatBox = ({
         const apiKeys = globalSettings?.aiAssistant?.apiKeys || {};
         const currentMessages = getCurrentSectionMessages();
         
-        // コンテキストを簡素化
-        const detailedContext = {
-          chatHistory: currentMessages.slice(-3).map(m => `${m.sender}: ${m.text}`).join('\n'),
-          projectInfo: {
-            name: projectInfo?.name,
-            tempo: projectInfo?.tempo,
-            key: projectInfo?.key,
-            timeSignature: projectInfo?.timeSignature,
-            currentTime: projectInfo?.currentTime,
-            totalDuration: projectInfo?.totalDuration,
-            isPlaying: projectInfo?.isPlaying,
-            tracksCount: projectInfo?.tracksCount,
-            activeTab: projectInfo?.activeTab
-          },
-          tracks: existingTracks?.slice(0, 10).map(track => ({
-            id: track.id,
-            name: track.name,
-            type: track.type,
-            notesCount: track.midiData?.notes?.length || 0,
-            volume: track.volume,
-            pan: track.pan,
-            muted: track.muted,
-            solo: track.solo
-          })),
-          currentTrack: currentTrack ? {
-            id: currentTrack.id,
-            name: currentTrack.name,
-            type: currentTrack.type,
-            notesCount: currentTrack.midiData?.notes?.length || 0,
-            volume: currentTrack.volume,
-            pan: currentTrack.pan,
-            muted: currentTrack.muted,
-            solo: currentTrack.solo
-          } : null
-        };
+        // シンプルなコンテキスト
+        const simpleContext = currentMessages.slice(-3).map(m => `${m.sender}: ${m.text}`).join('\n');
 
         // AI Agent Engineの初期化状態を確認
         if (!window.aiAgentEngine) {
           throw new Error('AI Agent Engine not initialized');
         }
 
-        // AI Agent Engineに現在の設定を渡す
-        if (globalSettings?.aiAssistant) {
-          await window.aiAgentEngine.reinitialize({
-            apiKeys: globalSettings.aiAssistant.apiKeys || {},
-            models: globalSettings.aiAssistant.models || {}
-          });
-        }
-        
-        // 現在のモデルを設定
+        // 設定の更新
         if (currentModel) {
           window.aiAgentEngine.setModel(currentModel);
         }
-
-        console.log('AIAssistantChatBox: Using streamChat for chat mode');
 
         // ストリーミングレスポンス用のメッセージを作成
         const streamingMessage = {
@@ -457,15 +365,14 @@ const AIAssistantChatBox = ({
           sender: "assistant",
           text: "",
           timestamp: new Date().toISOString(),
-          isStreaming: true,
-          hasPendingChanges: false
+          isStreaming: true
         };
         addMessageToCurrentSection(streamingMessage);
 
         // ストリーミングチャットを実行
         const responseText = await window.aiAgentEngine.streamChat(
           currentMessage,
-          detailedContext,
+          simpleContext,
           (chunk, fullResponse) => {
             // ストリーミング中のテキストをリアルタイム更新
             setChatSections(prev => prev.map(section => 
