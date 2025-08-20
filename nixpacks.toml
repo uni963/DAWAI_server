@@ -1,9 +1,10 @@
 [phases.setup]
-nixPkgs = ["python311", "python311Packages.pip", "nodejs-18_x"]
+nixPkgs = ["python311", "python311Packages.pip", "python311Packages.venv", "nodejs-18_x"]
 
 [phases.install]
 cmds = [
-    "pip install -r requirements.txt",
+    "python -m venv /opt/venv",
+    "source /opt/venv/bin/activate && pip install -r requirements.txt",
     "npm install -g pnpm",
     "cd frontend && cp package.light.json package.json && pnpm install"
 ]
@@ -15,4 +16,4 @@ cmds = [
 ]
 
 [start]
-cmd = "python main.py"
+cmd = "source /opt/venv/bin/activate && python main.py"
