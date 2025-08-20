@@ -5,8 +5,7 @@ nixPkgs = ["python311", "python311Packages.pip", "nodejs-18_x"]
 cmds = [
     "python -m venv /opt/venv",
     "source /opt/venv/bin/activate && pip install -r requirements.txt",
-    "npm install -g pnpm",
-    "cd frontend && cp package.light.json package.json && pnpm install"
+    "npm install -g pnpm && cd frontend && cp package.light.json package.json && pnpm install"
 ]
 
 [phases.build]
