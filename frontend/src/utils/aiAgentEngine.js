@@ -588,7 +588,8 @@ class AIAgentEngine {
       const response = await fetch('/ai/api/stream/chat', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream'
         },
         body: JSON.stringify({
           message: message,
@@ -795,7 +796,8 @@ class AIAgentEngine {
       const response = await fetch('/ai/api/stream/agent', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream'
         },
         body: JSON.stringify({
           prompt: sensePrompt,
@@ -895,7 +897,8 @@ class AIAgentEngine {
       const response = await fetch('/ai/api/stream/agent', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream'
         },
         body: JSON.stringify({
           prompt: planPrompt,
@@ -997,7 +1000,8 @@ class AIAgentEngine {
       const response = await fetch('/ai/api/stream/agent', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream'
         },
         body: JSON.stringify({
           prompt: actPrompt,
@@ -1998,7 +2002,8 @@ ${prompt}
       const response = await fetch('/ai/api/agent', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream'
         },
         body: JSON.stringify({
           prompt: agentPrompt,
