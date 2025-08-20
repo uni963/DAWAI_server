@@ -1,0 +1,105 @@
+# 依存関係
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ビルド結果
+dist/
+build/
+*.egg-info/
+*.egg
+out/
+.next/
+.nuxt/
+.vuepress/dist
+.serverless/
+.fusebox/
+.dynamodb/
+
+# 環境設定
+.env
+.env.local
+.env.production
+.env.development
+.env.test
+.env.*.local
+
+# ログ
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# システムファイル
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE/エディタ
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# キャッシュ
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# テスト
+coverage/
+.nyc_output/
+.coverage
+.pytest_cache/
+htmlcov/
+.tox/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# 一時ファイル
+*.tmp
+*.temp
+.tmp/
+.temp/
+
+# 音声ファイル（必要に応じて）
+# *.wav
+# *.mp3
+# *.ogg
+# *.flac
+
+# データベース
+*.db
+*.sqlite
+*.sqlite3
+
+# バックアップ
+*.bak
+*.backup
+*.old
+
+# パッケージロック（必要に応じて）
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
