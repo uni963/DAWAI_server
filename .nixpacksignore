@@ -4,3 +4,5 @@ node_modules/
 .git/
 .DS_Store
 Thumbs.db
+*.pyc
+__pycache__/
