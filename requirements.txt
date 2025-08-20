@@ -1,0 +1,15 @@
+fastapi>=0.112.0
+uvicorn[standard]>=0.30.0
+python-dotenv>=1.0.1
+google-generativeai>=0.7.2
+pydantic>=2.9.2
+python-multipart>=0.0.9
+requests>=2.32.3
+aiohttp>=3.10.10
+numpy>=2.1.0
+soundfile>=0.12.1
+PyYAML>=6.0.1
+tqdm>=4.66.4
+psutil>=5.9.0
+onnxruntime>=1.18.0
+librosa>=0.10.1
