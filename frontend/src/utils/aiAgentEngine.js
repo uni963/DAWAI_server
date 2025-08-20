@@ -681,9 +681,9 @@ class AIAgentEngine {
     }
   }
 
-  // ストリーミングAgent mode機能（Sense-Plan-Act対応）
+  // ストリーミングAgent mode機能（シンプル化版）
   async streamAgentAction(prompt, context = {}, onChunk = null) {
-    console.log('AIAgentEngine: streamAgentAction called with prompt:', prompt, 'and context:', context)
+    console.log('AIAgentEngine: streamAgentAction called with prompt:', prompt)
     
     if (!this.isInitialized) {
       throw new Error('AI Agent Engine not initialized')
@@ -702,69 +702,29 @@ class AIAgentEngine {
     this.notifyListeners('agentStreamingStarted', { prompt })
 
     try {
-      // Phase 1: Sense - 現状把握
-      console.log('AIAgentEngine: Starting Sense phase...')
-      const senseResult = await this.executeSensePhase(prompt, context, onChunk)
+      // シンプルなエージェント用プロンプトを作成
+      const agentPrompt = `あなたは音楽制作のエキスパートアシスタントです。
+
+プロジェクト情報:
+- プロジェクト名: ${context.projectName || '無題のプロジェクト'}
+- テンポ: ${context.tempo || 120} BPM
+- キー: ${context.key || 'C'}
+- トラック数: ${context.tracksCount || 0}
+${context.currentTrack ? `- 現在のトラック: ${context.currentTrack.name} (${context.currentTrack.type})` : ''}
+
+${context.chatHistory ? `\n過去の会話:\n${context.chatHistory}` : ''}
+
+ユーザーの要求: ${prompt}
+
+音楽制作に関する具体的で実用的なアドバイスを提供してください。`
+
+      // 通常のストリーミングチャットを使用
+      const response = await this.streamChat(agentPrompt, '', onChunk)
       
-      if (!senseResult.understood) {
-        this.notifyListeners('agentStreamingCompleted', {
-          prompt: prompt,
-          result: {
-            actions: [],
-            summary: 'コンテキストの理解が不完全です',
-            nextSteps: 'より具体的な指示をください',
-            success: false,
-            error: 'Context understanding failed',
-            phase: 'sense_failed'
-          }
-        })
-        return {
-          actions: [],
-          summary: 'コンテキストの理解が不完全です',
-          nextSteps: 'より具体的な指示をください',
-          success: false,
-          error: 'Context understanding failed'
-        }
-      }
-
-      // Phase 2: Plan - 実行計画の策定
-      console.log('AIAgentEngine: Starting Plan phase...')
-      const planResult = await this.executePlanPhase(prompt, context, senseResult, onChunk)
-      
-      if (!planResult.actions || planResult.actions.length === 0) {
-        this.notifyListeners('agentStreamingCompleted', {
-          prompt: prompt,
-          result: {
-            actions: [],
-            summary: '実行可能なアクションが見つかりませんでした',
-            nextSteps: '別の方法で指示をください',
-            success: false,
-            error: 'No actionable plan found',
-            phase: 'plan_failed'
-          }
-        })
-        return {
-          actions: [],
-          summary: '実行可能なアクションが見つかりませんでした',
-          nextSteps: '別の方法で指示をください',
-          success: false,
-          error: 'No actionable plan found'
-        }
-      }
-
-      // Phase 3: Act - アクションの実行
-      console.log('AIAgentEngine: Starting Act phase...')
-      const actResult = await this.executeActPhase(prompt, context, planResult, onChunk)
-
-      // 最終結果を返す
+      // 結果を返す
       const finalResult = {
-        actions: actResult.actions || [],
-        summary: actResult.summary || '操作が完了しました',
-        nextSteps: actResult.nextSteps || '次のステップを実行してください',
-        success: actResult.success !== false,
-        error: actResult.error || '',
-        hasPendingChanges: this.hasPendingChanges(),
-        phase: 'completed'
+        response: response,
+        success: true
       }
 
       this.notifyListeners('agentStreamingCompleted', {
@@ -772,7 +732,7 @@ class AIAgentEngine {
         result: finalResult
       })
 
-      return finalResult
+      return response
 
     } catch (error) {
       console.error('AIAgentEngine: Agent streaming error:', error)

@@ -273,17 +273,10 @@ const AIAssistantChatBox = ({
           };
           addMessageToCurrentSection(streamingMessage);
 
-          // シンプルなストリーミングチャットを実行（エージェント用プロンプト付き）
-          const agentPrompt = `あなたは音楽制作のエキスパートアシスタントです。
-プロジェクト情報: ${JSON.stringify(context, null, 2)}
-
-ユーザーの要求: ${currentMessage}
-
-具体的で実用的なアドバイスを提供してください。`;
-
-          const result = await window.aiAgentEngine.streamChat(
-            agentPrompt,
-            context.chatHistory,
+          // シンプル化されたエージェントアクションを実行
+          const result = await window.aiAgentEngine.streamAgentAction(
+            currentMessage,
+            context,
             (chunk, fullResponse) => {
               // ストリーミング中のテキストを更新
               setChatSections(prev => prev.map(section => 
@@ -315,15 +308,25 @@ const AIAssistantChatBox = ({
               : section
           ));
         
-      } catch (error) {
+              } catch (error) {
         console.error("AI Agent generation error:", error);
-        const errorResponse = {
-          id: Date.now() + Math.random(),
-          sender: "assistant",
-          text: "AI Agentでエラーが発生しました。しばらく時間をおいて再度お試しください。",
-          timestamp: new Date().toISOString()
-        };
-        addMessageToCurrentSection(errorResponse);
+        // エラー時はストリーミングメッセージを更新
+        setChatSections(prev => prev.map(section => 
+          section.id === currentSectionId 
+            ? {
+                ...section,
+                messages: section.messages.map(msg => 
+                  msg.id === streamingMessage.id 
+                    ? { 
+                        ...msg, 
+                        text: `エラーが発生しました: ${error.message}`,
+                        isStreaming: false 
+                      }
+                    : msg
+                )
+              }
+            : section
+        ));
       } finally {
         setProcessingState(PROCESSING_STATES.IDLE);
       }
