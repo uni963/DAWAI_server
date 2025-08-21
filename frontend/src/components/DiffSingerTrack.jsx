@@ -1442,31 +1442,29 @@ const DiffSingerTrack = ({
   }, [trackId, state])
 
   return (
-    <div className="diffsinger-track-container flex flex-col h-full bg-gray-900 dark:bg-gray-900">
+    <div className="diffsinger-track-container flex flex-col h-full bg-gray-900 dark:bg-gray-900 relative">
+      {/* 開発中警告バナー */}
+      <div className="bg-red-600/90 text-white px-4 py-2 border-b border-red-500 flex items-center justify-center space-x-2 text-sm font-medium">
+        <AlertTriangle className="w-4 h-4" />
+        <span>⚠️ 開発中機能 - DiffSinger音声合成機能はまだ開発中です。合成音声機能は動作しません。現在はMIDIエディターとしてのみ使用可能です。</span>
+      </div>
+      
       {/* ツールバー */}
       <div className="flex items-center justify-between p-2 bg-gray-800 dark:bg-gray-800 border-b border-gray-700 dark:border-gray-700">
         <div className="flex items-center space-x-2">
-          <Badge variant="secondary" className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+          <Badge variant="secondary" className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
             <Mic className="w-3 h-3 mr-1" />
-            {trackName}
+            {trackName} (開発中)
           </Badge>
           <Button 
             onClick={generateVoice} 
-            disabled={isGenerating}
+            disabled={true}
             size="sm"
-            className="bg-purple-600 hover:bg-purple-700"
+            className="bg-gray-600 hover:bg-gray-600 cursor-not-allowed opacity-50"
+            title="開発中機能 - 音声合成機能はまだ実装されていません"
           >
-            {isGenerating ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                生成中...
-              </>
-            ) : (
-              <>
-                <AudioWaveform className="w-4 h-4 mr-1" />
-                音声生成
-              </>
-            )}
+            <AlertTriangle className="w-4 h-4 mr-1" />
+            音声生成（開発中）
           </Button>
           <Button 
             onClick={exportProjectData} 

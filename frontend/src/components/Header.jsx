@@ -302,7 +302,7 @@ const Header = ({
             {currentFileName}
           </span>
           <span className="text-xs text-red-400 font-medium mt-1">
-            ⚠️ 開発版 - バグが含まれる可能性があります
+            ⚠️ 開発版 - バグが含まれる可能性があります。また、一部機能が動いていないことを確認しています。
           </span>
         </div>
       </div>

@@ -210,20 +210,27 @@ const TrackList = ({
           return (
             <div
               key={track.id}
-              className={`relative flex border-b border-gray-700 hover:bg-gray-800/30 transition-all duration-200 cursor-pointer ${
+              className={`relative flex border-b border-gray-700 transition-all duration-200 cursor-pointer ${
+                track.type === 'voiceSynth' ? 'hover:bg-red-900/20' : 'hover:bg-gray-800/30'
+              } ${
                 isSelected ? 'bg-blue-500/10 border-blue-500 shadow-lg ring-2 ring-blue-500/50' : ''
-              } ${isCurrentlyResizing ? 'pointer-events-none' : ''}`}
+              } ${isCurrentlyResizing ? 'pointer-events-none' : ''} ${
+                track.type === 'voiceSynth' ? 'border-red-500/30' : ''
+              }`}
               style={{ 
                 height: `${trackHeight}px`,
                 willChange: isCurrentlyResizing ? 'height' : 'auto',
-                borderLeft: isSelected ? '4px solid #3B82F6' : '4px solid transparent',
-                borderRight: isSelected ? '4px solid #3B82F6' : '4px solid transparent',
+                borderLeft: isSelected ? '4px solid #3B82F6' : track.type === 'voiceSynth' ? '4px solid #EF4444' : '4px solid transparent',
+                borderRight: isSelected ? '4px solid #3B82F6' : track.type === 'voiceSynth' ? '4px solid #EF4444' : '4px solid transparent',
                 // 複数選択時の視覚的フィードバック
                 backgroundColor: isSelected ? 
                   (selectedTracks.size > 1 ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.1)') : 
-                  undefined
+                  track.type === 'voiceSynth' ? 'rgba(239, 68, 68, 0.05)' : undefined
               }}
-              title={`Track: ${track.name}, Height: ${trackHeight}px, Resizing: ${isCurrentlyResizing}`}
+              title={track.type === 'voiceSynth' ? 
+                `⚠️ 開発中トラック: ${track.name} - DiffSinger音声合成機能はまだ開発中のため、合成音声機能は動作しません。現在はMIDIエディターとしてのみ使用可能です。` :
+                `Track: ${track.name}, Height: ${trackHeight}px, Resizing: ${isCurrentlyResizing}`
+              }
               onMouseDown={(e) => !isCurrentlyResizing && onTrackSelectStart(track.id, e)}
               onMouseUp={!isCurrentlyResizing ? onTrackSelectEnd : undefined}
               onDoubleClick={(e) => !isCurrentlyResizing && onTrackDoubleClick(track.id, e)}
@@ -251,6 +258,15 @@ const TrackList = ({
                        }`}>
                          {track.name}
                        </span>
+                       {/* DiffSinger/VoiceSynthトラックの開発中マーカー */}
+                       {track.type === 'voiceSynth' && (
+                         <div 
+                           className="flex-shrink-0 bg-red-600/80 text-white px-1.5 py-0.5 rounded text-xs font-bold shadow-sm border border-red-500/50"
+                           title="開発中機能 - DiffSinger音声合成機能はまだ開発中です。合成音声機能は動作しません。"
+                         >
+                           ⚠️開発中
+                         </div>
+                       )}
                      </div>
                    </div>
                    
@@ -364,18 +380,41 @@ const TrackList = ({
                    }}>
                      {/* トラックタイプに応じたコンテンツを表示 */}
                      {track.type === 'voiceSynth' ? (
-                       <VoiceSynthTrack
-                         track={track}
-                         trackState={trackState}
-                         trackHeight={trackHeight}
-                         pixelsPerSecond={pixelsPerSecond}
-                         isSelected={isSelected}
-                         onUpdateTrackState={onUpdateTrackState}
-                         onOpenLyricsPanel={() => {
-                           // 歌詞パネルを開く処理（後で実装）
-                           console.log('Open lyrics panel for track:', track.id);
-                         }}
-                       />
+                       <div className="relative w-full h-full">
+                         <VoiceSynthTrack
+                           track={track}
+                           trackState={trackState}
+                           trackHeight={trackHeight}
+                           pixelsPerSecond={pixelsPerSecond}
+                           isSelected={isSelected}
+                           onUpdateTrackState={onUpdateTrackState}
+                           onOpenLyricsPanel={() => {
+                             // 歌詞パネルを開く処理（後で実装）
+                             console.log('Open lyrics panel for track:', track.id);
+                           }}
+                         />
+                         {/* 開発中マーカー - 赤い斜線パターン */}
+                         <div 
+                           className="absolute inset-0 pointer-events-none z-20"
+                           style={{
+                             background: `repeating-linear-gradient(
+                               45deg,
+                               transparent,
+                               transparent 8px,
+                               rgba(239, 68, 68, 0.4) 8px,
+                               rgba(239, 68, 68, 0.4) 16px
+                             )`
+                           }}
+                           title="開発中機能 - DiffSinger音声合成機能はまだ開発中です"
+                         />
+                         {/* 開発中ラベル */}
+                         <div className="absolute top-2 right-2 z-30">
+                           <div className="bg-red-600/90 text-white px-2 py-1 rounded text-xs font-medium flex items-center space-x-1 shadow-lg backdrop-blur-sm border border-red-500/50">
+                             <span>⚠️</span>
+                             <span>開発中</span>
+                           </div>
+                         </div>
+                       </div>
                      ) : track.subtype === 'drums' ? (
                        <>
                                                     {(() => {
@@ -622,15 +661,18 @@ const TrackList = ({
                   </div>
                 </button>
                 <button 
-                  className="block w-full text-left px-4 py-3 text-sm text-gray-800 dark:text-white hover:bg-gray-100/80 dark:hover:bg-gray-800/80 transition-all duration-200 flex items-center group"
+                  className="block w-full text-left px-4 py-3 text-sm text-gray-800 dark:text-white hover:bg-gray-100/80 dark:hover:bg-gray-800/80 transition-all duration-200 flex items-center group border-l-4 border-red-500/70"
                   onClick={() => onAddTrack('voiceSynth')}
                 >
-                  <div className="w-8 h-8 rounded-lg bg-pink-500/10 dark:bg-pink-400/10 flex items-center justify-center mr-3 group-hover:bg-pink-500/20 dark:group-hover:bg-pink-400/20 transition-colors">
-                    <Music className="h-4 w-4 text-pink-600 dark:text-pink-400" />
+                  <div className="w-8 h-8 rounded-lg bg-red-500/10 dark:bg-red-400/10 flex items-center justify-center mr-3 group-hover:bg-red-500/20 dark:group-hover:bg-red-400/20 transition-colors">
+                    <Music className="h-4 w-4 text-red-600 dark:text-red-400" />
                   </div>
-                  <div>
-                    <div className="font-medium">歌声合成トラック</div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">DiffSinger歌声合成</div>
+                  <div className="flex-1">
+                    <div className="font-medium flex items-center space-x-2">
+                      <span>歌声合成トラック</span>
+                      <span className="bg-red-600/80 text-white px-1.5 py-0.5 rounded text-xs font-bold">⚠️開発中</span>
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">DiffSinger歌声合成（開発中・合成機能未実装）</div>
                   </div>
                 </button>
                 {forceRerenderApp && (
