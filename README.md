@@ -14,6 +14,7 @@ Drumline Cymbals
 Provided by Michael Schorsch Copyright (c) 2016
 
 謝辞（Acknowledgements）
+https://ftp.osuosl.org/pub/musescore/soundfont/MuseScore_General/
 Fluid (R3) SoundFontは、Frank Wen氏の作業に加え、以下の協力者からのサンプルが一部使用されています。
 Suren M. Seron
 Scott Hanan
