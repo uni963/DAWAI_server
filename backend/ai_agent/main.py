@@ -889,6 +889,7 @@ async def agent_action(request: AgentRequest):
 async def stream_chat(request: StreamingChatRequest):
     try:
         print(f"Streaming chat request received: {request.message[:50]}...")
+        print(f"Chat Debug Info: model={request.model}, apiKeys={request.apiKeys}")
         
         model_config = {
             "claude-3-sonnet": {"provider": "anthropic", "api_key_name": "anthropic"},
@@ -905,7 +906,9 @@ async def stream_chat(request: StreamingChatRequest):
             )
 
         config = model_config[request.model]
+        print(f"Chat API Key Debug: provider={config['provider']}, api_key_name={config['api_key_name']}")
         api_key = ai_manager.get_api_key(config["api_key_name"], request.apiKeys)
+        print(f"Chat API Key Result: {api_key[:10] if api_key else 'None'}...")
 
         if not api_key:
             return StreamingResponse(

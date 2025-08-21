@@ -585,6 +585,13 @@ class AIAgentEngine {
     this.notifyListeners('streamingStarted', { message })
 
     try {
+      console.log('AIAgentEngine: Chat Debug Info:', {
+        currentModel: this.currentModel,
+        apiKey: apiKey,
+        apiKeys: this.apiKeys,
+        availableModels: this.availableModels
+      })
+      
       const response = await fetch('/ai/api/stream/chat', {
         method: 'POST',
         headers: {
@@ -595,7 +602,7 @@ class AIAgentEngine {
           message: message,
           context: context,
           model: this.currentModel,
-          apiKey: apiKey
+          apiKeys: this.apiKeys
         })
       })
 
