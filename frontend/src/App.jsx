@@ -2704,54 +2704,38 @@ const App = () => {
       const currentMessage = newMessage
       setNewMessage('')
       
-      // ストリーミング用のメッセージを作成
-      const streamingMessage = {
-        id: messages.length + 2,
-        sender: 'assistant',
-        text: '',
-        timestamp: new Date().toISOString(),
-        isStreaming: true
-      }
-      setMessages(prev => [...prev, streamingMessage])
-      
       try {
-        // ストリーミングチャットを使用
-        if (window.aiAgentEngine) {
-          const responseText = await window.aiAgentEngine.streamChat(
-            currentMessage,
-            messages.slice(-5).map(m => `${m.sender}: ${m.text}`).join('\n'),
-            (chunk, fullResponse) => {
-              // ストリーミング中のテキストをリアルタイム更新
-              setMessages(prev => prev.map(msg => 
-                msg.id === streamingMessage.id 
-                  ? { ...msg, text: fullResponse, isStreaming: true }
-                  : msg
-              ))
-            }
-          )
-          
-          // ストリーミング完了後、最終的なメッセージに更新
-          setMessages(prev => prev.map(msg => 
-            msg.id === streamingMessage.id 
-              ? { ...msg, text: responseText, isStreaming: false }
-              : msg
-          ))
-        } else {
-          throw new Error('AI Agent Engine not available')
+        // FastAPI バックエンドにリクエストを送信
+        const response = await fetch('/ai/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            message: currentMessage,
+            context: messages.slice(-5).map(m => `${m.sender}: ${m.text}`).join('\n')
+          })
+        })
+        
+        const data = await response.json()
+        
+        const aiResponse = {
+          id: messages.length + 2,
+          sender: 'assistant',
+          text: data.success ? data.response : 'エラーが発生しました。しばらく時間をおいて再度お試しください。',
+          timestamp: new Date().toISOString()
         }
+        setMessages(prev => [...prev, aiResponse])
         
       } catch (error) {
         console.error('API Error:', error)
-        // エラー時はストリーミングメッセージを更新
-        setMessages(prev => prev.map(msg => 
-          msg.id === streamingMessage.id 
-            ? { 
-                ...msg, 
-                text: 'ネットワークエラーが発生しました。接続を確認してください。',
-                isStreaming: false 
-              }
-            : msg
-        ))
+        const errorResponse = {
+          id: messages.length + 2,
+          sender: 'assistant',
+          text: 'ネットワークエラーが発生しました。接続を確認してください。',
+          timestamp: new Date().toISOString()
+        }
+        setMessages(prev => [...prev, errorResponse])
       }
     }
   }
