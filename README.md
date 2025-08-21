@@ -12,6 +12,7 @@ Temple Blocks instrument
 Provided by Ethan Winer Copyright (c) 2002
 Drumline Cymbals
 Provided by Michael Schorsch Copyright (c) 2016
+
 謝辞（Acknowledgements）
 Fluid (R3) SoundFontは、Frank Wen氏の作業に加え、以下の協力者からのサンプルが一部使用されています。
 Suren M. Seron
