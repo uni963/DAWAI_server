@@ -896,6 +896,10 @@ async def stream_chat(request: StreamingChatRequest):
             "claude-3-opus": {"provider": "anthropic", "api_key_name": "anthropic"},
             "gpt-4": {"provider": "openai", "api_key_name": "openai"},
             "gpt-3.5-turbo": {"provider": "openai", "api_key_name": "openai"},
+            "gemini-2.5-pro": {"provider": "google", "api_key_name": "google"},
+            "gemini-2.5-flash": {"provider": "google", "api_key_name": "google"},
+            "gemini-1.5-pro": {"provider": "google", "api_key_name": "google"},
+            "gemini-1.5-flash": {"provider": "google", "api_key_name": "google"},
             "gemini-pro": {"provider": "google", "api_key_name": "google"}
         }
 
