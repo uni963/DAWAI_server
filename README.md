@@ -2,6 +2,19 @@
 DAWAIのサーバーのソースコードです。
 
 著作権表示（Copyright Notice）
+
+google deepmindのmagentaを使用しております。
+https://huggingface.co/google/magenta-realtime
+
+Copyright 2025 Google LLC
+
+Use these materials responsibly and do not generate content, including outputs, that infringe or violate the rights of others, including rights in copyrighted content.
+
+Google claims no rights in outputs you generate using Magenta RealTime. You and your users are solely responsible for outputs and their subsequent uses.
+
+Unless required by applicable law or agreed to in writing, all software and materials distributed here under the Apache 2.0 or CC-BY licenses are distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the licenses for the specific language governing permissions and limitations under those licenses. You are solely responsible for determining the appropriateness of using, reproducing, modifying, performing, displaying or distributing the software and materials, and any outputs, and assume any and all risks associated with your use or distribution of any of the software and materials, and any outputs, and your exercise of rights and permissions under the licenses.
+
+
 Fluid (R3) SoundFont
 Copyright (c) 2000-2002, 2008 Frank Wen <getfrank@gmail.com>
 Mono conversion (FluidR3Mono)
