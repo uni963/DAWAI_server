@@ -29,6 +29,7 @@ import MidiEditorCanvas from './MIDIEditor/MidiEditorCanvas.jsx'
 import MidiEditorEventHandlers from './MIDIEditor/MidiEditorEventHandlers.jsx'
 import useMidiPersistence from '../hooks/useMidiPersistence.js'
 import useMidiAudio from '../hooks/useMidiAudio.js'
+import { useBassAudio } from '../hooks/useBassAudio.js'
 import useMidiNoteOperations from '../hooks/useMidiNoteOperations.js'
 import useMidiEditorState from '../hooks/useMidiEditorState.js'
 import useGhostText from '../hooks/useGhostText.js'
@@ -58,7 +59,14 @@ const EnhancedMidiEditor = ({
   onGlobalTempoChange,
   trackVolume = 75,
   trackMuted = false,
-  masterVolume = 100
+  masterVolume = 100,
+  musicTheorySettings = {
+    scaleConstraintEnabled: false,
+    selectedGenre: null,
+    selectedScales: [],
+    rootNote: 'C'
+  },
+  onMusicTheorySettingsChange
 }) => {
   // 音量情報の受け取りをログ出力（重複を防ぐため条件付きで出力）
   const prevVolumeInfoRef = useRef({ trackVolume, trackMuted, masterVolume })
@@ -102,8 +110,103 @@ const EnhancedMidiEditor = ({
   // 永続化フックの使用
   const persistence = useMidiPersistence()
   
-  // オーディオフックの使用
-  const audio = useMidiAudio()
+  // オーディオフックの使用 - trackTypeに基づいて適切な音源を選択
+  const pianoAudio = useMidiAudio()
+  const bassAudioHook = useBassAudio()
+
+  // trackTypeに基づいて音源を選択
+  const audio = useMemo(() => {
+    if (trackType === 'bass') {
+      return {
+        // 基本再生メソッド
+        playNote: (midiNote, velocity = 0.8, duration = 0.25) => {
+          return bassAudioHook.playBassNote(midiNote, Math.round(velocity * 127))
+        },
+        playScheduledNote: async (midiNote, startTime, duration, velocity = 100) => {
+          // Bass音源は即座に再生（スケジューリング未対応）
+          return bassAudioHook.playBassNote(midiNote, velocity)
+        },
+        noteOn: (midiNote, velocity = 0.8, duration = 2.0) => {
+          return bassAudioHook.playBassNote(midiNote, Math.round(velocity * 127))
+        },
+        noteOff: (midiNote) => {
+          bassAudioHook.stopBassNote(midiNote)
+        },
+        stopAllNotes: () => {
+          bassAudioHook.stopAllBassNotes()
+        },
+        stopAllSounds: () => {
+          bassAudioHook.stopAllBassNotes()
+        },
+
+        // 初期化・制御メソッド
+        initializeAudio: async () => {
+          // Bass音源は初期化不要（useBassAudioで自動初期化）
+          return bassAudioHook.isLoaded
+        },
+        stopAudio: () => {
+          bassAudioHook.stopAllBassNotes()
+        },
+        cleanup: () => {
+          bassAudioHook.stopAllBassNotes()
+        },
+
+        // 音量・設定メソッド（ダミー実装）
+        setInstrument: (instrument) => {
+          // Bass音源では楽器変更は不要
+        },
+        setVolume: (volume) => {
+          bassAudioHook.setBassVolume(volume)
+        },
+        setMasterVolume: (volume) => {
+          // マスターボリュームは統一音声システムで管理
+        },
+        setMetronomeVolume: (volume) => {
+          // Bass音源ではメトロノーム不要
+        },
+        setExternalVolumeInfo: (trackVolume, trackMuted, masterVolume) => {
+          if (trackMuted) {
+            bassAudioHook.setBassVolume(0)
+          } else {
+            bassAudioHook.setBassVolume(trackVolume / 100)
+          }
+        },
+
+        // メトロノーム機能（ダミー実装）
+        playMetronomeClick: () => {
+          // Bass音源ではメトロノーム不要
+        },
+        startMetronome: (bpm) => {
+          // Bass音源ではメトロノーム不要
+        },
+        stopMetronome: () => {
+          // Bass音源ではメトロノーム不要
+        },
+
+        // 状態取得メソッド
+        getAudioState: () => {
+          return {
+            initialized: bassAudioHook.isLoaded,
+            playing: false,
+            volume: bassAudioHook.bassSettings?.volume || 0.8
+          }
+        },
+        getCurrentTime: () => {
+          return 0 // Bass音源では時間管理不要
+        },
+        isAudioContextAvailable: () => {
+          return bassAudioHook.isLoaded
+        },
+
+        // 内部参照（互換性のため）
+        isInitializedRef: { current: bassAudioHook.isLoaded },
+        trackIdRef: { current: trackId }
+      }
+    } else {
+      // デフォルトはピアノ音源
+      return pianoAudio
+    }
+  }, [trackType, pianoAudio, bassAudioHook, trackId])
   
   // ノート操作フックの使用
   const noteOperations = useMidiNoteOperations(state.notes, state.setNotes, trackId, state.isInitialized, persistence, state.currentTime, state.selectedNotes, state.setSelectedNotes)
@@ -113,7 +216,20 @@ const EnhancedMidiEditor = ({
   
   // 音色設定フックの使用
   const instrumentSettings = useInstrumentSettings(trackId)
-  
+
+  // 音楽理論設定変更ハンドラ（App.jsxから渡された関数を使用）
+  const handleMusicTheorySettingsChange = useCallback((setting, value) => {
+    console.log('🎼 Music Theory Setting Changed:', setting, value)
+    if (onMusicTheorySettingsChange) {
+      onMusicTheorySettingsChange(setting, value)
+    }
+  }, [onMusicTheorySettingsChange])
+
+  // 音楽理論設定の同期確認
+  useEffect(() => {
+    console.log('🎼 EnhancedMidiEditor: Music Theory Settings Updated:', musicTheorySettings)
+  }, [musicTheorySettings])
+
   // 元のMIDIデータを保持
   const [originalMidiData, setOriginalMidiData] = useState(null)
   
@@ -2408,6 +2524,14 @@ const EnhancedMidiEditor = ({
           onClose={instrumentSettings.closeSettingsPanel}
           onSave={instrumentSettings.handleSaveSettings}
           onReset={instrumentSettings.handleResetSettings}
+          // Ghost Text関連プロパティ
+          ghostTextEnabled={ghostText.ghostTextEnabled}
+          aiModel={ghostText.currentModel}
+          onAiModelChange={ghostText.changeModel}
+          onGhostTextToggle={ghostText.toggleGhostText}
+          // 音楽理論設定プロパティ
+          musicTheorySettings={musicTheorySettings}
+          onMusicTheorySettingsChange={handleMusicTheorySettingsChange}
         />
       )}
 

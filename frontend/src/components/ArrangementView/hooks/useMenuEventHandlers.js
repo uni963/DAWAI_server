@@ -1,5 +1,6 @@
 import { useCallback, useState, useRef } from 'react'
 import drumTrackManager from '../../../utils/drumTrackManager.js'
+import { getTrackTypeById } from '../../../data/trackTypes.js'
 
 export const useMenuEventHandlers = ({
   tracks,
@@ -66,24 +67,21 @@ export const useMenuEventHandlers = ({
   }, [])
 
   // トラック追加
-  const handleAddTrack = useCallback((trackType) => {
-    console.log('Menu: Adding track with type:', trackType)
-    
-    // トラックタイプのマッピング
-    const trackTypeMap = {
-      'piano': { type: 'instrument', subtype: 'piano' },
-      'bass': { type: 'instrument', subtype: 'bass' },
-      'drums': { type: 'instrument', subtype: 'drums' },
-      'lead': { type: 'instrument', subtype: 'synth' },
-      'pad': { type: 'instrument', subtype: 'strings' },
-      'voiceSynth': { type: 'voiceSynth', subtype: 'diffsinger' }
+  const handleAddTrack = useCallback((trackTypeId) => {
+    console.log('Menu: Adding track with type:', trackTypeId)
+
+    // 統一トラックタイプから情報を取得
+    const trackTypeInfo = getTrackTypeById(trackTypeId)
+    if (!trackTypeInfo) {
+      console.error('Unknown track type:', trackTypeId)
+      return
     }
-    
-    const mappedType = trackTypeMap[trackType] || { type: 'instrument', subtype: 'piano' }
-    
+
+    console.log('Menu: Using unified track type:', trackTypeInfo.name)
+
     // ArrangementViewに留まるようにkeepInArrangement=trueを渡す
-    addNewTrack(mappedType.type, mappedType.subtype, true)
-    
+    addNewTrack(trackTypeInfo.type, trackTypeInfo.subtype, true)
+
     // メニューを閉じる
     setShowTrackMenu(false)
   }, [addNewTrack, setShowTrackMenu])

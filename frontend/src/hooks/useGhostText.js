@@ -121,15 +121,20 @@ const useGhostText = (trackId, appSettings) => {
 
   // appSettingsの変更を監視して設定を更新
   useEffect(() => {
+    console.log('🔍 [DEBUG useGhostText] useEffect実行 - appSettings.midiEditor:', appSettings?.midiEditor)
     if (!appSettings?.midiEditor) {
+      console.log('🔍 [DEBUG useGhostText] appSettings.midiEditorがないためreturn')
       return
     }
 
     const midiEditorSettings = appSettings.midiEditor
+    console.log('🔍 [DEBUG useGhostText] midiEditorSettings:', midiEditorSettings)
+    console.log('🔍 [DEBUG useGhostText] current ghostTextEnabled:', ghostTextEnabled, 'current currentModel:', currentModel)
 
     // Ghost Text有効/無効の更新
-    if (midiEditorSettings.ghostTextEnabled !== undefined && 
+    if (midiEditorSettings.ghostTextEnabled !== undefined &&
         midiEditorSettings.ghostTextEnabled !== ghostTextEnabled) {
+      console.log('🔍 [DEBUG useGhostText] ghostTextEnabled更新:', midiEditorSettings.ghostTextEnabled)
       setGhostTextEnabled(midiEditorSettings.ghostTextEnabled)
       if (window.magentaGhostTextEngine) {
         window.magentaGhostTextEngine.setActive(midiEditorSettings.ghostTextEnabled)
@@ -161,56 +166,61 @@ const useGhostText = (trackId, appSettings) => {
     }
 
     // モデルの更新（changeModelが定義された後に実行）
-    if (midiEditorSettings.currentModel && 
+    if (midiEditorSettings.currentModel &&
         midiEditorSettings.currentModel !== currentModel) {
+      console.log('🔍 [DEBUG useGhostText] currentModel更新開始:', midiEditorSettings.currentModel, '現在:', currentModel)
       // changeModelが利用可能になるまで待機
       const updateModel = async () => {
         try {
+          console.log('🔍 [DEBUG useGhostText] updateModel実行開始:', midiEditorSettings.currentModel)
           // モデル状態をローディングに設定
           setModelStatus(prev => ({
             ...prev,
             [midiEditorSettings.currentModel]: 'loading'
           }))
-          
+
           // リスナーに通知
           if (window.magentaGhostTextEngine) {
             window.magentaGhostTextEngine.notifyListeners('modelLoading', { modelKey: midiEditorSettings.currentModel })
-            
+
             const success = await window.magentaGhostTextEngine.loadMagentaModel(midiEditorSettings.currentModel)
-            
+
             if (success) {
+              console.log('🔍 [DEBUG useGhostText] setCurrentModel実行:', midiEditorSettings.currentModel)
               setCurrentModel(midiEditorSettings.currentModel)
               setGhostTextStatus(window.magentaGhostTextEngine.getStatus())
-              
+
               // モデル状態を成功に設定
               setModelStatus(prev => ({
                 ...prev,
                 [midiEditorSettings.currentModel]: 'ready'
               }))
-              
+
               // リスナーに通知
               window.magentaGhostTextEngine.notifyListeners('modelLoaded', { modelKey: midiEditorSettings.currentModel })
+              console.log('🔍 [DEBUG useGhostText] currentModel更新完了:', midiEditorSettings.currentModel)
             } else {
               throw new Error(`Failed to load model: ${midiEditorSettings.currentModel}`)
             }
           }
         } catch (error) {
+          console.log('🔍 [DEBUG useGhostText] currentModel更新エラー:', error.message)
           // モデル状態をエラーに設定
           setModelStatus(prev => ({
             ...prev,
             [midiEditorSettings.currentModel]: 'error'
           }))
-          
+
           // リスナーに通知
           if (window.magentaGhostTextEngine) {
-            window.magentaGhostTextEngine.notifyListeners('modelError', { 
-              modelKey: midiEditorSettings.currentModel, 
-              error: error.message 
+            window.magentaGhostTextEngine.notifyListeners('modelError', {
+              modelKey: midiEditorSettings.currentModel,
+              error: error.message
             })
           }
         }
       }
-      
+
       updateModel()
     }
   }, [appSettings?.midiEditor, ghostTextEnabled, currentModel])

@@ -15,6 +15,7 @@ export const useArrangementAudio = (tracks, trackStates, currentTime, metronomeE
   // トラックプリロード状態管理
   const preloadedTracksRef = useRef(new Set())
   const isPreloadingRef = useRef(false)
+  const preloadCacheRef = useRef(new Map())
 
   // ドラム音再生関数（統一された音声システム・トラック指定版を使用）
   const playDrumSound = useCallback(async (pitch, velocity = 0.8, trackId = 'drum-track') => {
@@ -229,14 +230,6 @@ export const useArrangementAudio = (tracks, trackStates, currentTime, metronomeE
     }
   }, [])
 
-  // グローバルテスト関数として公開
-  useEffect(() => {
-    window.arrangementViewPlayDrumSound = playDrumSound;
-    return () => {
-      delete window.arrangementViewPlayDrumSound;
-    };
-  }, [playDrumSound])
-
   // ModernAudioEngineの状態チェック
   const ensureAudioEngineReady = useCallback(async () => {
     if (!isInitializedRef.current) {
@@ -250,6 +243,166 @@ export const useArrangementAudio = (tracks, trackStates, currentTime, metronomeE
     }
     return true;
   }, []);
+
+  // DiffSingerトラック専用の再生開始関数
+  const startDiffSingerTrackPlayback = useCallback(async (track, startTime) => {
+    try {
+      console.log('🎤 [ArrangementAudio] Starting DiffSinger track playback:', {
+        trackId: track.id,
+        trackName: track.name,
+        startTime,
+        hasMidiData: !!track.midiData,
+        hasVoiceSynthData: !!track.voiceSynthData
+      });
+
+      // DiffSingerトラックの基本チェック
+      if (!track.midiData || !track.midiData.notes || track.midiData.notes.length === 0) {
+        console.warn('🎤 [ArrangementAudio] No MIDI notes found for DiffSinger track:', track.id);
+        return false;
+      }
+
+      // 音声合成データの確認 (diffsingerSettingsをフォールバックとして使用)
+      const voiceData = track.voiceSynthData || track.diffsingerSettings;
+      if (!voiceData) {
+        console.warn('🎤 [ArrangementAudio] No voice synthesis data or diffsingerSettings found for DiffSinger track:', track.id);
+        return false;
+      }
+
+      // 統合音声システムの準備確認
+      const engineReady = await ensureAudioEngineReady();
+      if (!engineReady) {
+        console.error('🎤 [ArrangementAudio] Failed to prepare unified audio system for DiffSinger track:', track.id);
+        return false;
+      }
+
+      // 生成された音声ファイルのURLを確認
+      let audioUrl = null;
+
+      // DiffSingerTrackコンポーネントで既に生成された音声がある場合
+      if (track.generatedAudioUrl) {
+        audioUrl = track.generatedAudioUrl;
+        console.log('🎤 [ArrangementAudio] Using existing generated audio URL:', audioUrl);
+      } else {
+        // DiffSingerサーバーから音声を生成
+        console.log('🎤 [ArrangementAudio] Generating audio for DiffSinger track...');
+
+        // MIDIノートから音名文字列とデュレーション文字列を作成
+        const midiNotes = track.midiData.notes;
+        const noteNames = midiNotes.map(note => {
+          // MIDIピッチを音名に変換 (例: 60 -> C4)
+          const noteNumber = note.pitch % 12;
+          const octave = Math.floor(note.pitch / 12) - 1;
+          const noteMap = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+          return `${noteMap[noteNumber]}${octave}`;
+        });
+        const durations = midiNotes.map(note => note.duration.toString());
+
+        const requestData = {
+          notes: noteNames.join(' | '),
+          durations: durations.join(' | '),
+          lyrics: voiceData.lyrics || 'あ',
+          language: voiceData.language || 'japanese'
+        };
+
+        console.log('🎤 [DiffSinger] API Request data:', {
+          endpoint: 'http://localhost:8001/api/synthesize',
+          notesCount: requestData.notes ? requestData.notes.length : 0,
+          lyrics: requestData.lyrics,
+          language: requestData.language,
+          phonemesCount: requestData.phonemes ? requestData.phonemes.length : 0,
+          firstNote: requestData.notes?.[0],
+          requestData
+        });
+
+        try {
+          const response = await fetch('http://localhost:8001/api/synthesize', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestData)
+          });
+
+          console.log('🎤 [DiffSinger] API Response status:', response.status);
+
+          if (!response.ok) {
+            console.error('🎤 [DiffSinger] API error response:', {
+              status: response.status,
+              statusText: response.statusText
+            });
+            throw new Error(`DiffSinger API error: ${response.status}`);
+          }
+
+          const result = await response.json();
+          console.log('🎤 [DiffSinger] API Response data:', result);
+
+          audioUrl = result.audio_path;
+
+          // 相対パスまたは絶対パスを完全なURLに変換
+          if (audioUrl.startsWith('/')) {
+            audioUrl = `http://localhost:8001${audioUrl}`;
+          } else if (!audioUrl.startsWith('http')) {
+            // 相対パス（outputs/synthesis.wavなど）の場合
+            audioUrl = `http://localhost:8001/api/generated/${audioUrl.replace(/^outputs[\/\\]/, '')}`;
+          }
+
+          console.log('🎤 [DiffSinger] Final audio URL:', audioUrl);
+        } catch (error) {
+          console.error('🎤 [ArrangementAudio] Failed to generate DiffSinger audio:', error);
+          return false;
+        }
+      }
+
+      if (!audioUrl) {
+        console.error('🎤 [ArrangementAudio] No audio URL available for DiffSinger track:', track.id);
+        return false;
+      }
+
+      // 統合音声システムでDiffSinger音声を再生
+      const trackVolumeValue = trackVolume[track.id] || track.volume || 75;
+      const normalizedVolume = (trackVolumeValue / 100) * (masterVolume / 100);
+
+      console.log('🎤 [ArrangementAudio] Playing DiffSinger audio with unified audio system:', {
+        audioUrl,
+        startTime,
+        volume: normalizedVolume,
+        trackMuted: trackMuted[track.id] || track.muted || false
+      });
+
+      // ミュートされていない場合のみ再生
+      if (!trackMuted[track.id] && !track.muted) {
+        const audioResult = await window.unifiedAudioSystem.playDiffSingerAudio(
+          audioUrl,
+          startTime,
+          null, // duration (null = 全体を再生)
+          normalizedVolume
+        );
+
+        if (audioResult) {
+          console.log('✅ [ArrangementAudio] DiffSinger track playback started successfully:', track.id);
+          return true;
+        } else {
+          console.error('❌ [ArrangementAudio] Failed to start DiffSinger track playback:', track.id);
+          return false;
+        }
+      } else {
+        console.log('🔇 [ArrangementAudio] DiffSinger track is muted, skipping playback:', track.id);
+        return true; // ミュートは成功とみなす
+      }
+
+    } catch (error) {
+      console.error('❌ [ArrangementAudio] Error in DiffSinger track playback:', error);
+      return false;
+    }
+  }, [ensureAudioEngineReady, trackVolume, trackMuted, masterVolume]);
+
+  // グローバルテスト関数として公開
+  useEffect(() => {
+    window.arrangementViewPlayDrumSound = playDrumSound;
+    return () => {
+      delete window.arrangementViewPlayDrumSound;
+    };
+  }, [playDrumSound])
 
   // ドラムトラック専用の再生開始関数（最適化版）
   const startDrumTrackPlayback = useCallback(async (track, startTime) => {
@@ -584,10 +737,24 @@ export const useArrangementAudio = (tracks, trackStates, currentTime, metronomeE
         console.log('🎵 [ArrangementAudio] Starting drum track:', drumTrack.id);
         await startDrumTrackPlayback(drumTrack, startTime)
       }
+
+      // DiffSingerトラックの再生を開始
+      console.log('🎵 [ArrangementAudio] Starting DiffSinger tracks...');
+      const diffsingerTracks = tracksToPlay.filter(track =>
+        track.subtype === 'diffsinger' || track.type === 'diffsinger'
+      )
+      for (const diffsingerTrack of diffsingerTracks) {
+        console.log('🎵 [ArrangementAudio] Starting DiffSinger track:', diffsingerTrack.id);
+        await startDiffSingerTrackPlayback(diffsingerTrack, startTime)
+      }
       
       // MIDIトラックの再生を開始
       console.log('🎵 [ArrangementAudio] Starting MIDI tracks...');
-      const midiTracks = tracksToPlay.filter(track => track.subtype !== 'drums')
+      const midiTracks = tracksToPlay.filter(track =>
+        track.subtype !== 'drums' &&
+        track.subtype !== 'diffsinger' &&
+        track.type !== 'diffsinger'
+      )
       
       // EnhancedSoundFontEngineの状態を確認
       if (!isInitializedRef.current) {

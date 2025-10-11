@@ -1,12 +1,15 @@
 import { useState, useRef, useEffect, memo } from 'react'
 import { Button } from './ui/button.jsx'
+import { UNIFIED_TRACK_TYPES } from '../data/trackTypes.js'
 import {
   Plus,
   X,
   Piano,
   Music,
   Drum,
-  Mic
+  Mic,
+  Headphones,
+  Zap
 } from 'lucide-react'
 
 const TabBar = ({ 
@@ -204,7 +207,7 @@ const TabBar = ({
         </Button>
         
         {showTrackMenu && (
-          <div 
+          <div
             className="track-menu-container fixed w-64 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl border border-gray-200/50 dark:border-gray-700/50 rounded-xl shadow-2xl z-20 overflow-hidden"
             style={{
               top: `${menuPosition.top}px`,
@@ -212,51 +215,28 @@ const TabBar = ({
             }}
           >
             <div className="py-2">
-              <button 
-                className="block w-full text-left px-4 py-3 text-sm text-gray-800 dark:text-white hover:bg-gray-100/80 dark:hover:bg-gray-800/80 transition-all duration-200 flex items-center group"
-                onClick={() => {
-                  addNewTab('midi')
-                  setShowTrackMenu(false)
-                }}
-              >
-                <div className="w-10 h-10 rounded-lg bg-blue-500/10 dark:bg-blue-400/10 flex items-center justify-center mr-3 group-hover:bg-blue-500/20 dark:group-hover:bg-blue-400/20 transition-colors">
-                  <Piano className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                </div>
-                <div>
-                  <div className="font-medium">MIDIトラック</div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">MIDI楽器やシンセサイザー</div>
-                </div>
-              </button>
-              <button 
-                className="block w-full text-left px-4 py-3 text-sm text-gray-800 dark:text-white hover:bg-gray-100/80 dark:hover:bg-gray-800/80 transition-all duration-200 flex items-center group"
-                onClick={() => {
-                  addNewTab('drum')
-                  setShowTrackMenu(false)
-                }}
-              >
-                <div className="w-10 h-10 rounded-lg bg-purple-500/10 dark:bg-purple-400/10 flex items-center justify-center mr-3 group-hover:bg-purple-500/20 dark:group-hover:bg-purple-400/20 transition-colors">
-                  <Drum className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                </div>
-                <div>
-                  <div className="font-medium">ドラムトラック</div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">ドラムキットやパーカッション</div>
-                </div>
-              </button>
-              <button 
-                className="block w-full text-left px-4 py-3 text-sm text-gray-800 dark:text-white hover:bg-gray-100/80 dark:hover:bg-gray-800/80 transition-all duration-200 flex items-center group"
-                onClick={() => {
-                  addNewTab('diffsinger')
-                  setShowTrackMenu(false)
-                }}
-              >
-                <div className="w-10 h-10 rounded-lg bg-pink-500/10 dark:bg-pink-400/10 flex items-center justify-center mr-3 group-hover:bg-pink-500/20 dark:group-hover:bg-pink-400/20 transition-colors">
-                  <Mic className="h-5 w-5 text-pink-600 dark:text-pink-400" />
-                </div>
-                <div>
-                  <div className="font-medium">Diffsingerトラック</div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">DiffSinger歌声合成</div>
-                </div>
-              </button>
+              {UNIFIED_TRACK_TYPES.map((trackType) => {
+                const IconComponent = trackType.icon
+                return (
+                  <button
+                    key={trackType.id}
+                    className="block w-full text-left px-4 py-3 text-sm text-gray-800 dark:text-white hover:bg-gray-100/80 dark:hover:bg-gray-800/80 transition-all duration-200 flex items-center group"
+                    onClick={() => {
+                      // 統一トラックタイプのIDを使用してタブを追加
+                      addNewTab(trackType.tabType, trackType.id)
+                      setShowTrackMenu(false)
+                    }}
+                  >
+                    <div className={`w-10 h-10 rounded-lg ${trackType.color} flex items-center justify-center mr-3 group-hover:opacity-80 transition-colors`}>
+                      <IconComponent className={`h-5 w-5 ${trackType.iconColor}`} />
+                    </div>
+                    <div>
+                      <div className="font-medium">{trackType.name}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">{trackType.description}</div>
+                    </div>
+                  </button>
+                )
+              })}
             </div>
           </div>
         )}

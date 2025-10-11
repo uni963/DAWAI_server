@@ -528,10 +528,46 @@ function ProjectMenu({
   // 自動保存間隔の変更
   const handleAutoSaveIntervalChange = (interval) => {
     if (!projectManager) return
-    
+
     setAutoSaveInterval(interval)
     projectManager.setAutoSaveInterval(interval)
     showStatus('自動保存間隔を更新しました', 'success')
+  }
+
+  // サンプルプロジェクトの読み込み
+  const handleLoadSampleProject = async () => {
+    if (!projectManager) {
+      showStatus('プロジェクトマネージャーが利用できません', 'error')
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      console.log('Loading sample project from ProjectMenu...')
+
+      // サンプルプロジェクトを読み込み
+      const sampleProject = projectManager.loadSampleProject()
+
+      if (!sampleProject) {
+        throw new Error('サンプルプロジェクトの読み込みに失敗しました')
+      }
+
+      setCurrentProject(sampleProject)
+      loadProjectList()
+
+      // プロジェクト読み込み完了を通知
+      window.dispatchEvent(new CustomEvent('projectLoaded', {
+        detail: { project: sampleProject }
+      }))
+
+      showStatus('サンプルプロジェクトを読み込みました！ 🎵', 'success')
+      console.log(`Sample project "${sampleProject.name}" loaded successfully`)
+    } catch (error) {
+      console.error('Failed to load sample project:', error)
+      showStatus('サンプルプロジェクトの読み込みに失敗しました', 'error')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   // 早期リターンを削除し、条件付きレンダリングを使用
@@ -595,8 +631,9 @@ function ProjectMenu({
                 <Zap className="w-4 h-4 text-yellow-400" />
                 クイックアクション
               </h4>
-              
-              <div className="grid grid-cols-2 gap-3">
+
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
                 <Dialog open={showNewProjectDialog} onOpenChange={handleNewProjectDialogChange}>
                   <DialogTrigger asChild>
                     <Button 
@@ -762,6 +799,21 @@ function ProjectMenu({
                     </div>
                   </DialogContent>
                 </Dialog>
+                </div>
+
+                {/* サンプルプロジェクト読み込み */}
+                <div className="w-full">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full h-8 bg-gradient-to-r from-pink-500/10 to-purple-500/10 border-pink-500/30 hover:from-pink-500/20 hover:to-purple-500/20 text-pink-400 hover:text-pink-300"
+                    onClick={handleLoadSampleProject}
+                    disabled={isLoading}
+                  >
+                    {isLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                    サンプルプロジェクトを試す
+                  </Button>
+                </div>
               </div>
             </div>
 

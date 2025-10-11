@@ -1,0 +1,232 @@
+/**
+ * システム初期化関連のカスタムフック
+ * マネージャー初期化、エンジン初期化、音声システム初期化、テスト機能セットアップを管理
+ */
+
+import { useEffect, useState } from 'react'
+import genreManager from '../managers/GenreManager.js'
+import demoSongManager from '../managers/DemoSongManager.js'
+import unifiedAudioSystem from '../utils/unifiedAudioSystem.js'
+import { setupPianoTest } from '../utils/pianoTest.js'
+import { setupDrumTest } from '../utils/drumTest.js'
+
+/**
+ * マネージャー初期化フック
+ */
+export const useManagerInitialization = () => {
+  const [managersInitialized, setManagersInitialized] = useState(false)
+  const [initializationError, setInitializationError] = useState(null)
+
+  useEffect(() => {
+    const initializeManagers = async () => {
+      try {
+        console.log('🎵 Initializing managers...')
+
+        // GenreManager と DemoSongManager の初期化
+        await genreManager.initialize()
+        await demoSongManager.initialize()
+
+        setManagersInitialized(true)
+        console.log('✅ Managers initialized successfully')
+      } catch (error) {
+        console.error('❌ Manager initialization error:', error)
+        setInitializationError(error)
+      }
+    }
+
+    // Managers の初期化を実行
+    initializeManagers()
+  }, [])
+
+  return {
+    managersInitialized,
+    initializationError
+  }
+}
+
+/**
+ * エンジン初期化フック
+ */
+export const useEngineInitialization = (projectManager) => {
+  const [enginesInitialized, setEnginesInitialized] = useState(false)
+  const [engineError, setEngineError] = useState(null)
+
+  useEffect(() => {
+    const initializeEngines = async () => {
+      try {
+        console.log('🚀 Initializing engines...')
+
+        // 統一された音声システムの初期化
+        if (window.unifiedAudioSystem) {
+          await window.unifiedAudioSystem.initialize()
+          console.log('✅ Unified audio system initialized')
+        }
+
+        // プロジェクトマネージャーが利用可能な場合、サンプルプロジェクトをチェック
+        if (projectManager?.shouldLoadSampleProject()) {
+          console.log('🎵 Loading sample project...')
+          projectManager.loadSampleProject()
+          console.log('✅ Sample project loaded')
+        }
+
+        setEnginesInitialized(true)
+        console.log('✅ All engines initialized successfully')
+      } catch (error) {
+        console.error('❌ Engine initialization error:', error)
+        setEngineError(error)
+      }
+    }
+
+    // エンジンの初期化を実行
+    initializeEngines()
+  }, [projectManager])
+
+  return {
+    enginesInitialized,
+    engineError
+  }
+}
+
+/**
+ * 音声システム初期化フック
+ */
+export const useAudioSystemInitialization = () => {
+  const [audioSystemInitialized, setAudioSystemInitialized] = useState(false)
+  const [audioSystemError, setAudioSystemError] = useState(null)
+
+  useEffect(() => {
+    const initializeAudioSystems = async () => {
+      try {
+        console.log('🎵 音声システムを初期化中...')
+
+        // 統一された音声システムを初期化
+        if (window.unifiedAudioSystem) {
+          if (!window.unifiedAudioSystem.isInitialized) {
+            await window.unifiedAudioSystem.initialize()
+            console.log('✅ 統一音声システム初期化完了')
+          }
+        } else {
+          console.warn('⚠️ 統一音声システムが見つかりません')
+        }
+
+        setAudioSystemInitialized(true)
+        console.log('✅ 音声システム初期化完了')
+      } catch (error) {
+        console.error('❌ 音声システム初期化エラー:', error)
+        setAudioSystemError(error)
+      }
+    }
+
+    initializeAudioSystems()
+  }, [])
+
+  return {
+    audioSystemInitialized,
+    audioSystemError
+  }
+}
+
+/**
+ * テスト機能セットアップフック
+ */
+export const useTestSetup = () => {
+  const [testSetupComplete, setTestSetupComplete] = useState(false)
+
+  useEffect(() => {
+    try {
+      // ピアノテスト機能をセットアップ
+      setupPianoTest()
+      console.log('✅ Piano test setup completed')
+
+      // ドラムテスト機能をセットアップ
+      setupDrumTest()
+      console.log('✅ Drum test setup completed')
+
+      setTestSetupComplete(true)
+      console.log('✅ All test setups completed')
+    } catch (error) {
+      console.error('❌ Test setup error:', error)
+    }
+  }, [])
+
+  return { testSetupComplete }
+}
+
+/**
+ * 包括的システム初期化フック
+ * すべての初期化プロセスを統合管理
+ */
+export const useSystemInitialization = (projectManager) => {
+  const { managersInitialized, initializationError } = useManagerInitialization()
+  const { enginesInitialized, engineError } = useEngineInitialization(projectManager)
+  const { audioSystemInitialized, audioSystemError } = useAudioSystemInitialization()
+  const { testSetupComplete } = useTestSetup()
+
+  // 全体の初期化状態
+  const isFullyInitialized = managersInitialized &&
+                            enginesInitialized &&
+                            audioSystemInitialized &&
+                            testSetupComplete
+
+  // エラーの統合
+  const initializationErrors = [
+    initializationError,
+    engineError,
+    audioSystemError
+  ].filter(Boolean)
+
+  useEffect(() => {
+    if (isFullyInitialized) {
+      console.log('🎉 システム全体の初期化が完了しました')
+    }
+  }, [isFullyInitialized])
+
+  useEffect(() => {
+    if (initializationErrors.length > 0) {
+      console.error('❌ 初期化中にエラーが発生しました:', initializationErrors)
+    }
+  }, [initializationErrors])
+
+  return {
+    isFullyInitialized,
+    managersInitialized,
+    enginesInitialized,
+    audioSystemInitialized,
+    testSetupComplete,
+    initializationErrors,
+    hasErrors: initializationErrors.length > 0
+  }
+}
+
+/**
+ * 設定読み込みフック
+ */
+export const useSettingsLoader = () => {
+  const [settingsLoaded, setSettingsLoaded] = useState(false)
+
+  useEffect(() => {
+    const loadAllSettings = () => {
+      try {
+        // AI Assistant設定の読み込み
+        const savedAiSettings = localStorage.getItem('dawai_ai_settings')
+
+        if (savedAiSettings) {
+          const aiSettings = JSON.parse(savedAiSettings)
+          console.log('📝 AI設定を読み込みました:', aiSettings)
+        }
+
+        // その他の設定読み込み処理
+        console.log('📝 設定読み込み処理完了')
+        setSettingsLoaded(true)
+      } catch (error) {
+        console.error('❌ 設定読み込みエラー:', error)
+      }
+    }
+
+    loadAllSettings()
+  }, [])
+
+  return { settingsLoaded }
+}
+
+export default useSystemInitialization

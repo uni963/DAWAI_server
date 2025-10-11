@@ -25,12 +25,25 @@ app = FastAPI(
 )
 
 # CORS設定（フロントエンドからのアクセスを許可）
+# ローカル開発環境用のオリジン設定
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 本番環境では適切なオリジンを指定
+    allow_origins=[
+        "http://localhost:5175",  # Vite開発サーバー (固定ポート)
+        "http://localhost:5173",  # Vite開発サーバー (代替)
+        "http://localhost:3000",  # 代替ポート
+        "http://127.0.0.1:5175",  # IPv4ローカルホスト (固定ポート)
+        "http://127.0.0.1:5173",  # IPv4ローカルホスト (代替)
+        "http://127.0.0.1:3000"   # 代替ポート
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Content-Type",
+        "Authorization",
+        "X-Requested-With",
+        "X-API-Key"
+    ],
 )
 
 
@@ -687,6 +700,14 @@ async def health():
         "supported_models": ["claude-3-sonnet", "claude-3-opus", "gpt-4", "gpt-3.5-turbo", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-1.5-pro", "gemini-1.5-flash"]
     }
 
+# フロントエンド互換性のために /ai/api/ パスも追加
+@app.get("/ai/api/health")
+async def health_ai():
+    return {
+        "status": "healthy",
+        "supported_models": ["claude-3-sonnet", "claude-3-opus", "gpt-4", "gpt-3.5-turbo", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-1.5-pro", "gemini-1.5-flash"]
+    }
+
 # 音楽生成エンドポイント
 @app.post("/api/generate", response_model=GenerateResponse)
 async def generate_music(request: GenerateRequest):
@@ -890,7 +911,7 @@ async def stream_chat(request: StreamingChatRequest):
     try:
         print(f"Streaming chat request received: {request.message[:50]}...")
         print(f"Chat Debug Info: model={request.model}, apiKeys={request.apiKeys}")
-        
+
         model_config = {
             "claude-3-sonnet": {"provider": "anthropic", "api_key_name": "anthropic"},
             "claude-3-opus": {"provider": "anthropic", "api_key_name": "anthropic"},
@@ -928,7 +949,7 @@ async def stream_chat(request: StreamingChatRequest):
                 print(f"stream_chat: Model starts with 'claude': {request.model.startswith('claude')}")
                 print(f"stream_chat: Model starts with 'gpt': {request.model.startswith('gpt')}")
                 print(f"stream_chat: Model starts with 'gemini': {request.model.startswith('gemini')}")
-                
+
                 # モデルごとに適切なストリーミング関数を呼び分け
                 if request.model.startswith("claude"):
                     print(f"stream_chat: Using Claude streaming for model: {request.model}")
@@ -948,7 +969,7 @@ async def stream_chat(request: StreamingChatRequest):
                 else:
                     print(f"stream_chat: Unsupported model: {request.model}")
                     yield f"data: {json.dumps({'type': 'error', 'content': f'Unsupported model: {request.model}'})}\n\n"
-                
+
                 print("stream_chat: Event generator completed successfully")
             except Exception as e:
                 print(f"stream_chat: Error in streaming: {e}")
@@ -962,6 +983,11 @@ async def stream_chat(request: StreamingChatRequest):
             content=json.dumps({"type": "error", "content": f"Error during streaming: {e}"}),
             media_type="text/event-stream"
         )
+
+# フロントエンド互換性のために /ai/api/ パスも追加
+@app.post("/ai/api/stream/chat")
+async def stream_chat_ai(request: StreamingChatRequest):
+    return await stream_chat(request)
 
 # ストリーミングAgent modeエンドポイント
 @app.post("/api/stream/agent")
@@ -989,8 +1015,16 @@ async def stream_agent_action(request: StreamingAgentRequest):
         api_key = request.apiKey or ai_manager.get_api_key(config["api_key_name"], {})
 
         if not api_key:
+            # 開発環境用のフォールバック対応
+            async def dev_fallback_generator():
+                provider_name = config["provider"].title()
+                yield f"data: {json.dumps({'type': 'error', 'content': f'{provider_name} APIキーが設定されていません。'})}\n\n"
+                yield f"data: {json.dumps({'type': 'info', 'content': '開発環境では.envファイルにAPIキーを設定してください。'})}\n\n"
+                yield f"data: {json.dumps({'type': 'info', 'content': 'サンプル: ANTHROPIC_API_KEY=your_key_here'})}\n\n"
+                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
             return StreamingResponse(
-                content=json.dumps({"type": "error", "content": f"{config['provider'].title()} API key not configured"}),
+                content=dev_fallback_generator(),
                 media_type="text/event-stream"
             )
 
@@ -1029,6 +1063,158 @@ async def stream_agent_action(request: StreamingAgentRequest):
         return StreamingResponse(
             content=json.dumps({"type": "error", "content": f"Error during streaming: {e}"}),
             media_type="text/event-stream"
+        )
+
+# フロントエンド互換性のために /ai/api/ パスも追加
+@app.post("/ai/api/stream/agent")
+async def stream_agent_action_ai(request: StreamingAgentRequest):
+    return await stream_agent_action(request)
+
+# 追加のフロントエンド互換エンドポイント
+@app.post("/ai/api/agent")
+async def agent_action_ai(request: AgentRequest):
+    return await agent_action(request)
+
+@app.post("/ai/api/generate")
+async def generate_music_ai(request: GenerateRequest):
+    return await generate_music(request)
+
+@app.post("/ai/api/chat")
+async def chat_ai(request: ChatRequest):
+    return await chat(request)
+
+# MIDI更新概要エンドポイント（仮実装）
+@app.post("/ai/api/update-summary")
+async def update_summary():
+    return {"status": "success", "message": "MIDI summary updated"}
+
+# DiffSinger音声合成API（プロキシ実装）
+class DiffSingerSynthesisRequest(BaseModel):
+    lyrics: str
+    notes: str
+    durations: str
+    output_path: Optional[str] = "outputs/synthesis.wav"
+
+@app.post("/ai/api/voice/synthesize")
+async def voice_synthesize(request: DiffSingerSynthesisRequest):
+    """DiffSingerサーバー（ポート8001）への音声合成リクエストプロキシ"""
+    try:
+        # DiffSingerサーバーへのプロキシリクエスト
+        async with aiohttp.ClientSession() as session:
+            diffsinger_url = "http://localhost:8001/api/synthesize"
+
+            # リクエストデータの準備
+            payload = {
+                "lyrics": request.lyrics,
+                "notes": request.notes,
+                "durations": request.durations,
+                "output_path": request.output_path
+            }
+
+            print(f"DiffSinger Proxy: Forwarding request to {diffsinger_url}")
+            print(f"DiffSinger Proxy: Payload = {payload}")
+
+            async with session.post(
+                diffsinger_url,
+                json=payload,
+                timeout=aiohttp.ClientTimeout(total=120)  # 2分タイムアウト
+            ) as response:
+                response_data = await response.json()
+
+                if response.status == 200:
+                    print(f"DiffSinger Proxy: Success response = {response_data}")
+                    return response_data
+                else:
+                    print(f"DiffSinger Proxy: Error {response.status} = {response_data}")
+                    raise HTTPException(
+                        status_code=response.status,
+                        detail=f"DiffSinger server error: {response_data}"
+                    )
+
+    except aiohttp.ClientError as e:
+        print(f"DiffSinger Proxy: Connection error = {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"DiffSinger server unavailable: {str(e)}"
+        )
+    except Exception as e:
+        print(f"DiffSinger Proxy: Unexpected error = {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {str(e)}"
+        )
+
+@app.get("/ai/api/voice/health")
+async def voice_health():
+    """DiffSingerサーバーのヘルスチェック"""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                "http://localhost:8001/health",
+                timeout=aiohttp.ClientTimeout(total=5)
+            ) as response:
+                if response.status == 200:
+                    diffsinger_status = await response.json()
+                    return {
+                        "status": "healthy",
+                        "service": "DiffSinger Voice API Proxy",
+                        "diffsinger_server": diffsinger_status
+                    }
+                else:
+                    return {
+                        "status": "degraded",
+                        "service": "DiffSinger Voice API Proxy",
+                        "error": f"DiffSinger server returned {response.status}"
+                    }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "service": "DiffSinger Voice API Proxy",
+            "error": f"Cannot connect to DiffSinger server: {str(e)}"
+        }
+
+# DiffSingerモデル管理API
+@app.get("/ai/api/voice/models")
+async def get_voice_models():
+    """利用可能な音声モデル一覧"""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                "http://localhost:8001/api/models",
+                timeout=aiohttp.ClientTimeout(total=10)
+            ) as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    return {
+                        "models": [],
+                        "current": None,
+                        "error": f"DiffSinger server returned {response.status}"
+                    }
+    except Exception as e:
+        return {
+            "models": [
+                {"id": "popcs_ds_beta6", "name": "PopCS DiffSinger Beta 6", "language": "zh_CN"},
+                {"id": "opencpop", "name": "OpenCPop", "language": "zh_CN"}
+            ],
+            "current": "popcs_ds_beta6",
+            "error": f"Using fallback models: {str(e)}"
+        }
+
+@app.post("/ai/api/voice/models/{model_id}/load")
+async def load_voice_model(model_id: str):
+    """指定された音声モデルをロード"""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"http://localhost:8001/api/models/{model_id}/load",
+                timeout=aiohttp.ClientTimeout(total=30)
+            ) as response:
+                return await response.json()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to load model {model_id}: {str(e)}"
         )
 
 def generate_agent_prompt(user_prompt: str, context: dict) -> str:
@@ -1326,5 +1512,5 @@ def parse_agent_response(response_text: str, context: dict) -> dict:
 # サーバー起動設定
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8000)
 

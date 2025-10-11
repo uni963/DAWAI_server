@@ -10,21 +10,36 @@ import {
   FileAudio,
   FileMusic,
   Share2,
-  Plus
+  Plus,
+  Sparkles
 } from 'lucide-react'
-import { useState, useRef, memo } from 'react'
+import { useState, useRef, memo, useEffect } from 'react'
 
-const Header = ({ 
-  showSettings, 
+const Header = ({
+  showSettings,
   setShowSettings,
   onExportAudio,
-  onExportMidi
+  onExportMidi,
+  onOpenGenreSelector,
+  onOpenDemoSongBrowser,
+  genreContext,
+  demoSongMetadata,
+  smartSuggestionsEnabled,
+  onToggleSmartSuggestions,
+  suggestionAggressiveness,
+  onSuggestionAggressivenessChange,
+  currentProjectName = 'Untitled Project'  // ⭐ プロジェクト名prop追加
 }) => {
   const [showFileMenu, setShowFileMenu] = useState(false)
   const [showExportMenu, setShowExportMenu] = useState(false)
-  const [currentFileName, setCurrentFileName] = useState('Untitled Project')
+  const [currentFileName, setCurrentFileName] = useState(currentProjectName)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const fileInputRef = useRef(null)
+
+  // ⭐ プロジェクト名propが変更されたときにファイル名を更新
+  useEffect(() => {
+    setCurrentFileName(currentProjectName)
+  }, [currentProjectName])
 
   // 新規プロジェクト作成
   const handleNewProject = () => {
@@ -47,6 +62,36 @@ const Header = ({
   const handleOpenFile = () => {
     if (fileInputRef.current) {
       fileInputRef.current.click()
+    }
+  }
+
+  // サンプルプロジェクトを読み込む
+  const handleLoadSampleProject = () => {
+    if (!window.projectManager) {
+      alert('プロジェクトマネージャーが利用できません。')
+      return
+    }
+
+    try {
+      // サンプルプロジェクトを読み込み
+      const sampleProject = window.projectManager.loadSampleProject()
+
+      // ファイル名を更新
+      setCurrentFileName('Demo Song - はじめての楽曲')
+      setHasUnsavedChanges(false)
+
+      // Fileメニューを閉じる
+      setShowFileMenu(false)
+
+      // UIの更新を促すイベントを発火
+      window.dispatchEvent(new CustomEvent('projectLoaded', {
+        detail: { project: sampleProject }
+      }))
+
+      console.log('Sample project loaded successfully:', sampleProject.name)
+    } catch (error) {
+      console.error('Failed to load sample project:', error)
+      alert('サンプルプロジェクトの読み込みに失敗しました。')
     }
   }
 
@@ -216,12 +261,19 @@ const Header = ({
                     <Plus className="h-4 w-4 text-green-400" />
                     New Project
                   </button>
-                  <button 
+                  <button
                     className="w-full text-left px-4 py-2 text-sm text-white hover:bg-gray-700 flex items-center gap-2"
                     onClick={handleOpenFile}
                   >
                     <FolderOpen className="h-4 w-4 text-blue-400" />
                     Open...
+                  </button>
+                  <button
+                    className="w-full text-left px-4 py-2 text-sm text-white hover:bg-gray-700 flex items-center gap-2"
+                    onClick={handleLoadSampleProject}
+                  >
+                    <Sparkles className="h-4 w-4 text-pink-400" />
+                    Load Sample Project
                   </button>
                   <div className="border-t border-gray-600 my-1"></div>
                   <button 
@@ -292,6 +344,40 @@ const Header = ({
               </div>
             )}
           </div>
+
+          {/* ジャンル選択ボタン */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-white hover:bg-gray-700 flex items-center gap-2 h-9 px-3 font-medium"
+            onClick={onOpenGenreSelector}
+            title={genreContext ? `現在のジャンル: ${genreContext.genre.name.ja}` : 'ジャンルを選択'}
+          >
+            <Music className="h-4 w-4" />
+            ジャンル
+            {genreContext && (
+              <span className="text-xs bg-blue-600 px-1 rounded">
+                {genreContext.genre.name.ja}
+              </span>
+            )}
+          </Button>
+
+          {/* Demo Songブラウザボタン */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-white hover:bg-gray-700 flex items-center gap-2 h-9 px-3 font-medium"
+            onClick={onOpenDemoSongBrowser}
+            title={demoSongMetadata ? `読み込み済み: ${demoSongMetadata.title}` : 'Demo Songを読み込み'}
+          >
+            <Sparkles className="h-4 w-4" />
+            Demo Song
+            {demoSongMetadata && (
+              <span className="text-xs bg-green-600 px-1 rounded">
+                読込済
+              </span>
+            )}
+          </Button>
         </nav>
       </div>
 

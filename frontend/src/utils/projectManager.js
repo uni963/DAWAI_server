@@ -6,6 +6,8 @@ class ProjectManager {
     this.autoSaveInterval = null
     this.autoSaveEnabled = true
     this.autoSaveIntervalMs = 30000 // 30秒
+    this.genreContext = null // ジャンルコンテキスト
+    this.demoSongMetadata = null // Demo Songメタデータ
   }
 
   // 新しいプロジェクトを作成
@@ -59,13 +61,125 @@ class ProjectManager {
         genre: '',
         description: '',
         tags: []
-      }
+      },
+      scaleConstraints: null, // スケール制約
+      genreContext: null, // ジャンルコンテキスト
+      demoSongMetadata: null // Demo Songメタデータ
     }
 
     this.currentProject = project
+    this.genreContext = null
+    this.demoSongMetadata = null
     this.startAutoSave()
     return project
   }
+
+  // ===== Demo Song管理用メソッド =====
+
+  /**
+   * 新しいプロジェクトを作成（DemoSongManager用エイリアス）
+   */
+  newProject() {
+    this.createNewProject('Untitled Project')
+  }
+
+  /**
+   * プロジェクト名を設定
+   * @param {string} name - プロジェクト名
+   */
+  setProjectName(name) {
+    if (!this.currentProject) {
+      throw new Error('No current project')
+    }
+    this.currentProject.name = name
+    this.currentProject.modifiedAt = new Date().toISOString()
+    console.log(`✅ プロジェクト名設定: ${name}`)
+  }
+
+  /**
+   * テンポを設定
+   * @param {number} tempo - BPM値
+   */
+  setTempo(tempo) {
+    if (!this.currentProject) {
+      throw new Error('No current project')
+    }
+    this.currentProject.tempo = tempo
+    this.currentProject.modifiedAt = new Date().toISOString()
+    console.log(`✅ テンポ設定: ${tempo} BPM`)
+  }
+
+  /**
+   * 拍子を設定
+   * @param {string} timeSignature - 拍子（例: "4/4"）
+   */
+  setTimeSignature(timeSignature) {
+    if (!this.currentProject) {
+      throw new Error('No current project')
+    }
+    const [numerator, denominator] = timeSignature.split('/').map(Number)
+    this.currentProject.timeSignature = { numerator, denominator }
+    this.currentProject.modifiedAt = new Date().toISOString()
+    console.log(`✅ 拍子設定: ${timeSignature}`)
+  }
+
+  /**
+   * スケール制約を設定
+   * @param {Object} constraints - スケール制約オブジェクト
+   */
+  setScaleConstraints(constraints) {
+    if (!this.currentProject) {
+      console.warn('⚠️ No current project for scale constraints')
+      return
+    }
+    this.currentProject.scaleConstraints = constraints
+    this.currentProject.modifiedAt = new Date().toISOString()
+    console.log('✅ スケール制約設定:', constraints)
+  }
+
+  /**
+   * ジャンルコンテキストを設定
+   * @param {Object} context - ジャンルコンテキストオブジェクト
+   */
+  setGenreContext(context) {
+    this.genreContext = context
+    if (this.currentProject) {
+      this.currentProject.genreContext = context
+      this.currentProject.modifiedAt = new Date().toISOString()
+    }
+    console.log('✅ ジャンルコンテキスト設定:', context?.genre?.name?.ja || context?.genre?.name)
+  }
+
+  /**
+   * ジャンルコンテキストを取得
+   * @returns {Object|null} ジャンルコンテキスト
+   */
+  getGenreContext() {
+    return this.genreContext || this.currentProject?.genreContext || null
+  }
+
+  /**
+   * Demo Songメタデータを設定
+   * @param {Object} metadata - Demo Songメタデータ
+   */
+  setDemoSongMetadata(metadata) {
+    this.demoSongMetadata = metadata
+    if (this.currentProject) {
+      this.currentProject.demoSongMetadata = metadata
+      this.currentProject.modifiedAt = new Date().toISOString()
+    }
+    console.log('✅ Demo Songメタデータ設定:', metadata)
+  }
+
+  /**
+   * Demo Songメタデータを取得
+   * @returns {Object|null} Demo Songメタデータ
+   */
+  getDemoSongMetadata() {
+    return this.demoSongMetadata || this.currentProject?.demoSongMetadata || null
+  }
+
+  // ===== 既存メソッド =====
 
   // プロジェクトを保存
   saveProject(project = null) {
@@ -105,11 +219,13 @@ class ProjectManager {
       }
 
       const project = JSON.parse(projectData)
-      
+
       // データを新しい形式に変換
       const migratedProject = this.migrateProjectData(project)
-      
+
       this.currentProject = migratedProject
+      this.genreContext = migratedProject.genreContext || null
+      this.demoSongMetadata = migratedProject.demoSongMetadata || null
       this.startAutoSave()
 
       console.log(`Project "${migratedProject.name}" loaded successfully`)
@@ -147,11 +263,11 @@ class ProjectManager {
   importProject(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
-      
+
       reader.onload = (event) => {
         try {
           const projectData = JSON.parse(event.target.result)
-          
+
           // プロジェクトデータの検証
           if (!this.validateProjectData(projectData)) {
             throw new Error('Invalid project file format')
@@ -162,6 +278,8 @@ class ProjectManager {
           projectData.modifiedAt = new Date().toISOString()
 
           this.currentProject = projectData
+          this.genreContext = projectData.genreContext || null
+          this.demoSongMetadata = projectData.demoSongMetadata || null
           this.saveProject() // ローカルストレージにも保存
           this.startAutoSave()
 
@@ -300,7 +418,7 @@ class ProjectManager {
   updateProjectList(project) {
     try {
       let projectList = this.getProjectList()
-      
+
       // 既存のプロジェクトを更新または新規追加
       const existingIndex = projectList.findIndex(p => p.id === project.id)
       const projectSummary = {
@@ -342,6 +460,8 @@ class ProjectManager {
       // 現在のプロジェクトが削除された場合
       if (this.currentProject && this.currentProject.id === projectId) {
         this.currentProject = null
+        this.genreContext = null
+        this.demoSongMetadata = null
         this.stopAutoSave()
       }
 
@@ -358,13 +478,15 @@ class ProjectManager {
     try {
       const originalProject = this.loadProject(projectId)
       const duplicatedProject = JSON.parse(JSON.stringify(originalProject))
-      
+
       duplicatedProject.id = this.generateId()
       duplicatedProject.name = newName || `${originalProject.name} (Copy)`
       duplicatedProject.createdAt = new Date().toISOString()
       duplicatedProject.modifiedAt = new Date().toISOString()
 
       this.currentProject = duplicatedProject
+      this.genreContext = duplicatedProject.genreContext || null
+      this.demoSongMetadata = duplicatedProject.demoSongMetadata || null
       this.saveProject()
 
       console.log(`Project duplicated: "${duplicatedProject.name}"`)
@@ -455,7 +577,7 @@ class ProjectManager {
   calculateProjectDuration(project) {
     // 簡易実装：すべてのクリップの最大終了時間を計算
     let maxEndTime = 0
-    
+
     project.tracks.forEach(track => {
       if (track.clips) {
         track.clips.forEach(clip => {
@@ -510,11 +632,11 @@ class ProjectManager {
   // バイト数を読みやすい形式に変換
   formatBytes(bytes) {
     if (bytes === 0) return '0 Bytes'
-    
+
     const k = 1024
     const sizes = ['Bytes', 'KB', 'MB', 'GB']
     const i = Math.floor(Math.log(bytes) / Math.log(k))
-    
+
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
   }
 }
@@ -523,4 +645,3 @@ class ProjectManager {
 const projectManager = new ProjectManager()
 
 export default projectManager
-

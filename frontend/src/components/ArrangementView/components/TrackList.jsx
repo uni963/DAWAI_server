@@ -1,14 +1,17 @@
 import { Button } from '../../ui/button.jsx'
-import { 
-  Plus, 
-  Piano, 
-  AudioWaveform, 
-  Drum, 
+import { UNIFIED_TRACK_TYPES } from '../../../data/trackTypes.js'
+import {
+  Plus,
+  Piano,
+  AudioWaveform,
+  Drum,
   Mic,
   RefreshCw,
   Volume2,
   VolumeX,
-  Music
+  Music,
+  Headphones,
+  Zap
 } from 'lucide-react'
 import VoiceSynthTrack from './VoiceSynthTrack.jsx'
 import { 
@@ -227,8 +230,8 @@ const TrackList = ({
                   (selectedTracks.size > 1 ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.1)') : 
                   track.type === 'voiceSynth' ? 'rgba(239, 68, 68, 0.05)' : undefined
               }}
-              title={track.type === 'voiceSynth' ? 
-                `⚠️ 開発中トラック: ${track.name} - DiffSinger音声合成機能はまだ開発中のため、合成音声機能は動作しません。現在はMIDIエディターとしてのみ使用可能です。` :
+              title={track.type === 'voiceSynth' ?
+                `歌声合成トラック: ${track.name} - DiffSinger音声合成機能搭載` :
                 `Track: ${track.name}, Height: ${trackHeight}px, Resizing: ${isCurrentlyResizing}`
               }
               onMouseDown={(e) => !isCurrentlyResizing && onTrackSelectStart(track.id, e)}
@@ -258,15 +261,6 @@ const TrackList = ({
                        }`}>
                          {track.name}
                        </span>
-                       {/* DiffSinger/VoiceSynthトラックの開発中マーカー */}
-                       {track.type === 'voiceSynth' && (
-                         <div 
-                           className="flex-shrink-0 bg-red-600/80 text-white px-1.5 py-0.5 rounded text-xs font-bold shadow-sm border border-red-500/50"
-                           title="開発中機能 - DiffSinger音声合成機能はまだ開発中です。合成音声機能は動作しません。"
-                         >
-                           ⚠️開発中
-                         </div>
-                       )}
                      </div>
                    </div>
                    
@@ -334,19 +328,41 @@ const TrackList = ({
                            return `🥁 ${activeCells} hits | ${totalDuration.toFixed(1)}s | ${tempo}BPM`;
                          }
                          
-                         // 通常のMIDIトラック
+                         // 通常のMIDIトラック（Piano Trackなど）
                          const midiData = getDrumTrackMidiData(track)
-                         const noteCount = midiData?.notes?.length || 0
+                         const notes = midiData?.notes || []
+                         const noteCount = notes.length
                          let maxEndTime = 0
-                         
-                         if (midiData?.notes) {
-                           for (const note of midiData.notes) {
+
+                         // 音階分析
+                         const noteRange = { min: 127, max: 0 }
+                         let totalVelocity = 0
+
+                         if (notes.length > 0) {
+                           for (const note of notes) {
                              const noteStart = note.time !== undefined ? note.time : (note.start / 1000)
                              const noteDuration = note.duration || 0.5
+                             const pitch = note.pitch || 60
+                             const velocity = note.velocity || 0.8
+
                              maxEndTime = Math.max(maxEndTime, noteStart + noteDuration)
+                             noteRange.min = Math.min(noteRange.min, pitch)
+                             noteRange.max = Math.max(noteRange.max, pitch)
+                             totalVelocity += velocity
+                           }
+
+                           const avgVelocity = totalVelocity / notes.length
+                           const minNoteName = getNoteName(noteRange.min)
+                           const maxNoteName = getNoteName(noteRange.max)
+
+                           // Piano Trackの場合は音階範囲を表示
+                           if (track.subtype === 'piano' || track.name.toLowerCase().includes('piano')) {
+                             return `🎹 ${noteCount} notes | ${minNoteName}-${maxNoteName} | ${maxEndTime.toFixed(1)}s | ${Math.round(avgVelocity * 100)}%`
+                           } else {
+                             return `🎵 ${noteCount} notes | ${minNoteName}-${maxNoteName} | ${maxEndTime.toFixed(1)}s`
                            }
                          }
-                         
+
                          return `${noteCount} notes | ${maxEndTime.toFixed(1)}s`
                        })()}
                      </div>
@@ -393,27 +409,6 @@ const TrackList = ({
                              console.log('Open lyrics panel for track:', track.id);
                            }}
                          />
-                         {/* 開発中マーカー - 赤い斜線パターン */}
-                         <div 
-                           className="absolute inset-0 pointer-events-none z-20"
-                           style={{
-                             background: `repeating-linear-gradient(
-                               45deg,
-                               transparent,
-                               transparent 8px,
-                               rgba(239, 68, 68, 0.4) 8px,
-                               rgba(239, 68, 68, 0.4) 16px
-                             )`
-                           }}
-                           title="開発中機能 - DiffSinger音声合成機能はまだ開発中です"
-                         />
-                         {/* 開発中ラベル */}
-                         <div className="absolute top-2 right-2 z-30">
-                           <div className="bg-red-600/90 text-white px-2 py-1 rounded text-xs font-medium flex items-center space-x-1 shadow-lg backdrop-blur-sm border border-red-500/50">
-                             <span>⚠️</span>
-                             <span>開発中</span>
-                           </div>
-                         </div>
                        </div>
                      ) : track.subtype === 'drums' ? (
                        <>
@@ -600,81 +595,24 @@ const TrackList = ({
               }}
             >
               <div className="py-2">
-                <button 
-                  className="block w-full text-left px-4 py-3 text-sm text-gray-800 dark:text-white hover:bg-gray-100/80 dark:hover:bg-gray-800/80 transition-all duration-200 flex items-center group"
-                  onClick={() => onAddTrack('piano')}
-                >
-                  <div className="w-8 h-8 rounded-lg bg-blue-500/10 dark:bg-blue-400/10 flex items-center justify-center mr-3 group-hover:bg-blue-500/20 dark:group-hover:bg-blue-400/20 transition-colors">
-                    <Piano className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <div>
-                    <div className="font-medium">楽器トラック</div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">MIDI楽器やシンセサイザー</div>
-                  </div>
-                </button>
-                <button 
-                  className="block w-full text-left px-4 py-3 text-sm text-gray-800 dark:text-white hover:bg-gray-100/80 dark:hover:bg-gray-800/80 transition-all duration-200 flex items-center group"
-                  onClick={() => onAddTrack('bass')}
-                >
-                  <div className="w-8 h-8 rounded-lg bg-green-500/10 dark:bg-green-400/10 flex items-center justify-center mr-3 group-hover:bg-green-500/20 dark:group-hover:bg-green-400/20 transition-colors">
-                    <AudioWaveform className="h-4 w-4 text-green-600 dark:text-green-400" />
-                  </div>
-                  <div>
-                    <div className="font-medium">ベーストラック</div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">ベースライン楽器</div>
-                  </div>
-                </button>
-                <button 
-                  className="block w-full text-left px-4 py-3 text-sm text-gray-800 dark:text-white hover:bg-gray-100/80 dark:hover:bg-gray-800/80 transition-all duration-200 flex items-center group"
-                  onClick={() => onAddTrack('drums')}
-                >
-                  <div className="w-8 h-8 rounded-lg bg-purple-500/10 dark:bg-purple-400/10 flex items-center justify-center mr-3 group-hover:bg-purple-500/20 dark:group-hover:bg-purple-400/20 transition-colors">
-                    <Drum className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                  </div>
-                  <div>
-                    <div className="font-medium">ドラムトラック</div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">ドラムキットやパーカッション</div>
-                  </div>
-                </button>
-                <button 
-                  className="block w-full text-left px-4 py-3 text-sm text-gray-800 dark:text-white hover:bg-gray-100/80 dark:hover:bg-gray-800/80 transition-all duration-200 flex items-center group"
-                  onClick={() => onAddTrack('lead')}
-                >
-                  <div className="w-8 h-8 rounded-lg bg-orange-500/10 dark:bg-orange-400/10 flex items-center justify-center mr-3 group-hover:bg-orange-500/20 dark:group-hover:bg-orange-400/20 transition-colors">
-                    <Mic className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-                  </div>
-                  <div>
-                    <div className="font-medium">リードトラック</div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">メロディーライン楽器</div>
-                  </div>
-                </button>
-                <button 
-                  className="block w-full text-left px-4 py-3 text-sm text-gray-800 dark:text-white hover:bg-gray-100/80 dark:hover:bg-gray-800/80 transition-all duration-200 flex items-center group"
-                  onClick={() => onAddTrack('pad')}
-                >
-                  <div className="w-8 h-8 rounded-lg bg-yellow-500/10 dark:bg-yellow-400/10 flex items-center justify-center mr-3 group-hover:bg-yellow-500/20 dark:group-hover:bg-yellow-400/20 transition-colors">
-                    <AudioWaveform className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
-                  </div>
-                  <div>
-                    <div className="font-medium">パッドトラック</div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">アンビエント・パッド音</div>
-                  </div>
-                </button>
-                <button 
-                  className="block w-full text-left px-4 py-3 text-sm text-gray-800 dark:text-white hover:bg-gray-100/80 dark:hover:bg-gray-800/80 transition-all duration-200 flex items-center group border-l-4 border-red-500/70"
-                  onClick={() => onAddTrack('voiceSynth')}
-                >
-                  <div className="w-8 h-8 rounded-lg bg-red-500/10 dark:bg-red-400/10 flex items-center justify-center mr-3 group-hover:bg-red-500/20 dark:group-hover:bg-red-400/20 transition-colors">
-                    <Music className="h-4 w-4 text-red-600 dark:text-red-400" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="font-medium flex items-center space-x-2">
-                      <span>歌声合成トラック</span>
-                      <span className="bg-red-600/80 text-white px-1.5 py-0.5 rounded text-xs font-bold">⚠️開発中</span>
-                    </div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">DiffSinger歌声合成（開発中・合成機能未実装）</div>
-                  </div>
-                </button>
+                {UNIFIED_TRACK_TYPES.map((trackType) => {
+                  const IconComponent = trackType.icon
+                  return (
+                    <button
+                      key={trackType.id}
+                      className="block w-full text-left px-4 py-3 text-sm text-gray-800 dark:text-white hover:bg-gray-100/80 dark:hover:bg-gray-800/80 transition-all duration-200 flex items-center group"
+                      onClick={() => onAddTrack(trackType.id)}
+                    >
+                      <div className={`w-10 h-10 rounded-lg ${trackType.color} flex items-center justify-center mr-3 group-hover:opacity-80 transition-colors`}>
+                        <IconComponent className={`h-5 w-5 ${trackType.iconColor}`} />
+                      </div>
+                      <div>
+                        <div className="font-medium">{trackType.name}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">{trackType.description}</div>
+                      </div>
+                    </button>
+                  )
+                })}
                 {forceRerenderApp && (
                   <button 
                     className="block w-full text-left px-4 py-3 text-sm text-gray-800 dark:text-white hover:bg-gray-100/80 dark:hover:bg-gray-800/80 transition-all duration-200 flex items-center group border-t border-gray-200/50 dark:border-gray-700/50"

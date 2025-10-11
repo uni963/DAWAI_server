@@ -64,26 +64,35 @@ class UnifiedAudioSystem {
     if (this.audioBuffers[filename]) {
       return this.audioBuffers[filename];
     }
-    
+
     try {
-      // ピアノ音ファイルは /piano/ フォルダにある
-      const filePath = isPiano 
-        ? `/sounds/MuseScore_General/samples/piano/${filename}`
-        : `/sounds/MuseScore_General/samples/${filename}`;
-      
+      let filePath;
+
+      // DiffSinger音声: 完全URLはそのまま使用
+      if (filename.startsWith('http://') || filename.startsWith('https://')) {
+        filePath = filename;
+        console.log(`🎤 [UnifiedAudio] DiffSinger音声読み込み: ${filePath}`);
+      } else {
+        // ピアノ/ドラム音: 既存のパス構築ロジック
+        filePath = isPiano
+          ? `/sounds/MuseScore_General/samples/piano/${filename}`
+          : `/sounds/MuseScore_General/samples/${filename}`;
+        console.log(`📁 [UnifiedAudio] 楽器サンプル読み込み: ${filePath} (${isPiano ? 'ピアノ' : 'ドラム'})`);
+      }
+
       const response = await fetch(filePath);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-      
+
       const arrayBuffer = await response.arrayBuffer();
       const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
       this.audioBuffers[filename] = audioBuffer;
-      
-      console.log(`📁 音声ファイル読み込み成功: ${filename} (${isPiano ? 'ピアノ' : 'ドラム'})`);
+
+      console.log(`✅ 音声デコード成功: ${audioBuffer.duration}s, ${audioBuffer.numberOfChannels}ch, ${audioBuffer.sampleRate}Hz`);
       return audioBuffer;
     } catch (error) {
-      console.warn(`⚠️ 音声ファイルの読み込みに失敗: ${filename} - ${error.message}`);
+      console.error(`❌ 音声ファイルの読み込みに失敗: ${filename}`, error);
       return null;
     }
   }
@@ -138,6 +147,62 @@ class UnifiedAudioSystem {
       return availableKeys.length > 0 ? availableKeys[0] : null;
     }
     return key;
+  }
+
+  // DiffSinger音声を再生（生成された音声ファイル）
+  async playDiffSingerAudio(audioUrl, startTime = 0, duration = null, velocity = 0.8) {
+    if (!this.isInitialized) {
+      const success = await this.initialize();
+      if (!success) return null;
+    }
+
+    try {
+      console.log('🎤 [UnifiedAudio] DiffSinger音声再生:', {
+        audioUrl,
+        startTime,
+        duration,
+        velocity
+      });
+
+      // 音声ファイルを読み込み
+      const audioBuffer = await this.loadAudioFile(audioUrl, false);
+      if (!audioBuffer) {
+        console.warn(`⚠️ DiffSinger音声ファイルが見つかりません: ${audioUrl}`);
+        return null;
+      }
+
+      // 音声を再生
+      const source = this.audioContext.createBufferSource();
+      const gainNode = this.audioContext.createGain();
+
+      source.buffer = audioBuffer;
+      gainNode.gain.value = velocity * this.masterVolume;
+
+      source.connect(gainNode);
+      gainNode.connect(this.audioContext.destination);
+
+      // 再生時間の制御
+      const now = this.audioContext.currentTime;
+      if (duration !== null) {
+        source.start(now, startTime, duration);
+      } else {
+        source.start(now, startTime);
+      }
+
+      console.log('✅ [UnifiedAudio] DiffSinger音声再生開始');
+
+      return {
+        source,
+        gainNode,
+        startTime: now,
+        duration: duration || (audioBuffer.duration - startTime),
+        type: 'diffsinger'
+      };
+
+    } catch (error) {
+      console.error(`❌ DiffSinger音声の再生に失敗: ${error.message}`);
+      return null;
+    }
   }
 
   // ドラム音を再生（デバッグコンソールと同じ方法）

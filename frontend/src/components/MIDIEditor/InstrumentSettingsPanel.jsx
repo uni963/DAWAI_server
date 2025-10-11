@@ -1,10 +1,13 @@
 import { Slider } from '../ui/slider.jsx'
 import { Button } from '../ui/button.jsx'
-import { X, Save, RotateCcw, Brain, RefreshCw, Zap } from 'lucide-react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select.jsx'
+import { Checkbox } from '../ui/checkbox.jsx'
+import { X, Save, RotateCcw, Brain, RefreshCw, Zap, Music } from 'lucide-react'
+import { MUSIC_GENRES, SCALE_DEFINITIONS } from '../../utils/musicTheory/MusicTheorySystem.js'
 
-const InstrumentSettingsPanel = ({ 
-  instrument, 
-  settings, 
+const InstrumentSettingsPanel = ({
+  instrument,
+  settings,
   onSettingsChange,
   onClose,
   onSave,
@@ -21,7 +24,15 @@ const InstrumentSettingsPanel = ({
     predictionDelay: 100,
     ghostNoteOpacity: 0.5
   },
-  onPredictionSettingsChange
+  onPredictionSettingsChange,
+  // 音楽理論設定のprops
+  musicTheorySettings = {
+    scaleConstraintEnabled: false,
+    selectedGenre: null,
+    selectedScales: [],
+    rootNote: 'C'
+  },
+  onMusicTheorySettingsChange
 }) => {
   console.log('🎛️ InstrumentSettingsPanel: aiModel =', aiModel, 'ghostTextEnabled =', ghostTextEnabled)
   const handleParameterChange = (parameter, value) => {
@@ -32,6 +43,44 @@ const InstrumentSettingsPanel = ({
     if (onPredictionSettingsChange) {
       onPredictionSettingsChange(setting, value)
     }
+  }
+
+  const handleMusicTheorySettingChange = (setting, value) => {
+    if (onMusicTheorySettingsChange) {
+      onMusicTheorySettingsChange(setting, value)
+    }
+  }
+
+  const handleGenreChange = (genreId) => {
+    handleMusicTheorySettingChange('selectedGenre', genreId)
+
+    // ジャンルに推奨されるスケールを自動選択
+    if (genreId && MUSIC_GENRES[genreId]) {
+      const recommendedScales = MUSIC_GENRES[genreId].recommendedScales.slice(0, 2)
+      handleMusicTheorySettingChange('selectedScales', recommendedScales)
+    }
+  }
+
+  const handleScaleToggle = (scaleId, checked) => {
+    const currentScales = musicTheorySettings.selectedScales || []
+    let newScales
+
+    if (checked) {
+      newScales = [...currentScales, scaleId]
+    } else {
+      newScales = currentScales.filter(scale => scale !== scaleId)
+    }
+
+    handleMusicTheorySettingChange('selectedScales', newScales)
+  }
+
+  // 推奨スケールかどうかを判定
+  const isRecommendedScale = (scaleId) => {
+    if (!musicTheorySettings.selectedGenre || !MUSIC_GENRES[musicTheorySettings.selectedGenre]) {
+      return false
+    }
+    const genre = MUSIC_GENRES[musicTheorySettings.selectedGenre]
+    return genre.recommendedScales.includes(scaleId)
   }
 
   const getDefaultSettings = (instrumentType) => {
@@ -259,6 +308,118 @@ const InstrumentSettingsPanel = ({
             )}
           </div>
         </div>
+
+        {/* 音楽理論設定 */}
+        {ghostTextEnabled && (
+          <div className="border-b border-gray-700 pb-4 mb-4">
+            <h4 className="text-md font-medium text-white mb-3 flex items-center gap-2">
+              <Music className="h-4 w-4" />
+              音楽理論設定
+            </h4>
+
+            <div className="space-y-3">
+              {/* スケール制約有効/無効 */}
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-300">スケール制約</span>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={musicTheorySettings.scaleConstraintEnabled}
+                    onChange={(e) => handleMusicTheorySettingChange('scaleConstraintEnabled', e.target.checked)}
+                    className="sr-only peer"
+                    data-testid="scale-constraint-toggle"
+                  />
+                  <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
+
+              {/* ジャンル選択 */}
+              {musicTheorySettings.scaleConstraintEnabled && (
+                <div className="space-y-3" data-testid="music-theory-section">
+                  <div className="parameter-group">
+                    <label className="block text-sm font-medium text-gray-300 mb-2">ジャンル</label>
+                    <Select
+                      value={musicTheorySettings.selectedGenre || ''}
+                      onValueChange={handleGenreChange}
+                      data-testid="genre-select"
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="ジャンルを選択..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(MUSIC_GENRES).map(([genreId, genre]) => (
+                          <SelectItem key={genreId} value={genreId}>
+                            {genre.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* スケール選択 */}
+                  {musicTheorySettings.selectedGenre && (
+                    <div className="space-y-2" data-testid="scales-section">
+                      <label className="block text-sm font-medium text-gray-300">使用スケール</label>
+                      <div className="space-y-2">
+                        {Object.entries(SCALE_DEFINITIONS).map(([scaleId, scale]) => {
+                          const isChecked = (musicTheorySettings.selectedScales || []).includes(scaleId)
+                          const isRecommended = isRecommendedScale(scaleId)
+
+                          return (
+                            <div
+                              key={scaleId}
+                              className={`flex items-center space-x-2 p-2 rounded ${
+                                isRecommended ? 'bg-blue-900/30 border border-blue-700/50 recommended' : 'bg-gray-800/50'
+                              }`}
+                            >
+                              <Checkbox
+                                id={`scale-${scaleId}`}
+                                checked={isChecked}
+                                onCheckedChange={(checked) => handleScaleToggle(scaleId, checked)}
+                                data-testid={`scale-${scaleId.replace(/\s+/g, '')}`}
+                              />
+                              <label
+                                htmlFor={`scale-${scaleId}`}
+                                className={`text-sm cursor-pointer flex-1 ${
+                                  isRecommended ? 'text-blue-200 font-medium' : 'text-gray-300'
+                                }`}
+                              >
+                                {scale.name}
+                                {isRecommended && (
+                                  <span className="ml-2 text-xs text-blue-400">推奨</span>
+                                )}
+                              </label>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ルート音設定 */}
+                  <div className="parameter-group">
+                    <label className="block text-sm font-medium text-gray-300 mb-2">ルート音</label>
+                    <Select
+                      value={musicTheorySettings.rootNote || 'C'}
+                      onValueChange={(value) => handleMusicTheorySettingChange('rootNote', value)}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'].map((note) => (
+                          <SelectItem key={note} value={note}>
+                            {note}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* 基本パラメータ */}
         <div className="space-y-4">

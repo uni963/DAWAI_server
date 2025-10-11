@@ -223,9 +223,9 @@ const TimelineHeader = ({
       </div>
       
       {/* 高FPSタイムライン本体 */}
-      <div 
+      <div
         ref={timelineRef}
-        className="relative h-16 bg-gray-800 cursor-pointer flex-1 overflow-x-auto overflow-y-hidden"
+        className="relative h-20 bg-gray-800 cursor-pointer flex-1 overflow-x-auto overflow-y-hidden"
         style={{
           willChange: 'scroll-position', // GPU加速有効化
           backfaceVisibility: 'hidden', // チラつき防止

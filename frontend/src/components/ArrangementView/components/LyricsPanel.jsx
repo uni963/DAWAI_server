@@ -185,6 +185,7 @@ const LyricsPanel = ({
                     placeholder="歌詞を入力してください..."
                     value={lyrics}
                     onChange={handleLyricsChange}
+                    onKeyDown={(e) => e.stopPropagation()}
                     className="min-h-[200px] bg-gray-800 border-gray-700"
                   />
                 </div>

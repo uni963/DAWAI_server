@@ -17,10 +17,29 @@ export default defineConfig({
   },
   server: {
     host: 'localhost',
-    port: 5173,
+    port: 5175,
     hmr: {
-      port: 5173,
+      port: 5175,
       protocol: 'ws'
+    },
+    // プロキシ設定: AIエンドポイントをバックエンドにルーティング
+    proxy: {
+      // DiffSinger音声合成専用プロキシ（port 8001）
+      '/ai/api/voice': {
+        target: 'http://localhost:8001',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/ai\/api\/voice/, '/api')
+      },
+      // その他のAIエンドポイント（port 8000）
+      '/ai/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/ai\/api/, '/ai/api')
+      },
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true
+      }
     },
     // 大きなファイルの配信設定
     fs: {

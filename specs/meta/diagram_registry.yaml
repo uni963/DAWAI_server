@@ -1,0 +1,285 @@
+# DAWAI 階層型仕様書2.0 - ダイアグラム登録
+version: 2.0.0
+last_updated: 2025-01-22
+project: DAWAI
+implementation_base: current_codebase
+
+# ダイアグラム情報管理
+diagrams:
+  # システム概要図
+  system_overview:
+    L0:
+      business_overview:
+        path: overview/index.md
+        title: "DAWAIプラットフォーム全体像"
+        type: mindmap
+        stakeholders: [executive, product_manager, user]
+        mermaid_type: "graph TB"
+
+  # システム構成図
+  system_architecture:
+    L1:
+      overall_architecture:
+        path: architecture/logical/L1_system.md
+        title: "システム全体アーキテクチャ"
+        type: architecture
+        parent: null
+        children:
+          - system_architecture/L2/frontend_detail
+          - system_architecture/L2/backend_detail
+        requirements: [FR-AUDIO-001, FR-AI-001, FR-PROJECT-001, FR-UI-001]
+        implementation_refs:
+          - frontend/src/App.jsx
+          - backend/main.py
+          - backend/ai_agent/main.py
+        sync_status: ✅
+
+    L2:
+      frontend_detail:
+        path: architecture/logical/L2_frontend/index.md
+        title: "React フロントエンド構成"
+        type: component_diagram
+        parent: system_architecture/L1/overall_architecture
+        technologies: [React, Vite, Tone.js, Tailwind]
+        implementation_refs:
+          - frontend/src/
+          - frontend/package.json
+          - frontend/vite.config.js
+        sync_status: 🔄 # To be created
+
+      backend_detail:
+        path: architecture/logical/L2_backend/index.md
+        title: "FastAPI バックエンド構成"
+        type: component_diagram
+        parent: system_architecture/L1/overall_architecture
+        technologies: [FastAPI, Python, PyTorch, Uvicorn]
+        implementation_refs:
+          - backend/
+          - backend/requirements.txt
+        sync_status: 🔄 # To be created
+
+  # 機能要件図
+  functional_requirements:
+    L1:
+      requirements_overview:
+        path: requirements/functional/L1_index.md
+        title: "機能要件マップ"
+        type: mindmap
+        mermaid_type: "mindmap"
+        coverage:
+          audio_processing: 4
+          ai_integration: 4
+          project_management: 3
+          ui_features: 4
+        implementation_rate: "100%"
+        sync_status: ✅
+
+    L2:
+      audio_processing_detail:
+        path: requirements/functional/L2_audio_processing/index.md
+        title: "音声処理システム構成"
+        type: architecture
+        parent: functional_requirements/L1/requirements_overview
+        implementation_refs:
+          - frontend/src/utils/unifiedAudioSystem.js
+          - frontend/src/components/EnhancedMidiEditor.jsx
+          - frontend/src/components/ArrangementView.jsx
+          - frontend/src/components/DrumTrack/
+        sync_status: ✅
+
+      ai_integration_detail:
+        path: requirements/functional/L2_ai_integration/index.md
+        title: "AI統合システム構成"
+        type: architecture
+        parent: functional_requirements/L1/requirements_overview
+        implementation_refs:
+          - backend/ai_agent/main.py
+          - backend/diffsinger/
+          - backend/ghost_text/
+          - frontend/src/components/AIassistant/
+        sync_status: ✅
+
+  # データフロー図
+  data_flows:
+    L1:
+      system_dataflow:
+        path: architecture/logical/L1_system.md
+        title: "主要データフロー"
+        type: sequence
+        mermaid_type: "sequenceDiagram"
+        entities: [User, "React UI", FastAPI, "AI Service", "Audio Engine"]
+        flows: [chat_flow, audio_flow, ai_synthesis_flow, project_save_flow]
+        sync_status: ✅
+
+  # シーケンス図
+  sequences:
+    L0:
+      business_flows:
+        path: design/sequences/L0_business_flows.md
+        title: "ビジネスフローシーケンス"
+        type: sequence
+        mermaid_type: "sequenceDiagram"
+        target_audience: [executive, product_manager, stakeholder]
+        flows: [onboarding_flow, ai_collaboration_flow, platform_value_flow, market_impact_flow]
+        sync_status: ✅
+
+    L1:
+      system_flows:
+        path: design/sequences/L1_system_flows.md
+        title: "システムフローシーケンス"
+        type: sequence
+        mermaid_type: "sequenceDiagram"
+        target_audience: [architect, senior_developer, pm]
+        flows: [startup_flow, ai_chat_flow, audio_processing_flow, project_management_flow, diffsinger_flow, ghost_text_flow, performance_flow, security_flow]
+        sync_status: ✅
+
+    L2:
+      component_flows:
+        path: design/sequences/L2_component_flows.md
+        title: "コンポーネントフローシーケンス"
+        type: sequence
+        mermaid_type: "sequenceDiagram"
+        target_audience: [developer, domain_specialist]
+        flows: [midi_editor_flow, multitrack_flow, drum_sequencer_flow, ai_switching_flow, diffsinger_synthesis_flow, ghost_text_completion_flow, visualization_flow, keyboard_shortcuts_flow, persistence_flow]
+        sync_status: ✅
+
+    L3:
+      implementation_flows:
+        path: design/sequences/L3_implementation_flows.md
+        title: "実装詳細フローシーケンス"
+        type: sequence
+        mermaid_type: "sequenceDiagram"
+        target_audience: [implementation_developer, debugger]
+        flows: [unified_audio_system_flow, canvas_implementation_flow, fastapi_ai_integration_flow, diffsinger_pipeline_flow, midi_persistence_hook_flow, ai_provider_switching_flow, audio_realtime_processing_flow, canvas_performance_flow, api_key_management_flow, cors_security_flow]
+        sync_status: ✅
+
+# 整合性チェックルール
+sync_rules:
+  - name: requirement_implementation_mapping
+    description: 要件と実装ファイルの対応確認
+    check_type: file_existence
+    source: requirements/functional/
+    target: implementation_refs
+    severity: ERROR
+
+  - name: diagram_hierarchy_consistency
+    description: ダイアグラムの階層整合性確認
+    check_type: hierarchy_validation
+    source: parent
+    target: children
+    severity: WARNING
+
+  - name: implementation_sync_status
+    description: 実装との同期状態確認
+    check_type: sync_status_validation
+    target: sync_status
+    severity: INFO
+
+  - name: mermaid_syntax_validation
+    description: Mermaidダイアグラムの構文確認
+    check_type: syntax_validation
+    target: mermaid_type
+    severity: WARNING
+
+# 自動生成設定
+auto_generation:
+  navigation_links:
+    enabled: true
+    update_frequency: "on_change"
+
+  cross_references:
+    enabled: true
+    link_format: "[{title}]({path})"
+
+  implementation_tracking:
+    enabled: true
+    scan_directories: ["frontend/src/", "backend/"]
+
+# 検証ステータス
+validation_status:
+  last_check: "2025-01-22T11:00:00Z"
+  total_diagrams: 12
+  validated_diagrams: 9
+  pending_diagrams: 3
+  errors: 0
+  warnings: 0
+
+  detailed_status:
+    system_overview: ✅
+    system_architecture: ✅
+    functional_requirements: ✅
+    data_flows: ✅
+    sequences_L0: ✅
+    sequences_L1: ✅
+    sequences_L2: ✅
+    sequences_L3: ✅
+    frontend_detail: 🔄
+    backend_detail: 🔄
+    test_cases: 🔄
+    design_detail: 🔄
+
+# 実装ファイル参照マッピング
+implementation_mapping:
+  # 主要エントリーポイント
+  main_app: "frontend/src/App.jsx"
+  main_api: "backend/main.py"
+  ai_service: "backend/ai_agent/main.py"
+
+  # Manager Classes (PR #6 - 2025-10-11 実装)
+  project_manager: "frontend/src/classes/ProjectManager.js"
+  event_handlers_manager: "frontend/src/classes/EventHandlersManager.js"
+  app_settings_manager: "frontend/src/classes/AppSettingsManager.js"
+
+  # 音声処理
+  audio_engine: "frontend/src/utils/unifiedAudioSystem.js"
+  midi_editor: "frontend/src/components/EnhancedMidiEditor.jsx"
+
+  # ArrangementView Module (PR #6 - モジュール化)
+  arrangement_view: "frontend/src/components/ArrangementView.jsx"
+  arrangement_hooks: "frontend/src/components/ArrangementView/hooks/"
+  arrangement_components: "frontend/src/components/ArrangementView/components/"
+
+  # AIAssistant Module (PR #6 - 再構成)
+  ai_chat: "frontend/src/components/AIassistant/AIAssistantChatBox.jsx"
+  ai_chat_components: "frontend/src/components/AIassistant/"
+
+  # DrumTrack Module (PR #6 - 再構築)
+  drum_track_main: "frontend/src/components/DrumTrack/DrumTrack.jsx"
+  drum_track_hooks: "frontend/src/components/DrumTrack/hooks/"
+  drum_track_components: "frontend/src/components/DrumTrack/"
+
+  # Backend
+  diffsinger: "backend/diffsinger/"
+  ghost_text: "backend/ghost_text/"
+
+  # プロジェクト管理
+  project_menu: "frontend/src/components/ProjectMenu.jsx"
+  persistence: "frontend/src/hooks/useMidiPersistence.js"
+
+  # 設定
+  vite_config: "frontend/vite.config.js"
+  package_json: "frontend/package.json"
+  requirements: "backend/requirements.txt"
+
+# メタデータ
+metadata:
+  creation_date: "2025-01-22"
+  last_major_update: "2025-10-11"
+  version_history:
+    - version: "2.0.0"
+      date: "2025-01-22"
+      changes: "階層型仕様書2.0への移行、現在実装ベース化"
+    - version: "2.1.0"
+      date: "2025-10-11"
+      changes: "PR #6 リファクタリング反映: Manager Classes導入、ArrangementView/AIAssistant/DrumTrackモジュール化"
+
+  contributors:
+    - role: "Product Manager"
+      name: "System Architect"
+    - role: "Technical Writer"
+      name: "Claude"
+
+  review_schedule:
+    frequency: "monthly"
+    next_review: "2025-02-22"
+    reviewers: ["CTO", "Lead Developer", "Product Manager"]
