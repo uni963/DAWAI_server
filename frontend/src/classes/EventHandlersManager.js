@@ -78,12 +78,13 @@ class EventHandlersManager {
       this.setProject(currentProject)
       this.setTracks(this.projectManager.getTracks())
       this.setTabs(this.projectManager.getTabs())
-      this.setActiveTab(this.projectManager.getActiveTab())
+      // 🔥 INFINITE LOOP FIX: setActiveTabを削除 - useTabManagementで処理済み
+      // this.setActiveTab(this.projectManager.getActiveTab())
 
       // 強制再レンダリングをトリガー
       this.setForceRerender(prev => prev + 1)
 
-      console.log('📊 Project state updated')
+      console.log('📊 Project state updated (activeTab sync removed to prevent infinite loop)')
     }, 50) // 🔧 10ms→50ms: 複数の状態更新を統合してちらつき削減
   }
 
@@ -117,7 +118,8 @@ class EventHandlersManager {
     console.log('🔄 Tab changed to:', tabId)
 
     if (this.projectManager.setActiveTab(tabId)) {
-      this.setActiveTab(tabId)
+      // 🔥 INFINITE LOOP FIX: setActiveTabを削除 - useTabManagementで処理済み
+      // this.setActiveTab(tabId)
       this.updateProjectState()
     }
   }

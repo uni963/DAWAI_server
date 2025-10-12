@@ -94,7 +94,7 @@ const EnhancedMidiEditor = ({
       console.log('🎵 Updating tempo from', state.tempo, 'to', globalTempo)
       state.setTempo(globalTempo)
     }
-  }, [globalTempo, state])
+  }, [globalTempo, state.tempo]) // 🔧 修正: state全体ではなくstate.tempoのみ依存
   
   // トラック別データの永続化用Ref
   const trackDataRef = useRef({})
@@ -105,7 +105,7 @@ const EnhancedMidiEditor = ({
   useEffect(() => {
     console.log('🎵 Redraw useEffect triggered')
     state.setNeedsRedraw(true)
-  }, [state])
+  }, []) // 🔧 修正: 初期化時のみ実行、stateを依存関係から削除
   
   // 永続化フックの使用
   const persistence = useMidiPersistence()
@@ -849,7 +849,7 @@ const EnhancedMidiEditor = ({
     // 現在のトラックIDを記録
     previousTrackIdRef.current = trackId
     console.log('🎵 Track change completed, new trackId:', trackId)
-  }, [trackId, isActive, state.isInitialized, saveCurrentTrackData]) // state.notesを依存配列から削除
+  }, [trackId, isActive, saveCurrentTrackData]) // 🔧 修正: state.isInitializedを依存配列から削除
 
   // ノート変更時の自動保存
   useEffect(() => {
@@ -873,7 +873,7 @@ const EnhancedMidiEditor = ({
     } else {
       console.log('🎵 Auto save skipped - too soon since last save')
     }
-  }, [trackId, state.isInitialized, saveCurrentTrackData]) // state.notesを依存配列から削除
+  }, [trackId, saveCurrentTrackData]) // 🔧 修正: state.isInitializedとstate.notesを依存配列から削除
 
   // midiDataの変更を監視して状態を更新
   useEffect(() => {
@@ -905,7 +905,7 @@ const EnhancedMidiEditor = ({
     } else {
       console.log('🎵 MIDI data unchanged, no sync needed')
     }
-  }, [midiData, trackId, isActive, state.isInitialized, trackName])
+  }, [midiData, trackId, isActive, trackName, state.setNotes, state.setNeedsRedraw]) // 🔧 修正: state.isInitializedを依存配列から削除
 
   // AIが追加したノートの更新を監視
   useEffect(() => {
@@ -1035,7 +1035,7 @@ const EnhancedMidiEditor = ({
       window.removeEventListener('midiDataRejected', handleMidiDataRejected)
       window.removeEventListener('midiDataApproved', handleMidiDataApproved)
     }
-  }, [trackId, isActive, state.isInitialized, midiData, state.setNotes, state.setNeedsRedraw])
+  }, [trackId, isActive, midiData, state.setNotes, state.setNeedsRedraw]) // 🔧 修正: state.isInitializedを依存配列から削除
 
   // ノートデータの更新を親コンポーネントに通知
   useEffect(() => {
@@ -1079,7 +1079,7 @@ const EnhancedMidiEditor = ({
     }
     
     onMidiDataUpdate(updateData)
-  }, [trackId, onMidiDataUpdate, state.isInitialized, state.isDraggingMultipleNotes, state.notes]) // state.notesを依存配列に戻す
+  }, [trackId, onMidiDataUpdate, state.isDraggingMultipleNotes]) // 🔧 修正: state.notesを依存配列から削除（無限ループ防止）
 
 
 
@@ -1766,7 +1766,7 @@ const EnhancedMidiEditor = ({
     state.setNeedsRedraw(true)
     
 
-  }, [state.isPlaying, globalTempo, state.playbackDuration, state.currentTime, onGlobalTempoChange, state.setTempo, state.setPlaybackDuration, state.setCurrentTime, state.setNeedsRedraw])
+  }, [state.isPlaying, globalTempo, onGlobalTempoChange, state.setTempo, state.setPlaybackDuration, state.setCurrentTime, state.setNeedsRedraw]) // 🔧 修正: state.playbackDurationとstate.currentTimeを依存配列から削除（無限ループ防止）
 
   // コンテナのリサイズ監視
   useEffect(() => {
@@ -1946,7 +1946,7 @@ const EnhancedMidiEditor = ({
         onMidiDataUpdate(updateData)
       }
     }, 0)
-  }, [trackId, state.audioEnabled, onNoteAdd, state.notes, persistence, state.isInitialized, ghostText, state.isPlaying, audio])
+  }, [trackId, state.audioEnabled, onNoteAdd, persistence, ghostText, state.isPlaying, audio]) // 🔧 修正: state.notesを依存配列から削除（無限ループ防止）
 
   // ノート削除関数
   const removeNote = useCallback((noteId) => {
@@ -2026,7 +2026,7 @@ const EnhancedMidiEditor = ({
         onMidiDataUpdate(updateData)
       }
     }, 0)
-  }, [trackId, onNoteRemove, persistence, state.isInitialized])
+  }, [trackId, onNoteRemove, persistence]) // 🔧 修正: state.isInitializedを依存配列から削除
 
   // ノート編集関数
   const editNote = useCallback((noteId, changes) => {
@@ -2078,7 +2078,7 @@ const EnhancedMidiEditor = ({
         onMidiDataUpdate(updateData)
       }
     }, 0)
-  }, [trackId, onNoteEdit, persistence, state.isInitialized, ghostText, state.notes])
+  }, [trackId, onNoteEdit, persistence, ghostText]) // 🔧 修正: state.notesを依存配列から削除（無限ループ防止）
 
   // ノートドラッグ終了処理
   const finalizeNoteDrag = useCallback((noteId, changes) => {
@@ -2104,7 +2104,7 @@ const EnhancedMidiEditor = ({
     }
     
     if (onNoteEdit) onNoteEdit(noteId, changes)
-  }, [trackId, onNoteEdit, persistence, state.isInitialized, ghostText, state.notes])
+  }, [trackId, onNoteEdit, persistence, ghostText]) // 🔧 修正: state.notesを依存配列から削除（無限ループ防止）
 
   // 複数ノートドラッグ終了処理
   const finalizeMultiNoteDrag = useCallback((updatedNotes) => {
@@ -2187,7 +2187,7 @@ const EnhancedMidiEditor = ({
         persistence.addToHistory(updatedNotes, `Multi-drag ${updatedNotes.length} notes`)
       }
     }, 10)
-  }, [trackId, onMidiDataUpdate, onNoteEdit, persistence, state.isInitialized])
+  }, [trackId, onMidiDataUpdate, onNoteEdit, persistence]) // 🔧 修正: state.isInitializedを依存配列から削除
 
 
 
@@ -2269,7 +2269,7 @@ const EnhancedMidiEditor = ({
       state.setSelectedNotes(new Set())
       state.setNeedsRedraw(true)
     }
-  }, [trackId, state.isInitialized, persistence])
+  }, [trackId, persistence]) // 🔧 修正: state.isInitializedを依存配列から削除
   
 
 

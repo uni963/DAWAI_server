@@ -11,16 +11,17 @@ class UnifiedAudioSystem {
     this.isInitialized = false;
     this.masterVolume = 0.8; // マスターボリュームを少し上げる
     this.masterGain = null;
-    
+    this.masterLimiter = null; // クリッピング防止用リミッター
+
     // 現在再生中の音
     this.activeSounds = new Map();
-    
+
     // トラック管理
     this.tracks = new Map();
     this.trackVolumes = new Map();
     this.trackMuted = new Map();
     this.trackSolo = new Map();
-    
+
     // イベントリスナー
     this.listeners = new Set();
   }
@@ -74,7 +75,23 @@ class UnifiedAudioSystem {
         if (!this.masterGain) {
           this.masterGain = this.audioContext.createGain();
           this.masterGain.gain.value = this.masterVolume;
-          this.masterGain.connect(this.audioContext.destination);
+
+          // クリッピング防止用リミッター（DynamicsCompressor）を作成
+          this.masterLimiter = this.audioContext.createDynamicsCompressor();
+
+          // リミッター設定: ソフトリミッティングでクリッピングを防止
+          // PC環境での音割れを防ぐための最適化設定
+          this.masterLimiter.threshold.setValueAtTime(-3, this.audioContext.currentTime); // -3dB: クリッピング直前で抑制
+          this.masterLimiter.knee.setValueAtTime(0, this.audioContext.currentTime); // ハードニー: リミッター動作
+          this.masterLimiter.ratio.setValueAtTime(20, this.audioContext.currentTime); // 20:1: 強力な圧縮でクリッピング防止
+          this.masterLimiter.attack.setValueAtTime(0.001, this.audioContext.currentTime); // 1ms: 瞬時に反応
+          this.masterLimiter.release.setValueAtTime(0.1, this.audioContext.currentTime); // 100ms: 自然な解放
+
+          // 接続: masterGain → limiter → destination
+          this.masterGain.connect(this.masterLimiter);
+          this.masterLimiter.connect(this.audioContext.destination);
+
+          console.log('✅ マスターリミッター初期化完了 (threshold: -3dB, ratio: 20:1)');
         }
 
         // AudioContextが実際にrunning状態になっているかチェック

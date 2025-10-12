@@ -56,6 +56,10 @@ const MidiEditorEventHandlers = ({
       // isActive が true の場合、Piano track特有の問題
       if (isActive) {
         console.error('🔥🔥🔥 CRITICAL: Piano track is active and capturing TabBar clicks! 🔥🔥🔥')
+        console.error('✅ FIX: Stopping event propagation to allow TabBar to handle click')
+        // イベント伝播を停止してTabBarのクリックハンドラーが正常に動作するようにする
+        e.stopPropagation()
+        e.preventDefault()
       }
       return
     }

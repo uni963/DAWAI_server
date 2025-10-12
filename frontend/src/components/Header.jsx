@@ -268,13 +268,6 @@ const Header = ({
                     <FolderOpen className="h-4 w-4 text-blue-400" />
                     Open...
                   </button>
-                  <button
-                    className="w-full text-left px-4 py-2 text-sm text-white hover:bg-gray-700 flex items-center gap-2"
-                    onClick={handleLoadSampleProject}
-                  >
-                    <Sparkles className="h-4 w-4 text-pink-400" />
-                    Load Sample Project
-                  </button>
                   <div className="border-t border-gray-600 my-1"></div>
                   <button 
                     className="w-full text-left px-4 py-2 text-sm text-white hover:bg-gray-700 flex items-center gap-2"

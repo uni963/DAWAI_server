@@ -72,12 +72,12 @@ const EnhancedMidiEditor = ({
     if (globalTempo !== state.tempo) {
       state.setTempo(globalTempo);
     }
-  }, [globalTempo, state]);
+  }, [globalTempo, state.tempo]); // 🔧 修正: state全体ではなくstate.tempoのみ依存
   
   // 初期化時に再生ヘッドを表示するため、強制的に再描画
   useEffect(() => {
     state.setNeedsRedraw(true);
-  }, [state]);
+  }, []); // 🔧 修正: 依存関係から state を削除して初期化時のみ実行
   
   // 永続化フックの使用
   const persistence = useMidiPersistence();
@@ -347,7 +347,7 @@ const EnhancedMidiEditor = ({
       window.removeEventListener('midiDataApproved', handleMidiDataApproved)
       window.removeEventListener('midiDataRejected', handleMidiDataRejected)
     }
-  }, [midiData, trackId, state])
+  }, [midiData, trackId, state.setNeedsRedraw, state.setNotes]) // 🔧 修正: state全体ではなく使用する関数のみ
 
   // 曲の最大時間を計算（ArrangementViewの設定を優先）
   const maxTime = useMemo(() => {
@@ -568,7 +568,7 @@ const EnhancedMidiEditor = ({
       resizeObserver.disconnect();
       window.removeEventListener('wheel', handlePageWheel);
     };
-  }, [containerRef, state]);
+  }, [state.setNeedsRedraw]); // 🔧 修正: state全体ではなくsetNeedsRedrawのみ依存
 
   // コンポーネントのクリーンアップ
   useEffect(() => {
@@ -1080,6 +1080,6 @@ const EnhancedMidiEditor = ({
       delete window.midiEditorForceUpdate;
       delete window.projectManager;
     };
-  }, [state, projectManager]);
+  }, [state.setNeedsRedraw, projectManager]); // 🔧 修正: state全体ではなくsetNeedsRedrawのみ依存
 
 export default memo(EnhancedMidiEditor); 

@@ -22,6 +22,7 @@ const TabBar = ({
   addNewTab
 }) => {
 
+
   // タブタイトルに番号を付ける関数
   const getDisplayTitle = (tab, index) => {
     const sameTitleTabs = tabs.filter(t => t.title === tab.title)
@@ -139,7 +140,6 @@ const TabBar = ({
             !document.activeElement ||
             !document.activeElement.closest('.tab-scroll-container')) {
           activeTabElement.focus()
-          console.error('❗❗❗ AUTO FOCUS DEBUG: Focused on active tab:', activeTab, '❗❗❗')
         }
       }
     }
@@ -147,35 +147,6 @@ const TabBar = ({
 
   // グローバルマウスイベントリスナーを追加
   useEffect(() => {
-    // Piano trackクリック問題診断用のグローバルクリックリスナー
-    const handleGlobalClick = (e) => {
-      const isTabBarElement = e.target.closest('.tab-scroll-container') ||
-                             e.target.closest('[data-tab-id]') ||
-                             e.target.closest('[data-track-menu-trigger]')
-
-      if (isTabBarElement) {
-        console.error('🌍🌍🌍 GLOBAL CLICK DEBUG: TabBar element clicked, target:', e.target.tagName, 'class:', e.target.className, '🌍🌍🌍')
-        console.error('🌍🌍🌍 GLOBAL CLICK DEBUG: Event details - currentTarget:', e.currentTarget.tagName, 'bubbles:', e.bubbles, 'cancelable:', e.cancelable, '🌍🌍🌍')
-        console.error('🌍🌍🌍 GLOBAL CLICK DEBUG: Event path length:', e.composedPath ? e.composedPath().length : 'N/A', '🌍🌍🌍')
-
-        // イベントが適切に伝播しているかチェック
-        if (e.target.hasAttribute('data-tab-id')) {
-          const tabId = e.target.getAttribute('data-tab-id')
-          console.error('🌍🌍🌍 GLOBAL CLICK DEBUG: Direct tab button clicked, ID:', tabId, '🌍🌍🌍')
-
-          // タブボタンの詳細状態チェック
-          const computedStyle = window.getComputedStyle(e.target)
-          console.error('🌍🌍🌍 GLOBAL CLICK DEBUG: Tab button CSS - pointerEvents:', computedStyle.pointerEvents, 'display:', computedStyle.display, 'visibility:', computedStyle.visibility, '🌍🌍🌍')
-          console.error('🌍🌍🌍 GLOBAL CLICK DEBUG: Tab button disabled:', e.target.disabled, 'hidden:', e.target.hidden, '🌍🌍🌍')
-        } else if (e.target.closest('[data-tab-id]')) {
-          const parentTab = e.target.closest('[data-tab-id]')
-          const tabId = parentTab.getAttribute('data-tab-id')
-          console.error('🌍🌍🌍 GLOBAL CLICK DEBUG: Child element clicked, parent tab ID:', tabId, '🌍🌍🌍')
-          console.error('🌍🌍🌍 GLOBAL CLICK DEBUG: Clicked element:', e.target.tagName, 'class:', e.target.className, '🌍🌍🌍')
-        }
-      }
-    }
-
     const handleGlobalMouseMove = (e) => {
       if (isScrolling && tabBarRef.current) {
         e.preventDefault()
@@ -189,11 +160,36 @@ const TabBar = ({
     }
 
     const handleKeyDown = (e) => {
-      // 新しいボタンベースのイベントハンドラーを使用するため、
-      // Tab キーの処理はコメントアウト
-      // （個別のボタンのonKeyDownで処理される）
+      // タブボタンがフォーカスされている場合のみトラック移動を処理
+      const focusedElement = document.activeElement
+      const isTabButtonFocused = focusedElement && focusedElement.hasAttribute('data-tab-id')
 
-      if (tabBarRef.current) {
+      if (isTabButtonFocused) {
+        // 矢印キーでトラック移動
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+          e.preventDefault()
+          const currentIndex = tabs.findIndex(t => t.id === activeTab)
+          let nextIndex
+
+          if (e.key === 'ArrowLeft') {
+            nextIndex = currentIndex > 0 ? currentIndex - 1 : tabs.length - 1
+          } else {
+            nextIndex = currentIndex < tabs.length - 1 ? currentIndex + 1 : 0
+          }
+
+          const nextTab = tabs[nextIndex]
+          if (nextTab) {
+            setActiveTab(nextTab.id)
+            setTimeout(() => {
+              const nextTabButton = tabBarRef.current?.querySelector(`[data-tab-id="${nextTab.id}"]`)
+              if (nextTabButton) {
+                nextTabButton.focus()
+              }
+            }, 10)
+          }
+        }
+      } else if (tabBarRef.current) {
+        // タブボタンがフォーカスされていない場合は通常のスクロール
         if (e.key === 'ArrowLeft') {
           e.preventDefault()
           tabBarRef.current.scrollLeft -= 100
@@ -212,42 +208,14 @@ const TabBar = ({
     // キーボードショートカットを追加
     document.addEventListener('keydown', handleKeyDown)
 
-    // グローバルクリック診断リスナーを追加
-    document.addEventListener('click', handleGlobalClick, true) // capture=true で早期キャプチャ
-
-    // 最も低レベルのマウスイベント診断
-    const handleMouseDown = (e) => {
-      const isTabBarElement = e.target.closest('.tab-scroll-container') ||
-                             e.target.closest('[data-tab-id]') ||
-                             e.target.closest('[data-track-menu-trigger]')
-      if (isTabBarElement) {
-        console.error('⚡⚡⚡ RAW MOUSEDOWN: TabBar mousedown detected, target:', e.target.tagName, '⚡⚡⚡')
-      }
-    }
-
-    const handleMouseUp = (e) => {
-      const isTabBarElement = e.target.closest('.tab-scroll-container') ||
-                             e.target.closest('[data-tab-id]') ||
-                             e.target.closest('[data-track-menu-trigger]')
-      if (isTabBarElement) {
-        console.error('⚡⚡⚡ RAW MOUSEUP: TabBar mouseup detected, target:', e.target.tagName, '⚡⚡⚡')
-      }
-    }
-
-    document.addEventListener('mousedown', handleMouseDown, true)
-    document.addEventListener('mouseup', handleMouseUp, true)
-
     return () => {
       document.removeEventListener('mousemove', handleGlobalMouseMove)
       document.removeEventListener('mouseup', handleGlobalMouseUp)
       document.removeEventListener('keydown', handleKeyDown)
-      document.removeEventListener('click', handleGlobalClick, true)
-      document.removeEventListener('mousedown', handleMouseDown, true)
-      document.removeEventListener('mouseup', handleMouseUp, true)
     }
   }, [isScrolling, scrollStartX, scrollStartScrollLeft, tabs, activeTab, setActiveTab])
   return (
-    <div 
+    <div
       ref={tabBarRef}
       className="bg-gray-800/50 border-b border-gray-700/50 px-3 py-1 flex items-center space-x-1 overflow-x-auto scrollbar-hide tab-scroll-container relative"
       onWheel={handleWheel}
@@ -256,7 +224,7 @@ const TabBar = ({
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
       onMouseEnter={(e) => e.stopPropagation()}
-      style={{ 
+      style={{
         cursor: isScrolling ? 'grabbing' : 'default',
         userSelect: isScrolling ? 'none' : 'auto',
         maxHeight: '40px', // 60pxから40pxに削減
@@ -276,80 +244,62 @@ const TabBar = ({
               }`}
               data-tab-id={tab.id}
               onClick={(e) => {
-                const displayTitle = getDisplayTitle(tab, tabs.indexOf(tab))
-                console.error('🚨🚨🚨 TAB CLICK DEBUG: Clicked tab:', displayTitle, 'ID:', tab.id, '🚨🚨🚨')
-                console.error('🚨🚨🚨 TAB CLICK DEBUG: Current activeTab:', activeTab, '🚨🚨🚨')
-                console.error('🚨🚨🚨 TAB CLICK DEBUG: Event target:', e.target.tagName, '🚨🚨🚨')
-                console.error('🚨🚨🚨 TAB CLICK DEBUG: Event currentTarget:', e.currentTarget.tagName, '🚨🚨🚨')
-                console.error('🚨🚨🚨 TAB CLICK DEBUG: Event timestamp:', Date.now(), '🚨🚨🚨')
-                console.error('🚨🚨🚨 TAB CLICK DEBUG: All tabs:')
-                tabs.forEach((t, i) => {
-                  const tDisplayTitle = getDisplayTitle(t, i)
-                  console.error(`  [${i}]: ${tDisplayTitle} (ID: ${t.id}) ${t.id === activeTab ? '← ACTIVE' : ''}`)
-                })
-
-                console.error('🚨🚨🚨 TAB CLICK DEBUG: Before setActiveTab, activeTab was:', activeTab, '🚨🚨🚨')
+                console.log('🔧 TAB CLICK: ', tab.id, 'current active:', activeTab)
                 setActiveTab(tab.id)
-                console.error('🚨🚨🚨 TAB CLICK DEBUG: After setActiveTab called with:', tab.id, '🚨🚨🚨')
-
                 // クリック後、ボタンに確実にフォーカスを設定
                 e.currentTarget.focus()
-                console.error('🚨🚨🚨 TAB CLICK DEBUG: Focused on tab:', displayTitle, '🚨🚨🚨')
-
-                // setActiveTabが実際に変更されたかを確認
-                setTimeout(() => {
-                  console.error('🚨🚨🚨 TAB CLICK DEBUG: After timeout, activeTab is now:', activeTab, '🚨🚨🚨')
-                }, 100)
+                console.log('🔧 TAB CLICK END: ', tab.id)
               }}
               title={tab.title}
               tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === 'Tab') {
-                  e.preventDefault()
-                  const displayTitle = getDisplayTitle(tab, tabs.indexOf(tab))
-                  console.error('❗❗❗ BUTTON TABBAR DEBUG: Tab key pressed on button:', displayTitle, 'ID:', tab.id, '❗❗❗')
-                  console.error('❗❗❗ BUTTON TABBAR DEBUG: Current activeTab:', activeTab, '❗❗❗')
-                  console.error('❗❗❗ BUTTON TABBAR DEBUG: All tabs:')
-                  tabs.forEach((t, i) => {
-                    const tDisplayTitle = getDisplayTitle(t, i)
-                    console.error(`  [${i}]: ${tDisplayTitle} (ID: ${t.id}) ${t.id === activeTab ? '← ACTIVE' : ''}`)
-                  })
-
-                  const currentIndex = tabs.findIndex(t => t.id === activeTab)
-                  console.error('❗❗❗ BUTTON TABBAR DEBUG: Current index:', currentIndex, '❗❗❗')
-
-                  let nextIndex
-                  if (e.shiftKey) {
-                    nextIndex = currentIndex > 0 ? currentIndex - 1 : tabs.length - 1
-                  } else {
-                    nextIndex = currentIndex < tabs.length - 1 ? currentIndex + 1 : 0
-                  }
-
-                  console.error('❗❗❗ BUTTON TABBAR DEBUG: Next index:', nextIndex, '❗❗❗')
-
-                  const nextTab = tabs[nextIndex]
-                  if (nextTab) {
-                    const nextDisplayTitle = getDisplayTitle(nextTab, nextIndex)
-                    console.error('❗❗❗ BUTTON TABBAR DEBUG: Switching to tab:', nextDisplayTitle, 'ID:', nextTab.id, '❗❗❗')
-                    setActiveTab(nextTab.id)
-
-                    setTimeout(() => {
-                      const nextTabButton = tabBarRef.current?.querySelector(`[data-tab-id="${nextTab.id}"]`)
-                      if (nextTabButton) {
-                        nextTabButton.focus()
-                      }
-                    }, 10)
-                  } else {
-                    console.error('❗❗❗ BUTTON TABBAR DEBUG: ERROR - nextTab is null! ❗❗❗')
-                  }
-                }
-              }}
             >
-              {tab.type === 'midi_editor' && <Piano className="h-4 w-4 mr-2 flex-shrink-0" />}
-              {tab.type === 'drum_track' && <Drum className="h-4 w-4 mr-2 flex-shrink-0" />}
-              {tab.type === 'diffsinger_track' && <Mic className="h-4 w-4 mr-2 flex-shrink-0" />}
-              {tab.type === 'arrangement' && <Music className="h-4 w-4 mr-2 flex-shrink-0" />}
-              <span className="truncate">{getDisplayTitle(tab, tabs.indexOf(tab))}</span>
+              {tab.type === 'midi_editor' && (
+                <Piano
+                  className="h-4 w-4 mr-2 flex-shrink-0"
+                  onClick={(e) => {
+                    console.log('🎹 PIANO ICON CLICK: イベントをButtonに伝播')
+                    // e.stopPropagation() を削除してイベント伝播を許可
+                  }}
+                />
+              )}
+              {tab.type === 'drum_track' && (
+                <Drum
+                  className="h-4 w-4 mr-2 flex-shrink-0"
+                  onClick={(e) => {
+                    console.log('🥁 DRUM ICON CLICK: イベントをButtonに伝播')
+                    // e.stopPropagation() を削除してイベント伝播を許可
+                  }}
+                />
+              )}
+              {tab.type === 'diffsinger_track' && (
+                <Mic
+                  className="h-4 w-4 mr-2 flex-shrink-0"
+                  onClick={(e) => {
+                    console.log('🎤 MIC ICON CLICK: イベントをButtonに伝播')
+                    // e.stopPropagation() を削除してイベント伝播を許可
+                  }}
+                />
+              )}
+              {tab.type === 'arrangement' && (
+                <Music
+                  className="h-4 w-4 mr-2 flex-shrink-0"
+                  onClick={(e) => {
+                    console.log('🎵 MUSIC ICON CLICK: イベントをButtonに伝播')
+                    // e.stopPropagation() を削除してイベント伝播を許可
+                  }}
+                />
+              )}
+              <span
+                className="truncate"
+                onClick={(e) => {
+                  // SPANクリック時も親ボタンのonClickに伝播させる
+                  // e.stopPropagation() を削除してイベント伝播を許可
+                  console.log('🎯 SPAN CLICK: イベントをButtonに伝播')
+                  // setActiveTab(tab.id) は親ButtonのonClickで処理される
+                }}
+              >
+                {getDisplayTitle(tab, tabs.indexOf(tab))}
+              </span>
             </Button>
             {tabs.length > 1 && tab.isClosable && (
               <button

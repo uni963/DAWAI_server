@@ -92,20 +92,23 @@ export const useTabManagement = (dependencies) => {
    * - updateProjectStateで他の状態も同期（デバウンス適用）
    */
   const handleTabChange = useCallback((tabId) => {
-    console.log('🔄 タブ切り替え開始:', tabId)
+    console.log('🔄 HOOK handleTabChange 開始:', tabId, 'current:', activeTab)
 
     // 1. MIDIデータ検証（条件付き - 修正1適用後）
     processMidiDataValidation(tabId)
+    console.log('🔄 HOOK processMidiDataValidation 完了:', tabId)
 
-    // 2. タブ切り替えと状態更新
+    // 2. タブ切り替えのみ（無限ループ修正）
     if (projectManager.setActiveTab(tabId)) {
-      // ✅ 即座にタブ切り替えを反映（UI応答性確保）
+      console.log('🔄 HOOK projectManager.setActiveTab 成功:', tabId)
+
+      // 即座にReact stateを更新してUI応答性を確保
       setActiveTab(tabId)
-      // ✅ 他の状態もupdateProjectStateで同期（デバウンス適用）
-      eventHandlersManager.updateProjectState()
-      console.log('✅ タブ切り替え完了:', tabId)
+      console.log('✅ HOOK handleTabChange 完了:', tabId)
+    } else {
+      console.log('❌ HOOK projectManager.setActiveTab 失敗:', tabId)
     }
-  }, [projectManager, eventHandlersManager, setActiveTab, processMidiDataValidation])
+  }, [projectManager, setActiveTab, processMidiDataValidation])
   // ✅ 修正: tabs, tracks, globalTempoは不要な依存関係のため削除
   // ✅ 修正: processMidiDataValidationを依存配列に追加（TDZ回避のため関数定義を先に移動）
 

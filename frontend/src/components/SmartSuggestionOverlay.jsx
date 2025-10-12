@@ -6,6 +6,23 @@
 import React, { useState, useEffect, useRef } from 'react';
 import smartSuggestionEngine from '../engines/SmartSuggestionEngine.js';
 
+// ゴーストノート位置調整用定数
+// 🔧 これらの値を調整することで、ゴーストノートの表示位置を微調整できます
+const GHOST_NOTE_POSITION = {
+  // X軸調整 (時間軸)
+  timeScale: 100,        // 1秒あたりのピクセル数
+  leftOffset: 80,        // 左からのオフセット (ピアノロール幅)
+
+  // Y軸調整 (ピッチ軸)
+  noteHeight: 20,        // 1ノートあたりの高さ (px)
+  topOffset: 60,         // 上からのオフセット (ヘッダー高さ)
+  pitchInversion: true,  // ピッチの反転 (true = 高い音が上)
+
+  // ピッチ範囲調整
+  minPitch: 21,          // 表示される最低音 (A0 = MIDI 21)
+  maxPitch: 108          // 表示される最高音 (C8 = MIDI 108)
+};
+
 const SmartSuggestionOverlay = ({
   genreContext,
   currentNotes = [],
@@ -26,7 +43,9 @@ const SmartSuggestionOverlay = ({
   const [isVisible, setIsVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [confidence, setConfidence] = useState(0);
+  const [opacity, setOpacity] = useState(1); // フェードアウト用の透明度
   const suggestionTimeoutRef = useRef(null);
+  const fadeTimeoutRef = useRef(null);
 
   // SmartSuggestionEngine初期化
   useEffect(() => {
@@ -41,6 +60,31 @@ const SmartSuggestionOverlay = ({
 
     initializeEngine();
   }, []);
+
+  // 自動フェードアウト処理（5秒後に透明化）
+  useEffect(() => {
+    if (isVisible && suggestions.length > 0) {
+      // 表示時は不透明にリセット
+      setOpacity(1);
+
+      // 前のタイマーをクリア
+      if (fadeTimeoutRef.current) {
+        clearTimeout(fadeTimeoutRef.current);
+      }
+
+      // 5秒後にフェードアウト開始
+      fadeTimeoutRef.current = setTimeout(() => {
+        setOpacity(0);
+        console.log('💨 サジェスチョンフェードアウト開始');
+      }, 5000);
+    }
+
+    return () => {
+      if (fadeTimeoutRef.current) {
+        clearTimeout(fadeTimeoutRef.current);
+      }
+    };
+  }, [isVisible, suggestions]);
 
   // サジェスチョン生成（デバウンス処理）
   useEffect(() => {
@@ -183,6 +227,38 @@ const SmartSuggestionOverlay = ({
     return `${note}${octave}`;
   };
 
+  // ゴーストノート位置計算関数
+  // MIDIノート番号と時間から、画面上の座標を計算
+  const calculateGhostNotePosition = (pitch, time, duration) => {
+    const {
+      timeScale,
+      leftOffset,
+      noteHeight,
+      topOffset,
+      pitchInversion,
+      minPitch,
+      maxPitch
+    } = GHOST_NOTE_POSITION;
+
+    // X座標: 時間位置をピクセルに変換
+    const left = leftOffset + (time * timeScale);
+
+    // Y座標: ピッチをピクセルに変換
+    let top;
+    if (pitchInversion) {
+      // 高い音が上に表示される（一般的なピアノロール）
+      top = topOffset + ((maxPitch - pitch) * noteHeight);
+    } else {
+      // 低い音が上に表示される
+      top = topOffset + ((pitch - minPitch) * noteHeight);
+    }
+
+    // 幅: 音符の長さをピクセルに変換
+    const width = duration * timeScale;
+
+    return { left, top, width };
+  };
+
   // レンダリング条件
   if (!isEnabled || !isVisible || (!suggestions.length && !chordSuggestions.length && !rhythmSuggestions.length)) {
     return null;
@@ -191,7 +267,10 @@ const SmartSuggestionOverlay = ({
   return (
     <div className={`smart-suggestion-overlay ${className}`}>
       {/* メインオーバーレイ */}
-      <div className="fixed top-20 right-4 z-50 bg-white border border-gray-300 rounded-lg shadow-lg max-w-sm">
+      <div
+        className="fixed top-20 right-4 z-50 bg-white border border-gray-300 rounded-lg shadow-lg max-w-sm transition-opacity duration-1000"
+        style={{ opacity: opacity }}
+      >
         {/* ヘッダー */}
         <div className="p-3 border-b border-gray-200">
           <div className="flex items-center justify-between">
@@ -222,35 +301,46 @@ const SmartSuggestionOverlay = ({
             <div className="p-3 border-b border-gray-100">
               <h4 className="text-xs font-medium text-gray-700 mb-2">🎹 次のノート</h4>
               <div className="space-y-2">
-                {suggestions.slice(0, 3).map((suggestion, idx) => (
-                  <div
-                    key={suggestion.id || idx}
-                    className="flex items-center justify-between p-2 bg-gray-50 rounded hover:bg-gray-100 transition-colors"
-                  >
-                    <div className="flex-1">
-                      <div className="text-sm font-medium text-gray-900">
-                        {formatNoteName(suggestion.pitch)}
+                {suggestions.slice(0, 3).map((suggestion, idx) => {
+                  const colorIndicator = getGhostNoteColor(suggestion.confidence, idx);
+                  return (
+                    <div
+                      key={suggestion.id || idx}
+                      className="flex items-center justify-between p-2 bg-gray-50 rounded hover:bg-gray-100 transition-colors"
+                    >
+                      <div className="flex items-center flex-1 gap-2">
+                        {/* カラーインジケーター */}
+                        <div
+                          className="w-3 h-3 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: colorIndicator.dot }}
+                          title={`提案 ${idx + 1}`}
+                        />
+                        <div className="flex-1">
+                          <div className="text-sm font-medium text-gray-900">
+                            {formatNoteName(suggestion.pitch)}
+                          </div>
+                          <div className="text-xs text-gray-600">
+                            {typeof suggestion.reasoning === 'string' ? suggestion.reasoning : '音楽理論に基づく提案'}
+                          </div>
+                        </div>
                       </div>
-                      <div className="text-xs text-gray-600">
-                        {typeof suggestion.reasoning === 'string' ? suggestion.reasoning : '音楽理論に基づく提案'}
+                      <div className="flex space-x-1 ml-2">
+                        <button
+                          onClick={() => handleAcceptSuggestion(suggestion)}
+                          className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded hover:bg-green-200 transition-colors"
+                        >
+                          ✓
+                        </button>
+                        <button
+                          onClick={() => handleRejectSuggestion(suggestion)}
+                          className="px-2 py-1 bg-red-100 text-red-700 text-xs rounded hover:bg-red-200 transition-colors"
+                        >
+                          ✕
+                        </button>
                       </div>
                     </div>
-                    <div className="flex space-x-1 ml-2">
-                      <button
-                        onClick={() => handleAcceptSuggestion(suggestion)}
-                        className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded hover:bg-green-200 transition-colors"
-                      >
-                        ✓
-                      </button>
-                      <button
-                        onClick={() => handleRejectSuggestion(suggestion)}
-                        className="px-2 py-1 bg-red-100 text-red-700 text-xs rounded hover:bg-red-200 transition-colors"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -352,25 +442,33 @@ const SmartSuggestionOverlay = ({
       {/* ゴーストノート表示 (ピアノロール上に重なって表示される想定) */}
       {showGhostNotes && ghostNotes.length > 0 && (
         <div className="ghost-notes-container">
-          {ghostNotes.map((ghostNote, idx) => (
-            <div
-              key={idx}
-              className="ghost-note"
-              style={{
-                position: 'absolute',
-                left: `${ghostNote.time * 100}px`, // 時間位置
-                top: `${(127 - ghostNote.pitch) * 2}px`, // ピッチ位置
-                width: `${ghostNote.duration * 100}px`, // 長さ
-                height: '14px',
-                backgroundColor: 'rgba(59, 130, 246, 0.3)',
-                border: '1px dashed #3b82f6',
-                borderRadius: '2px',
-                pointerEvents: 'none',
-                zIndex: 10
-              }}
-              title={`提案: ${formatNoteName(ghostNote.pitch)} (信頼度: ${(ghostNote.confidence * 100).toFixed(0)}%)`}
-            />
-          ))}
+          {ghostNotes.map((ghostNote, idx) => {
+            const position = calculateGhostNotePosition(
+              ghostNote.pitch,
+              ghostNote.time,
+              ghostNote.duration
+            );
+
+            return (
+              <div
+                key={idx}
+                className="ghost-note"
+                style={{
+                  position: 'absolute',
+                  left: `${position.left}px`,
+                  top: `${position.top}px`,
+                  width: `${position.width}px`,
+                  height: `${GHOST_NOTE_POSITION.noteHeight - 2}px`, // ノート高さから2px引いて余白確保
+                  backgroundColor: 'rgba(59, 130, 246, 0.3)',
+                  border: '1px dashed #3b82f6',
+                  borderRadius: '2px',
+                  pointerEvents: 'none',
+                  zIndex: 10
+                }}
+                title={`提案: ${formatNoteName(ghostNote.pitch)} (信頼度: ${(ghostNote.confidence * 100).toFixed(0)}%)`}
+              />
+            );
+          })}
         </div>
       )}
     </div>
