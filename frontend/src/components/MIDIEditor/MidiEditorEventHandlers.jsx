@@ -42,9 +42,31 @@ const MidiEditorEventHandlers = ({
   
   // マウスダウンハンドラー
   const handleMouseDown = useCallback((e) => {
+    // CRITICAL: ALL mouse events diagnosis
+    console.error('🔴🔴🔴 MIDI MOUSE CAPTURE: handleMouseDown ALWAYS called, target:', e.target.tagName, 'class:', e.target.className, '🔴🔴🔴')
+    console.error('🔴🔴🔴 MIDI MOUSE CAPTURE: isActive:', isActive, 'trackId:', trackId, '🔴🔴🔴')
+
+    // TabBar クリック競合デバッグ
+    const isTabBarClick = e.target.closest('.tab-scroll-container') ||
+                          e.target.closest('[data-tab-id]') ||
+                          e.target.closest('[data-track-menu-trigger]')
+
+    if (isTabBarClick) {
+      console.error('🟢🟢🟢 MIDI MOUSE DEBUG: TabBar click detected, isActive:', isActive, ', SHOULD IGNORE 🟢🟢🟢')
+      // isActive が true の場合、Piano track特有の問題
+      if (isActive) {
+        console.error('🔥🔥🔥 CRITICAL: Piano track is active and capturing TabBar clicks! 🔥🔥🔥')
+      }
+      return
+    }
+
+    console.error('🔵🔵🔵 MIDI MOUSE DEBUG: handleMouseDown called, target:', e.target.tagName, 'class:', e.target.className, '🔵🔵🔵')
+
     if (e.button === 2) return
-    
-    const rect = dynamicCanvasRef.current.getBoundingClientRect()
+
+    const rect = dynamicCanvasRef.current?.getBoundingClientRect()
+    if (!rect) return
+
     const x = e.clientX - rect.left
     const y = e.clientY - rect.top
 
@@ -986,6 +1008,11 @@ const MidiEditorEventHandlers = ({
 
   // キャンバス右クリックハンドラー
   const handleCanvasRightClick = useCallback((e) => {
+    // キャンバス上でのみ右クリックを処理（他のUI要素への影響を防ぐ）
+    if (e.target !== dynamicCanvasRef.current) {
+      return
+    }
+
     try {
       e.preventDefault()
     } catch (error) {
@@ -1040,28 +1067,69 @@ const MidiEditorEventHandlers = ({
   // キーボードイベントハンドラー
   useEffect(() => {
     const handleKeyDown = async (e) => {
-      const isInMidiEditor = containerRef.current?.contains(e.target) || 
+      // Tab キー専用デバッグ
+      if (e.key === 'Tab') {
+        console.warn('🔥🔥🔥 MIDI HANDLER DEBUG: Tab key pressed in MidiEditorEventHandlers 🔥🔥🔥')
+      }
+
+      // MIDIエディタコンテナ内かチェック
+      const isInMidiEditor = containerRef.current?.contains(e.target) ||
                            e.target.closest('.midi-editor-container')
-      
+
+      // AIアシスタント関連要素かチェック
       const isInAIAssistant = e.target.closest('.ai-assistant-container') ||
                              e.target.closest('.ai-chat-box') ||
                              e.target.closest('.ai-input-area') ||
                              e.target.closest('.ai-message-input') ||
                              e.target.closest('.ai-settings-panel')
-      
-      if (!isInMidiEditor || 
-          e.target.tagName === 'INPUT' || 
-          e.target.tagName === 'TEXTAREA' || 
+
+      // タブナビゲーション関連要素かチェック（実際のクラス名に修正）
+      const isInTabNavigation = e.target.closest('.tab-scroll-container') ||
+                                e.target.closest('[data-tab-id]') ||
+                                e.target.closest('[data-track-menu-trigger]') ||
+                                e.target.closest('.track-menu-container') ||
+                                e.target.closest('[role="tablist"]') ||
+                                e.target.closest('[role="tab"]')
+
+      // Tab キー専用デバッグ（タブナビゲーションチェック）
+      if (e.key === 'Tab') {
+        console.warn('🔥🔥🔥 MIDI HANDLER DEBUG: isInTabNavigation =', isInTabNavigation, '🔥🔥🔥')
+      }
+
+      // タブナビゲーション要素では常に早期リターン（最優先）
+      if (isInTabNavigation) {
+        if (e.key === 'Tab') {
+          console.warn('🔥🔥🔥 MIDI HANDLER DEBUG: Early return - Tab navigation element 🔥🔥🔥')
+        }
+        return
+      }
+
+      // Tab キー専用デバッグ（条件チェック）
+      if (e.key === 'Tab') {
+        console.warn('🔥🔥🔥 MIDI HANDLER DEBUG: isInMidiEditor =', isInMidiEditor, '🔥🔥🔥')
+        console.warn('🔥🔥🔥 MIDI HANDLER DEBUG: target.tagName =', e.target.tagName, '🔥🔥🔥')
+        console.warn('🔥🔥🔥 MIDI HANDLER DEBUG: isInAIAssistant =', isInAIAssistant, '🔥🔥🔥')
+        console.warn('🔥🔥🔥 MIDI HANDLER DEBUG: isActive =', isActive, '🔥🔥🔥')
+      }
+
+      // MIDIエディタ外、入力フィールド、ボタン、AIアシスタント、または非アクティブの場合は早期リターン
+      if (!isInMidiEditor ||
+          e.target.tagName === 'INPUT' ||
+          e.target.tagName === 'TEXTAREA' ||
           e.target.tagName === 'BUTTON' ||
           isInAIAssistant ||
           !isActive) {
+        if (e.key === 'Tab') {
+          console.warn('🔥🔥🔥 MIDI HANDLER DEBUG: Early return - conditions not met 🔥🔥🔥')
+        }
         return
       }
-      
+
       switch (e.key) {
         case 'Tab':
-          try { e.preventDefault() } catch (error) { console.warn('preventDefault failed:', error); }
-          // acceptGhostPrediction(0) - これは親コンポーネントで処理
+          console.warn('🔥🔥🔥 MIDI HANDLER DEBUG: Tab key reached switch statement 🔥🔥🔥')
+          // Tab keyはタブナビゲーションのためpreventDefault()を呼ばない
+          // MIDIエディタ内での特別な処理がある場合のみ（現在は無し）
           break
         case 'z':
           if (e.ctrlKey || e.metaKey) {

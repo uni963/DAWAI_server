@@ -140,19 +140,21 @@ const ChatHeader = ({
         <div className="flex items-center space-x-1">
           {/* モード切替 */}
           <div className="flex bg-gray-800/50 rounded-lg p-0.5 flex-1">
-            <ModeToggleButton 
-              mode="agent" 
-              currentMode={chatMode} 
-              onClick={() => onModeChange("agent")} 
+            <ModeToggleButton
+              mode="agent"
+              currentMode={chatMode}
+              onClick={() => onModeChange("agent")}
               icon={Wand2}
+              tooltip="自動操作モード: AIが分析→計画→実行"
             >
               Agent
             </ModeToggleButton>
-            <ModeToggleButton 
-              mode="chat" 
-              currentMode={chatMode} 
-              onClick={() => onModeChange("chat")} 
+            <ModeToggleButton
+              mode="chat"
+              currentMode={chatMode}
+              onClick={() => onModeChange("chat")}
               icon={MessageSquare}
+              tooltip="会話モード: 質問と回答のみ"
             >
               Chat
             </ModeToggleButton>

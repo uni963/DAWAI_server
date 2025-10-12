@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 
 /**
  * useMixerManagement
@@ -53,10 +53,12 @@ export const useMixerManagement = (dependencies) => {
       updateMultipleChannels(channels)
     }
 
-    // プロジェクト状態を更新
-    eventHandlersManager.updateProjectState()
+    // ✅ 第2の循環参照を防ぐため、updateProjectState呼び出しを除去
+    // updateProjectState() → projectManager状態更新 → getMixerChannels() → 循環参照発生
+    // eventHandlersManager.updateProjectState()
     console.log('✅ ミキサーチャンネル更新完了')
-  }, [trackVolumeState, eventHandlersManager])
+  }, [eventHandlersManager])
+  // ✅ 修正: trackVolumeStateは関数内で使用していないため依存配列から削除
 
   /**
    * 単一チャンネル更新処理
@@ -194,11 +196,15 @@ export const useMixerManagement = (dependencies) => {
   /**
    * ミキサーチャンネル取得
    *
-   * 現在のミキサーチャンネル情報を取得
+   * 現在のミキサーチャンネル情報を取得（ProjectManagerの内蔵キャッシュで参照安定性確保）
+   * useMemoを削除してProject状態変更を確実に反映
    */
   const getMixerChannels = useCallback(() => {
-    return projectManager.getMixerChannels()
+    const channels = projectManager.getMixerChannels()
+    console.log('🎛️ getMixerChannels 直接実行:', channels?.length || 0, 'チャンネル')
+    return channels
   }, [projectManager])
+  // ✅ 根本修正: useMemoによる過剰キャッシュを除去し、Project状態変更を確実に反映
 
   /**
    * トラック音量設定

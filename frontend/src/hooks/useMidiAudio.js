@@ -21,6 +21,29 @@ const useMidiAudio = () => {
   const trackIdRef = useRef('track-1') // midi-trackからtrack-1に変更
   const metronomeIntervalRef = useRef(null)
   
+  /**
+   * クリーンアップ処理
+   */
+  const cleanup = useCallback(() => {
+    try {
+      // メトロノーム停止
+      if (metronomeIntervalRef.current) {
+        clearInterval(metronomeIntervalRef.current)
+        metronomeIntervalRef.current = null
+      }
+
+      // 統一された音声システムの音を停止
+      if (isInitializedRef.current && window.unifiedAudioSystem) {
+        window.unifiedAudioSystem.stop()
+      }
+
+      isInitializedRef.current = false
+      console.log('🎹 [useMidiAudio] Cleanup completed')
+    } catch (error) {
+      console.warn('Error cleaning up Unified Audio System:', error)
+    }
+  }, [])
+
   // 統一された音声システムの初期化
   const initializeAudio = useCallback(async () => {
     try {
@@ -29,21 +52,21 @@ const useMidiAudio = () => {
       }
 
       console.log('🎹 [useMidiAudio] Initializing Unified Audio System...')
-      
+
       // 統一された音声システムが存在するかチェック
       if (!window.unifiedAudioSystem) {
         console.error('🎹 [useMidiAudio] Unified Audio System is not available')
         return false
       }
-      
+
       // 統一された音声システムを初期化
       const success = await window.unifiedAudioSystem.initialize()
-      
+
       if (!success) {
         console.error('🎹 [useMidiAudio] Unified Audio System initialization failed')
         return false
       }
-      
+
       isInitializedRef.current = true
       console.log('🎹 [useMidiAudio] Unified Audio System initialized successfully')
       return true
@@ -56,7 +79,13 @@ const useMidiAudio = () => {
   // 初期化を実行
   useEffect(() => {
     initializeAudio()
-  }, [initializeAudio])
+
+    // クリーンアップ関数：コンポーネントがアンマウントされる際に実行
+    return () => {
+      console.log('🎹 [useMidiAudio] Cleaning up on unmount')
+      cleanup()
+    }
+  }, [initializeAudio, cleanup])
   
   /**
    * 音色の設定
@@ -490,17 +519,6 @@ const useMidiAudio = () => {
     return isInitializedRef.current
   }, [])
 
-  /**
-   * クリーンアップ処理
-   */
-  const cleanup = useCallback(() => {
-    try {
-      stopAllSounds()
-      isInitializedRef.current = false
-    } catch (error) {
-      console.warn('Error cleaning up Unified Audio System:', error)
-    }
-  }, [stopAllSounds])
   
   return {
     // 初期化・制御

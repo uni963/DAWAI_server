@@ -316,19 +316,10 @@ const EnhancedMidiEditor = ({
     
     const handleKeyDown = (event) => {
       console.log(`🎹 KeyDown: ${event.code}`)
-
-      // Tab キー専用デバッグ
-      if (event.code === 'Tab') {
-        console.warn('🚨🚨🚨 TAB DEBUG: Tab key pressed in EnhancedMidiEditor 🚨🚨🚨')
-        console.warn('🚨🚨🚨 TAB DEBUG: isActive =', isActive, '🚨🚨🚨')
-      }
-
+      
       // MIDIエディタがアクティブでない場合は処理しない
       if (!isActive) {
         console.log('🎹 MIDIエディタが非アクティブのため、キーボード入力を無視');
-        if (event.code === 'Tab') {
-          console.warn('🚨🚨🚨 TAB DEBUG: Early return - MIDI editor not active, Tab should work normally 🚨🚨🚨')
-        }
         return;
       }
       
@@ -361,23 +352,11 @@ const EnhancedMidiEditor = ({
       )
       
       const midiNote = getMidiNoteFromKeyCode(event.code, octave)
-      if (event.code === 'Tab') {
-        console.warn('🚨🚨🚨 TAB DEBUG: getMidiNoteFromKeyCode result =', midiNote, '🚨🚨🚨')
-      }
-
       if (midiNote === null) {
         console.log(`🎹 キー ${event.code} はMIDIノートに対応していません`);
-        if (event.code === 'Tab') {
-          console.warn('🚨🚨🚨 TAB DEBUG: Tab key not mapped to MIDI note - should exit early WITHOUT preventDefault 🚨🚨🚨')
-        }
         return;
       }
-
-      // Tab キーはここまで到達しないはず
-      if (event.code === 'Tab') {
-        console.error('🚨🚨🚨 TAB DEBUG: ERROR - Tab key reached preventDefault section! This should NOT happen! 🚨🚨🚨')
-      }
-
+      
       // イベントの伝播を停止（他のイベントリスナーとの競合を防ぐ）
       event.preventDefault();
       event.stopPropagation();

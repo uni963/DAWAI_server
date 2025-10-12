@@ -1,6 +1,5 @@
 import React, { useEffect, useRef } from "react";
 import { MessageSquare, Bot } from "lucide-react";
-import { Progress } from "../ui/progress";
 import ChatMessage from "./ChatMessage";
 
 const ChatMessages = ({ 
@@ -54,36 +53,17 @@ const ChatMessages = ({
             />
           )}
           
-          {/* Thinking indicator */}
-          {processingState.isThinking && (
+          {/* 処理中インジケーター（簡潔版） */}
+          {(processingState.isThinking || processingState.isGenerating) && (
             <div className="flex justify-start">
               <div className="max-w-[80%] rounded-lg p-2 bg-gray-700 text-gray-100">
-                <div className="flex items-center space-x-1.5">
-                  <Bot className="h-4 w-4 text-blue-400" />
-                  <div className="flex items-center space-x-1">
-                    <span className="text-xs text-gray-300">thinking</span>
-                    <div className="flex space-x-0.5">
-                      <div className="w-1 h-1 bg-gray-400 rounded-full animate-pulse" style={{ animationDelay: '0ms' }}></div>
-                      <div className="w-1 h-1 bg-gray-400 rounded-full animate-pulse" style={{ animationDelay: '150ms' }}></div>
-                      <div className="w-1 h-1 bg-gray-400 rounded-full animate-pulse" style={{ animationDelay: '300ms' }}></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-          
-          {/* 生成中インジケーター */}
-          {processingState.isGenerating && (
-            <div className="flex justify-start">
-              <div className="max-w-[80%] rounded-lg p-2 bg-gray-700 text-gray-100">
-                <div className="flex items-center space-x-1.5">
-                  <Bot className="h-4 w-4 text-blue-400" />
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-1.5">
-                      <span className="text-xs text-gray-300">Generating...</span>
-                      <Progress value={processingState.progress} className="w-20 h-1.5" />
-                    </div>
+                <div className="flex items-center space-x-2">
+                  <Bot className="h-4 w-4 text-blue-400 flex-shrink-0" />
+                  <span className="text-xs text-gray-300">処理中</span>
+                  <div className="flex space-x-0.5">
+                    <div className="w-1 h-1 bg-blue-400 rounded-full animate-pulse" style={{ animationDelay: '0ms' }}></div>
+                    <div className="w-1 h-1 bg-blue-400 rounded-full animate-pulse" style={{ animationDelay: '150ms' }}></div>
+                    <div className="w-1 h-1 bg-blue-400 rounded-full animate-pulse" style={{ animationDelay: '300ms' }}></div>
                   </div>
                 </div>
               </div>

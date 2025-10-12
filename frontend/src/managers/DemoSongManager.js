@@ -118,11 +118,18 @@ class DemoSongManager {
     }
 
     const completionRatio = demoSong.structure.completedBars / demoSong.structure.totalBars;
-    const timeLimit = (demoSong.structure.completedBars / demoSong.structure.totalBars) *
-                     (demoSong.structure.tempo / 60) * 4; // 4拍子想定
+
+    // ★ 修正: 正しい時間計算式
+    // 1小節の時間 = (60 / tempo) * beatsPerBar
+    // 完成小節数の時間 = barDuration * completedBars
+    const timeSignature = demoSong.structure.timeSignature || { numerator: 4, denominator: 4 };
+    const beatsPerBar = timeSignature.numerator; // 拍子記号の分子
+    const barDuration = (60 / demoSong.structure.tempo) * beatsPerBar; // 1小節の秒数
+    const timeLimit = barDuration * demoSong.structure.completedBars; // 完成小節数分の時間
 
     console.log(`🎵 Generating half-complete song: ${demoSong.metadata.title.ja}`);
     console.log(`   完成率: ${Math.round(completionRatio * 100)}% (${demoSong.structure.completedBars}/${demoSong.structure.totalBars} bars)`);
+    console.log(`   🔧 時間計算: ${beatsPerBar}拍子, ${demoSong.structure.tempo} BPM → 1小節=${barDuration.toFixed(2)}秒 × ${demoSong.structure.completedBars}小節 = ${timeLimit.toFixed(2)}秒`);
 
     return {
       ...demoSong.tracks,

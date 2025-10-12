@@ -300,6 +300,55 @@ const EnhancedMidiEditor = ({
     }
   }, [state.notes, aiModel, ghostTextEnabled]);
 
+  // AI Agent承認/拒否イベントのリスナー（対策3: MIDIエディタ更新強化）
+  useEffect(() => {
+    const handleMidiDataApproved = (event) => {
+      console.log('MIDI Editor: Data approved event received', event.detail)
+
+      // trackIdが一致する場合のみ処理
+      if (event.detail?.trackId === trackId) {
+        console.log('MIDI Editor: Forcing redraw for approved changes')
+        state.setNeedsRedraw(true)
+
+        // midiDataプロップからノートデータを再読み込み
+        if (midiData?.notes) {
+          console.log('MIDI Editor: Reloading notes from midiData', {
+            notesCount: midiData.notes.length,
+            trackId
+          })
+          state.setNotes(midiData.notes)
+        }
+      }
+    }
+
+    const handleMidiDataRejected = (event) => {
+      console.log('MIDI Editor: Data rejected event received', event.detail)
+
+      // trackIdが一致する場合のみ処理
+      if (event.detail?.trackId === trackId) {
+        console.log('MIDI Editor: Forcing redraw for rejected changes')
+        state.setNeedsRedraw(true)
+
+        // midiDataプロップからノートデータを再読み込み
+        if (midiData?.notes) {
+          console.log('MIDI Editor: Reloading notes from midiData', {
+            notesCount: midiData.notes.length,
+            trackId
+          })
+          state.setNotes(midiData.notes)
+        }
+      }
+    }
+
+    window.addEventListener('midiDataApproved', handleMidiDataApproved)
+    window.addEventListener('midiDataRejected', handleMidiDataRejected)
+
+    return () => {
+      window.removeEventListener('midiDataApproved', handleMidiDataApproved)
+      window.removeEventListener('midiDataRejected', handleMidiDataRejected)
+    }
+  }, [midiData, trackId, state])
+
   // 曲の最大時間を計算（ArrangementViewの設定を優先）
   const maxTime = useMemo(() => {
     // プロジェクトマネージャーからArrangementViewの曲の長さを取得

@@ -86,7 +86,12 @@ const SmartSuggestionOverlay = ({
           const noteSuggestions = await smartSuggestionEngine.suggestNextNotes(context);
           setSuggestions(noteSuggestions);
 
-          const chordSuggestions = await smartSuggestionEngine.suggestChordProgression(context);
+          // 修正: 正しい引数形式でコード進行提案を呼び出し
+          const chordSuggestions = await smartSuggestionEngine.suggestChordProgression(
+            context.genreContext,
+            currentNotes,
+            context.position
+          );
           setChordSuggestions(chordSuggestions);
 
           // ゴーストノート生成
@@ -97,7 +102,12 @@ const SmartSuggestionOverlay = ({
           break;
 
         case 'drum':
-          const rhythmSuggestions = await smartSuggestionEngine.suggestRhythmPattern(context);
+          // 修正: 正しい引数形式でリズムパターン提案を呼び出し
+          const rhythmSuggestions = await smartSuggestionEngine.suggestRhythmPattern(
+            context.genreContext,
+            'drum',
+            null
+          );
           setRhythmSuggestions(rhythmSuggestions);
           break;
 
@@ -222,7 +232,7 @@ const SmartSuggestionOverlay = ({
                         {formatNoteName(suggestion.pitch)}
                       </div>
                       <div className="text-xs text-gray-600">
-                        {suggestion.reasoning || '音楽理論に基づく提案'}
+                        {typeof suggestion.reasoning === 'string' ? suggestion.reasoning : '音楽理論に基づく提案'}
                       </div>
                     </div>
                     <div className="flex space-x-1 ml-2">

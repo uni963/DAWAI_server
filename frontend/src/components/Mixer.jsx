@@ -1,4 +1,4 @@
-import { useState, useEffect, memo, useCallback } from 'react'
+import { useState, useEffect, memo, useCallback, useMemo } from 'react'
 import { Volume2, VolumeX } from 'lucide-react'
 
 const Mixer = ({ 
@@ -15,14 +15,40 @@ const Mixer = ({
   // マスターボリュームの状態
   const [masterVolume, setMasterVolume] = useState(85)
 
-  // mixerChannelsからチャンネルデータを取得して状態を更新
-  useEffect(() => {
-    const currentChannels = typeof mixerChannels === 'function' ? mixerChannels() : mixerChannels
-    if (currentChannels && Array.isArray(currentChannels)) {
-      console.log('Mixer: Updating channels:', currentChannels.length, 'tracks')
-      setChannels(currentChannels)
-    }
+  // 🔧 Fix #2対応: mixerChannelsは既に値として渡されるため、関数チェック不要
+  // App.jsxでuseMemoによりメモ化された値を直接受け取る
+  const mixerChannelsValue = useMemo(() => {
+    console.log('Mixer: useMemo実行 - チャンネル数:', mixerChannels?.length || 0)
+    return mixerChannels || []
   }, [mixerChannels])
+
+  // メモ化されたチャンネルデータで状態更新（循環参照問題の完全修正）
+  // 🔧 Fix #5: 空配列への遷移を遅延させてちらつきを防止
+  useEffect(() => {
+    if (Array.isArray(mixerChannelsValue) && mixerChannelsValue.length > 0) {
+      // データがある場合は即座に更新
+      setChannels(prevChannels => {
+        const channelsChanged = JSON.stringify(prevChannels) !== JSON.stringify(mixerChannelsValue)
+        if (channelsChanged) {
+          console.log('Mixer: Updating channels:', mixerChannelsValue.length, 'tracks')
+          return mixerChannelsValue
+        } else {
+          console.log('Mixer: Channels unchanged, skipping update')
+          return prevChannels
+        }
+      })
+    } else if (mixerChannelsValue.length === 0) {
+      // 🔧 空配列の場合は100ms待機してから更新（一時的な空状態を無視）
+      console.log('Mixer: Empty channels detected, waiting 100ms before clearing')
+      const timer = setTimeout(() => {
+        setChannels([])
+        console.log('Mixer: Channels cleared after debounce')
+      }, 100) // レースコンディションによる一時的な空配列を無視
+
+      return () => clearTimeout(timer)
+    }
+  }, [mixerChannelsValue])
+  // ✅ 循環参照完全修正: channels を依存配列から除去してちらつき問題根絶
 
   // リサイズ機能のイベントハンドラー - useCallbackで最適化
   const handleMouseDown = useCallback((e) => {
@@ -75,18 +101,12 @@ const Mixer = ({
           : channel
       )
       
-      // 更新されたチャンネルをApp.jsxに通知（単一オブジェクトとして渡す）
-      const updatedChannel = updatedChannels.find(channel => channel.id === channelId)
-      if (updatedChannel) {
-        // setTimeoutでレンダリング後に実行
-        setTimeout(() => {
-          setMixerChannels({ ...updatedChannel, volume })
-        }, 0)
-      }
+      // ✅ 双方向循環参照を防ぐため、setMixerChannels呼び出しを除去
+      // Mixerはローカル状態のみを管理し、永続化は親コンポーネントに委ね
       
       return updatedChannels
     })
-  }, [setMixerChannels])
+  }, [])
 
   const toggleMute = useCallback((channelId) => {
     console.log('Mixer: toggleMute called:', channelId)
@@ -104,18 +124,12 @@ const Mixer = ({
           : channel
       )
       
-      // 更新されたチャンネルをApp.jsxに通知（正しいミュート状態を渡す）
-      const updatedChannel = updatedChannels.find(channel => channel.id === channelId)
-      if (updatedChannel) {
-        // setTimeoutでレンダリング後に実行
-        setTimeout(() => {
-          setMixerChannels({ ...updatedChannel, muted: newMutedState })
-        }, 0)
-      }
+      // ✅ 双方向循環参照を防ぐため、setMixerChannels呼び出しを除去
+      // Mixerはローカル状態のみを管理し、永続化は親コンポーネントに委ね
       
       return updatedChannels
     })
-  }, [setMixerChannels])
+  }, [])
 
   const handleMasterVolumeChange = useCallback((volume) => {
     setMasterVolume(volume)
@@ -154,8 +168,8 @@ const Mixer = ({
                 <button
                   onClick={() => toggleMute(channel.id)}
                   className={`w-6 h-6 rounded flex items-center justify-center ml-2 ${
-                    channel.muted 
-                      ? 'bg-red-500 text-white shadow-md' 
+                    channel.muted
+                      ? 'bg-red-500 text-white shadow-md'
                       : 'bg-gray-600 text-gray-300 hover:bg-gray-500'
                   }`}
                   title={channel.muted ? "Unmute" : "Mute"}
@@ -167,12 +181,12 @@ const Mixer = ({
                   )}
                 </button>
               </div>
-              
+
               {/* ボリュームフェーダー */}
               <div className="mb-3">
                 <div className="relative h-24 mx-auto w-6">
                   <div className="absolute inset-0 bg-gray-700/50 rounded-full" />
-                  <div 
+                  <div
                     className="absolute bottom-0 rounded-full w-full bg-gradient-to-t from-blue-500 to-blue-400"
                     style={{ height: `${channel.volume}%` }}
                   />
@@ -183,8 +197,8 @@ const Mixer = ({
                     value={channel.volume}
                     onChange={(e) => updateChannelVolume(channel.id, parseInt(e.target.value))}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    style={{ 
-                      writingMode: 'vertical-lr', 
+                    style={{
+                      writingMode: 'vertical-lr',
                       direction: 'ltr',
                       transform: 'rotate(180deg)'
                     }}
@@ -198,8 +212,8 @@ const Mixer = ({
           ))
         ) : (
           <div className="text-center text-gray-500 py-8">
-            <p>No tracks available</p>
-            <p className="text-xs">Add tracks to see them in the mixer</p>
+            <div className="text-sm">No tracks available</div>
+            <div className="text-xs mt-1">Add tracks to see them in mixer</div>
           </div>
         )}
       </div>

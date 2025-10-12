@@ -27,36 +27,81 @@ class UnifiedAudioSystem {
 
   // 初期化
   async initialize() {
-    if (this.isInitialized) return true;
-
-    try {
-      console.log('🎵 統一音声システムを初期化中...');
-      
-      // AudioContextの作成
-      this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      
-      // AudioContextの状態を確認し、必要に応じて開始
-      if (this.audioContext.state === 'suspended') {
-        console.log('🎵 AudioContextが停止状態です。開始中...');
-        await this.audioContext.resume();
-        console.log('🎵 AudioContext開始完了:', this.audioContext.state);
-      }
-      
-      // マスターゲインノードの作成（デバッグコンソールでは使用しない）
-      this.masterGain = this.audioContext.createGain();
-      this.masterGain.gain.value = this.masterVolume;
-      this.masterGain.connect(this.audioContext.destination);
-      
-      this.isInitialized = true;
-      console.log('✅ 統一音声システムの初期化完了');
-      
-      this.emit('initialized', { success: true });
+    // 既に初期化済みの場合
+    if (this.isInitialized && this.audioContext && this.audioContext.state === 'running') {
+      console.log('🎵 既に初期化済みです。');
       return true;
-    } catch (error) {
-      console.error('❌ 統一音声システムの初期化に失敗:', error);
-      this.emit('error', { error: error.message });
-      return false;
     }
+
+    // 既に初期化処理中の場合は、その Promise を返す（排他制御）
+    if (this._initPromise) {
+      console.log('🎵 初期化処理中です。既存のPromiseを返します。');
+      return this._initPromise;
+    }
+
+    console.log('🎵 統一音声システムを初期化中...');
+
+    // 初期化 Promise を作成・保存（並行初期化を防止）
+    this._initPromise = (async () => {
+      try {
+        // AudioContextの作成または再利用
+        if (!this.audioContext) {
+          this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          console.log('🎵 AudioContext作成完了:', this.audioContext.state);
+        }
+
+        // AudioContextの状態を確認し、必要に応じて開始
+        if (this.audioContext.state === 'suspended') {
+          console.log('🎵 AudioContextが停止状態です。開始中...');
+
+          // タイムアウト付きでresume()を実行
+          const resumePromise = this.audioContext.resume();
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('AudioContext resume timeout')), 3000)
+          );
+
+          try {
+            await Promise.race([resumePromise, timeoutPromise]);
+            console.log('🎵 AudioContext開始完了:', this.audioContext.state);
+          } catch (error) {
+            console.warn('⚠️ AudioContext resume failed or timed out:', error.message);
+            console.log('🎵 ブラウザの自動再生ポリシーにより、ユーザージェスチャー後に再試行が必要です');
+            // 失敗してもマスターゲインノードは作成しておく
+          }
+        }
+
+        // マスターゲインノードの作成（存在しない場合のみ）
+        if (!this.masterGain) {
+          this.masterGain = this.audioContext.createGain();
+          this.masterGain.gain.value = this.masterVolume;
+          this.masterGain.connect(this.audioContext.destination);
+        }
+
+        // AudioContextが実際にrunning状態になっているかチェック
+        if (this.audioContext.state === 'running') {
+          this.isInitialized = true;
+          console.log('✅ 統一音声システムの初期化完了 (AudioContext: running)');
+          this.emit('initialized', { success: true });
+          return true;
+        } else {
+          // suspended状態でも基本構造は作成できたとマークする
+          // ユーザージェスチャー後に実際に開始される
+          this.isInitialized = true;
+          console.log('⚠️ 統一音声システムの基本初期化完了 (AudioContext: suspended - ユーザージェスチャー待ち)');
+          this.emit('initialized', { success: true, suspended: true });
+          return true;
+        }
+      } catch (error) {
+        console.error('❌ 統一音声システムの初期化に失敗:', error);
+        this.isInitialized = false;
+        this.emit('error', { error: error.message });
+        return false;
+      } finally {
+        this._initPromise = null;  // 完了後にクリア
+      }
+    })();
+
+    return this._initPromise;
   }
 
   // 音声ファイルを読み込む（デバッグコンソールと同じ方法）
@@ -258,13 +303,16 @@ class UnifiedAudioSystem {
     // AudioContextの状態を確認し、必要に応じて開始
     if (this.audioContext.state === 'suspended') {
       console.log('🎵 音声再生時にAudioContextが停止状態です。開始中...');
+      // 非同期でresume()を実行し、成功したら再生を試行
       this.audioContext.resume().then(() => {
         console.log('🎵 AudioContext開始完了:', this.audioContext.state);
         // 再帰的に再生を試行
-        this.playAudioBuffer(audioBuffer, soundInfo, velocity, type);
+        return this.playAudioBuffer(audioBuffer, soundInfo, velocity, type);
       }).catch(error => {
-        console.error('🎵 AudioContext開始に失敗:', error);
+        console.error('❌ AudioContext開始に失敗:', error);
       });
+      // 非同期処理中なので一旦nullを返す（再試行は上記のthenで行われる）
+      console.log('🎵 AudioContext resume中のため、再生は保留されます');
       return null;
     }
 
@@ -743,13 +791,16 @@ class UnifiedAudioSystem {
     // AudioContextの状態を確認し、必要に応じて開始
     if (this.audioContext.state === 'suspended') {
       console.log('🎵 音声再生時にAudioContextが停止状態です。開始中...');
+      // 非同期でresume()を実行し、成功したら再生を試行
       this.audioContext.resume().then(() => {
         console.log('🎵 AudioContext開始完了:', this.audioContext.state);
         // 再帰的に再生を試行
-        this.playAudioBufferWithTrackSettings(audioBuffer, soundInfo, velocity, type, trackVolume);
+        return this.playAudioBufferWithTrackSettings(audioBuffer, soundInfo, velocity, type, trackVolume);
       }).catch(error => {
-        console.error('🎵 AudioContext開始に失敗:', error);
+        console.error('❌ AudioContext開始に失敗:', error);
       });
+      // 非同期処理中なので一旦nullを返す（再試行は上記のthenで行われる）
+      console.log('🎵 AudioContext resume中のため、再生は保留されます');
       return null;
     }
 

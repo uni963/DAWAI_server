@@ -3,7 +3,7 @@ export default class GhostTextInputContext {
   constructor() {
     this.currentNotes = [];
     this.cursorPosition = 0;
-    this.trackType = 'melody'; // 'melody', 'harmony', 'bass', 'percussion'
+    this.trackType = 'melody'; // 'melody', 'rhythm', 'harmony', 'bass', 'percussion', 'Drum'
     this.listeners = [];
     this.trackSummary = '';
     this.keySignature = 'C';
@@ -11,24 +11,30 @@ export default class GhostTextInputContext {
     this.tempo = 120;
     this.recentNotes = [];
     this.maxRecentNotes = 16;
+    this.genre = 'Lo-Fi Hip Hop';
+    this.scaleNotesMidi = null;
+    this.currentChord = null;
   }
 
   updateContext(notes, cursorPosition, trackType, additionalData = {}) {
     this.currentNotes = notes || [];
     this.cursorPosition = cursorPosition || 0;
     this.trackType = trackType || 'melody';
-    
+
     // 追加データの更新
     if (additionalData.keySignature) this.keySignature = additionalData.keySignature;
     if (additionalData.timeSignature) this.timeSignature = additionalData.timeSignature;
     if (additionalData.tempo) this.tempo = additionalData.tempo;
-    
+    if (additionalData.genre) this.genre = additionalData.genre;
+    if (additionalData.scaleNotesMidi) this.scaleNotesMidi = additionalData.scaleNotesMidi;
+    if (additionalData.currentChord) this.currentChord = additionalData.currentChord;
+
     // 最近のノートを更新
     this.updateRecentNotes();
-    
+
     // トラックサマリーを生成
     this.generateTrackSummary();
-    
+
     this.notifyListeners('contextUpdate', this.getContextData());
   }
 
@@ -121,7 +127,10 @@ export default class GhostTextInputContext {
       keySignature: this.keySignature,
       timeSignature: this.timeSignature,
       tempo: this.tempo,
-      recentNotes: this.recentNotes
+      recentNotes: this.recentNotes,
+      genre: this.genre,
+      scaleNotesMidi: this.scaleNotesMidi,
+      currentChord: this.currentChord
     };
   }
 
@@ -146,6 +155,22 @@ export default class GhostTextInputContext {
   setTempo(tempo) {
     this.tempo = tempo;
     this.generateTrackSummary();
+    this.notifyListeners('contextUpdate', this.getContextData());
+  }
+
+  setGenre(genre) {
+    this.genre = genre;
+    this.generateTrackSummary();
+    this.notifyListeners('contextUpdate', this.getContextData());
+  }
+
+  setScaleNotesMidi(scaleNotes) {
+    this.scaleNotesMidi = scaleNotes;
+    this.notifyListeners('contextUpdate', this.getContextData());
+  }
+
+  setCurrentChord(chord) {
+    this.currentChord = chord;
     this.notifyListeners('contextUpdate', this.getContextData());
   }
 

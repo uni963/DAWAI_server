@@ -31,35 +31,10 @@ export const useTabManagement = (dependencies) => {
   } = dependencies
 
   /**
-   * タブ切り替えハンドラー
-   *
-   * タブの即座切り替えと重い処理の遅延実行を行う
-   * MIDIデータの検証と準備処理を含む
-   */
-  const handleTabChange = useCallback((tabId) => {
-    console.log('🔄 タブ切り替え開始:', tabId)
-
-    // タブ切り替えを即座に実行
-    if (projectManager.setActiveTab(tabId)) {
-      setActiveTab(tabId)
-      console.log('✅ タブ切り替え完了:', tabId)
-    }
-
-    // 重い処理は遅延実行（パフォーマンス最適化）
-    if (window.requestIdleCallback) {
-      window.requestIdleCallback(() => {
-        processMidiDataValidation(tabId)
-      })
-    } else {
-      // requestIdleCallbackがサポートされていない場合は即座に実行
-      processMidiDataValidation(tabId)
-    }
-  }, [projectManager, setActiveTab, tabs, tracks, globalTempo, eventHandlersManager])
-
-  /**
    * MIDIデータ検証と準備処理
    *
    * タブ切り替え後のMIDIデータ整合性を確保
+   * 🔧 Fix #1: 条件付き実行 - 既に有効なMIDIデータがある場合はスキップ
    */
   const processMidiDataValidation = useCallback((tabId) => {
     if (tabId.startsWith('tab-')) {
@@ -67,6 +42,17 @@ export const useTabManagement = (dependencies) => {
       const currentTrack = tracks.find(track => track.id === currentTab?.trackId)
 
       if (currentTrack) {
+        // ✅ MIDIデータが既に有効かチェック
+        const needsValidation =
+          !currentTrack.midiData ||
+          !Array.isArray(currentTrack.midiData.notes) ||
+          typeof currentTrack.midiData.tempo !== 'number'
+
+        if (!needsValidation) {
+          console.log('✅ MIDIデータ検証不要（既に有効）:', currentTrack.name)
+          return // 早期リターン - 状態更新をスキップ
+        }
+
         console.log('🎼 MIDIデータ検証開始:', currentTrack.name)
 
         // MIDIデータの即座検証と準備（ノート入力時と同じ処理）
@@ -96,6 +82,32 @@ export const useTabManagement = (dependencies) => {
       }
     }
   }, [tabs, tracks, globalTempo, eventHandlersManager])
+
+  /**
+   * タブ切り替えハンドラー
+   *
+   * 🔧 修正5: タブ切り替えの即座実行を復元
+   * - MIDIデータ検証を同期実行（条件付き）
+   * - setActiveTabを即座に実行してUI応答性を確保
+   * - updateProjectStateで他の状態も同期（デバウンス適用）
+   */
+  const handleTabChange = useCallback((tabId) => {
+    console.log('🔄 タブ切り替え開始:', tabId)
+
+    // 1. MIDIデータ検証（条件付き - 修正1適用後）
+    processMidiDataValidation(tabId)
+
+    // 2. タブ切り替えと状態更新
+    if (projectManager.setActiveTab(tabId)) {
+      // ✅ 即座にタブ切り替えを反映（UI応答性確保）
+      setActiveTab(tabId)
+      // ✅ 他の状態もupdateProjectStateで同期（デバウンス適用）
+      eventHandlersManager.updateProjectState()
+      console.log('✅ タブ切り替え完了:', tabId)
+    }
+  }, [projectManager, eventHandlersManager, setActiveTab, processMidiDataValidation])
+  // ✅ 修正: tabs, tracks, globalTempoは不要な依存関係のため削除
+  // ✅ 修正: processMidiDataValidationを依存配列に追加（TDZ回避のため関数定義を先に移動）
 
   /**
    * タブクローズハンドラー

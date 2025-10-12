@@ -85,6 +85,28 @@ class PerformanceMonitor {
       console.groupEnd()
     }
   }
+
+  // エラーログ出力
+  logError(category, error) {
+    if (!this.isEnabled) {
+      return
+    }
+
+    const timestamp = new Date().toISOString()
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    const errorStack = error instanceof Error ? error.stack : undefined
+
+    console.group(`❌ ${category} Error - ${timestamp}`)
+    console.error('Message:', errorMessage)
+    if (errorStack) {
+      console.error('Stack:', errorStack)
+    }
+    console.groupEnd()
+
+    // エラー統計を記録
+    const errorKey = `error_${category}`
+    this.recordMetric(errorKey, 1)
+  }
 }
 
 // シングルトンインスタンス

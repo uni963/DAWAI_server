@@ -244,6 +244,11 @@ const App = () => {
     setMasterVolume
   })
 
+  // 🔧 修正3: useMemoを削除し、ProjectManagerのキャッシュ機構に任せる
+  // ProjectManager.getMixerChannels()内部で既にキャッシュ管理が実装されているため、
+  // useMemoの二重キャッシュは不安定性を生む原因となる
+  // getMixerChannels()を直接呼び出すことで、より正確なキャッシュ制御を実現
+
   // 開発時のみグローバルに公開（E2Eテスト用） - useDevToolsで管理
 
   // eventHandlersManager.updateProjectStateはEventHandlersManagerで管理
@@ -605,13 +610,12 @@ const App = () => {
       {/* メインコンテンツ */}
       <div className="flex flex-1 overflow-hidden">
         {/* 左側：ミキサーパネル */}
-        <div 
+        <div
           className="bg-gray-900/90 backdrop-blur-md border-r border-gray-700/50 flex flex-col flex-shrink-0 transition-all duration-300"
           style={{ width: `${mixerWidth}px` }}
         >
-          <Mixer 
-            key={`mixer-${forceRerender}`}
-            mixerChannels={getMixerChannels}
+          <Mixer
+            mixerChannels={getMixerChannels()}
             setMixerChannels={updateMixerChannels}
             mixerWidth={mixerWidth}
             setMixerWidth={setMixerWidth}
@@ -674,8 +678,8 @@ const App = () => {
                 })
                 
                 return (
-                  <EnhancedMidiEditor 
-                    key={`midi-editor-${currentTrack.id}-${forceRerender}`}
+                  <EnhancedMidiEditor
+                    key={`midi-editor-${currentTrack.id}`}
                     trackId={currentTrack.id}
                     trackType={currentTrack.type || 'piano'}
                     trackName={currentTrack.name || 'Unknown Track'}

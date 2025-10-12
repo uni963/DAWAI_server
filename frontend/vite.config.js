@@ -17,9 +17,10 @@ export default defineConfig({
   },
   server: {
     host: 'localhost',
-    port: 5175,
+    port: 5173,
+    strictPort: true, // ポート競合時にエラーで停止（複数起動禁止）
     hmr: {
-      port: 5175,
+      port: 5173,
       protocol: 'ws'
     },
     // プロキシ設定: AIエンドポイントをバックエンドにルーティング

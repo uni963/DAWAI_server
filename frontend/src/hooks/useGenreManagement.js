@@ -77,9 +77,6 @@ export const useGenreManagement = (dependencies) => {
       // DemoSongManagerを使ってプロジェクトに読み込み
       await demoSongManager.loadDemoSongToProject(demoSong.id, projectManager)
 
-      // プロジェクト状態を更新
-      eventHandlersManager.updateProjectState()
-
       // Demo Song読み込み後のタブ作成処理
       await createDemoSongTabs()
 
@@ -90,6 +87,9 @@ export const useGenreManagement = (dependencies) => {
       // スケール制約とジャンル自動設定
       await applyMusicTheoryAutoSettings(demoSong)
 
+      // ✅ 全処理完了後にプロジェクト状態を更新（ちらつき防止）
+      eventHandlersManager.updateProjectState()
+
       console.log('✅ Demo Song読み込み完了:', demoSong.metadata.title.ja)
     } catch (error) {
       console.error('❌ Demo Song読み込みエラー:', error)
@@ -99,7 +99,8 @@ export const useGenreManagement = (dependencies) => {
       setShowDemoSongBrowser(false)
       setShowGenreSelector(false)
     }
-  }, [projectManager, eventHandlersManager, setGenreContext, setDemoSongMetadata, setMusicTheorySettings, setShowDemoSongBrowser, setShowGenreSelector])
+  }, [projectManager, eventHandlersManager])
+  // ✅ 修正: setState関数は安定した参照を持つため依存配列から削除
 
   /**
    * Demo Song読み込み後のタブ作成処理

@@ -48,7 +48,7 @@ export default class GhostTextEngineClient {
   async makeRequest(contextData, retryCount = 0) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.requestTimeout);
-    
+
     try {
       const response = await fetch(`${this.apiEndpoint}/predict`, {
         method: 'POST',
@@ -67,7 +67,10 @@ export default class GhostTextEngineClient {
           track_type: contextData.trackType || 'melody',
           key_signature: contextData.keySignature || 'C',
           time_signature: contextData.timeSignature || '4/4',
-          tempo: contextData.tempo || 120
+          tempo: contextData.tempo || 120,
+          genre: contextData.genre || 'Lo-Fi Hip Hop',
+          scale_notes_midi: contextData.scaleNotesMidi || null,
+          current_chord: contextData.currentChord || null
         }),
         signal: controller.signal
       });

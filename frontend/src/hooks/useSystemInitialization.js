@@ -69,6 +69,59 @@ export const useEngineInitialization = (projectManager) => {
           console.log('✅ Sample project loaded')
         }
 
+        // AI Agent Engineにプロジェクト操作コールバックを設定
+        if (window.aiAgentEngine && projectManager) {
+          console.log('🤖 Registering AI Agent Engine callbacks...')
+          window.aiAgentEngine.setProjectCallbacks({
+            // トラック操作
+            addTrack: async (params) => {
+              console.log('AI Agent Callback: addTrack', params)
+              const newTrack = projectManager.addTrack(params)
+              return newTrack
+            },
+            updateTrack: async ({ trackId, updates }) => {
+              console.log('AI Agent Callback: updateTrack', { trackId, updates })
+              projectManager.updateTrack(trackId, updates)
+            },
+            deleteTrack: async ({ trackId }) => {
+              console.log('AI Agent Callback: deleteTrack', { trackId })
+              projectManager.removeTrack(trackId)
+            },
+
+            // MIDIノート操作
+            addMidiNotes: async (params) => {
+              console.log('AI Agent Callback: addMidiNotes', params)
+              projectManager.addMidiNotes(params)
+            },
+            updateMidiNotes: async (params) => {
+              console.log('AI Agent Callback: updateMidiNotes', params)
+              projectManager.updateMidiNotes(params)
+            },
+            deleteMidiNotes: async (params) => {
+              console.log('AI Agent Callback: deleteMidiNotes', params)
+              projectManager.deleteMidiNotes(params)
+            },
+            approveMidiNotes: async (params) => {
+              console.log('AI Agent Callback: approveMidiNotes', params)
+              projectManager.approveMidiNotes(params)
+            },
+            rejectMidiNotes: async (params) => {
+              console.log('AI Agent Callback: rejectMidiNotes', params)
+              projectManager.rejectMidiNotes(params)
+            },
+
+            // プロジェクト設定
+            updateProjectSettings: async (params) => {
+              console.log('AI Agent Callback: updateProjectSettings', params)
+              Object.assign(projectManager.currentProject.settings, params)
+            }
+          })
+
+          console.log('✅ AI Agent Engine callbacks registered successfully')
+        } else {
+          console.warn('⚠️ AI Agent Engine or ProjectManager not available for callback registration')
+        }
+
         setEnginesInitialized(true)
         console.log('✅ All engines initialized successfully')
       } catch (error) {

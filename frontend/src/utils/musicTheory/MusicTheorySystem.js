@@ -25,6 +25,14 @@ export const MUSIC_GENRES = {
       noteValuePreference: ["quarter", "eighth"],
       restProbability: 0.15
     },
+    rhythmDefinition: {
+      time_signature: "4/4",
+      strong_beats: [1, 3],
+      weak_beats: [2, 4],
+      off_beats_priority: [2, 4],
+      swing_ratio: 0.0,
+      drum_pattern_hint: "Kick on 1, Snare on 2 & 4"
+    },
     harmonicTendencies: {
       prefersConsonance: true,
       allowedTensions: ["add9", "6"],
@@ -42,6 +50,14 @@ export const MUSIC_GENRES = {
       syncopation: 0.6,
       noteValuePreference: ["eighth", "triplet", "sixteenth"],
       restProbability: 0.25
+    },
+    rhythmDefinition: {
+      time_signature: "4/4",
+      strong_beats: [1, 3],
+      weak_beats: [2, 4],
+      off_beats_priority: [1, 2, 3, 4],
+      swing_ratio: 0.67,
+      drum_pattern_hint: "Swing feel, ride cymbal on swing 8ths"
     },
     harmonicTendencies: {
       prefersConsonance: false,
@@ -62,6 +78,14 @@ export const MUSIC_GENRES = {
       restProbability: 0.2,
       ghostNotes: true
     },
+    rhythmDefinition: {
+      time_signature: "4/4",
+      strong_beats: [1, 3],
+      weak_beats: [2, 4],
+      off_beats_priority: [2, 4],
+      swing_ratio: 0.2,
+      drum_pattern_hint: "Syncopated groove, ghost notes on snare"
+    },
     harmonicTendencies: {
       prefersConsonance: false,
       allowedTensions: ["7", "9", "sus4", "add9"],
@@ -80,6 +104,14 @@ export const MUSIC_GENRES = {
       noteValuePreference: ["quarter", "eighth"],
       restProbability: 0.1,
       powerfulRhythm: true
+    },
+    rhythmDefinition: {
+      time_signature: "4/4",
+      strong_beats: [1, 3],
+      weak_beats: [2, 4],
+      off_beats_priority: [2, 4],
+      swing_ratio: 0.0,
+      drum_pattern_hint: "Powerful backbeat, heavy kick and snare"
     },
     harmonicTendencies: {
       prefersConsonance: true,
@@ -100,11 +132,46 @@ export const MUSIC_GENRES = {
       restProbability: 0.3,
       legato: true
     },
+    rhythmDefinition: {
+      time_signature: "4/4",
+      strong_beats: [1, 3],
+      weak_beats: [2, 4],
+      off_beats_priority: [2, 4],
+      swing_ratio: 0.0,
+      drum_pattern_hint: "Soft and emotional, light brush on snare"
+    },
     harmonicTendencies: {
       prefersConsonance: true,
       allowedTensions: ["add9", "sus4", "6"],
       emotionalProgression: true,
       avoidedIntervals: ["dim5"]
+    }
+  },
+  "LO-FI HIP HOP": {
+    name: "Lo-Fi Hip Hop調",
+    id: "lofi_hiphop",
+    description: "リラックスしたLo-Fiビート",
+    recommendedScales: ["minor", "minor pentatonic", "dorian"],
+    rhythmCharacteristics: {
+      straightFeel: true,
+      syncopation: 0.35,
+      noteValuePreference: ["eighth", "sixteenth"],
+      restProbability: 0.25,
+      chillVibe: true
+    },
+    rhythmDefinition: {
+      time_signature: "4/4",
+      strong_beats: [1, 3],
+      weak_beats: [2, 4],
+      off_beats_priority: [2, 4],
+      swing_ratio: 0.15,
+      drum_pattern_hint: "Kick on 1 & 3. Snare on 2 & 4 (Backbeat)."
+    },
+    harmonicTendencies: {
+      prefersConsonance: false,
+      allowedTensions: ["7", "9", "add9"],
+      jazzInfluence: true,
+      mellowChords: true
     }
   }
 };

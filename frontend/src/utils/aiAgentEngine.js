@@ -19,13 +19,16 @@ class AIAgentEngine {
       sessionId: null
     }
     this.lastCreatedTrackId = null  // 最後に作成されたトラックIDを保存
-    
+
     // 承認セッションの状態
     this.approvalSessionActive = false
     this.approvalSessionId = null
-    
+
     // 拒否処理中のフラグ
     this.isRejectingChanges = false
+
+    // 自動承認設定（デフォルトはtrue - 即座に反映）
+    this.autoApprove = true
     
     // getPendingChangesのキャッシュ機能
     this.pendingChangesCache = null
@@ -1073,11 +1076,17 @@ class AIAgentEngine {
       
       // 承認セッションを開始
       this.startApprovalSession()
-      
+
       // アクションを実行
       if (actResult.actions && Array.isArray(actResult.actions)) {
         console.log('AIAgentEngine: Executing actions from Act phase:', actResult.actions)
         await this.executeActions(actResult.actions, context)
+      }
+
+      // 自動承認が有効な場合、即座に承認
+      if (this.autoApprove && this.hasPendingChanges()) {
+        console.log('AIAgentEngine: Auto-approving changes')
+        await this.approveAllChanges()
       }
 
       // メモリシステムに会話を保存
@@ -2033,7 +2042,7 @@ ${prompt}
 
       // 承認セッションを開始
       this.startApprovalSession()
-      
+
       // 結果を解析して実際の操作を実行
       if (result.actions && Array.isArray(result.actions)) {
         console.log('AIAgentEngine: Executing actions:', result.actions)
@@ -2042,6 +2051,12 @@ ${prompt}
         console.warn('AIAgentEngine: No actions found in result')
         console.warn('AIAgentEngine: Result type:', typeof result.actions)
         console.warn('AIAgentEngine: Result actions value:', result.actions)
+      }
+
+      // 自動承認が有効な場合、即座に承認
+      if (this.autoApprove && this.hasPendingChanges()) {
+        console.log('AIAgentEngine: Auto-approving changes')
+        await this.approveAllChanges()
       }
 
       // 承認待ちの変更があるかチェック

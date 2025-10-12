@@ -640,227 +640,76 @@ class ProjectManager {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
   }
 
-  // ===== ミキサー管理メソッド =====
+  // ===== App.jsx互換メソッド =====
 
-  /**
-   * ミキサーチャンネル情報を取得
-   *
-   * 現在のプロジェクトのトラックからミキサーチャンネル形式のデータを動的に生成
-   * 参照安定性のためキャッシュ機能付き
-   *
-   * @returns {Array} ミキサーチャンネル配列
-   */
+  // プロジェクト取得（getCurrentProjectのエイリアス）
+  getProject() {
+    return this.currentProject
+  }
+
+  // トラック一覧を取得
+  getTracks() {
+    return this.currentProject?.tracks || []
+  }
+
+  // タブ一覧を取得（互換性のため空配列を返す）
+  getTabs() {
+    return []
+  }
+
+  // アクティブタブを取得（互換性のためnullを返す）
+  getActiveTab() {
+    return null
+  }
+
+  // アクティブタブを設定（互換性のため何もしない）
+  setActiveTab(tabId) {
+    return true
+  }
+
+  // ミキサーチャンネルを取得
   getMixerChannels() {
-    // 🔍 監視システム: currentProject値の詳細ログ
-    console.log('🎛️ ==================== getMixerChannels() DEBUG START ====================')
-    console.log('🔍 this.currentProject:', this.currentProject ? 'EXISTS' : 'NULL/UNDEFINED')
-
-    if (this.currentProject) {
-      console.log('📊 currentProject.id:', this.currentProject.id)
-      console.log('📊 currentProject.name:', this.currentProject.name)
-      console.log('📊 currentProject.modifiedAt:', this.currentProject.modifiedAt)
-      console.log('🔍 this.currentProject.tracks:', this.currentProject.tracks ? 'EXISTS' : 'NULL/UNDEFINED')
-
-      if (this.currentProject.tracks) {
-        console.log('📊 this.currentProject.tracks.length:', this.currentProject.tracks.length)
-        console.log('📊 this.currentProject.tracks.isArray:', Array.isArray(this.currentProject.tracks))
-        console.log('📊 tracks詳細:', this.currentProject.tracks.map(t => ({ id: t.id, name: t.name, type: t.type, subtype: t.subtype })))
-      } else {
-        console.log('🚨 CRITICAL: this.currentProject.tracks is NULL/UNDEFINED')
-      }
-    } else {
-      console.log('🚨 CRITICAL: this.currentProject is NULL/UNDEFINED')
-    }
-
-    // 🚨 "No tracks available"分岐条件を明示的にチェック
-    const branchCondition1 = !this.currentProject
-    const branchCondition2 = !this.currentProject?.tracks
-    const combinedCondition = branchCondition1 || branchCondition2
-
-    console.log('🎯 "No tracks available"分岐条件チェック:')
-    console.log('   → !this.currentProject:', branchCondition1)
-    console.log('   → !this.currentProject.tracks:', branchCondition2)
-    console.log('   → COMBINED (!this.currentProject || !this.currentProject.tracks):', combinedCondition)
-
-    if (combinedCondition) {
-      console.log('🚨 ENTERING "No tracks available" BRANCH!')
-      console.log('🎛️ getMixerChannels: プロジェクトまたはトラックが存在しません')
-      console.log('🎛️ ==================== getMixerChannels() DEBUG END (EMPTY) ====================')
+    if (!this.currentProject || !this.currentProject.tracks) {
       return []
     }
-
-    console.log('✅ "No tracks available"分岐をスキップ → 正常処理継続')
-
-    // キャッシュキーを生成（トラック変更時のみ再生成）
-    const cacheKey = JSON.stringify({
-      projectId: this.currentProject.id,
-      modifiedAt: this.currentProject.modifiedAt,
-      tracksCount: this.currentProject.tracks.length,
-      tracksModified: this.currentProject.tracks.map(t => `${t.id}:${t.metadata?.modifiedAt || ''}`)
-    })
-
-    console.log('🔑 キャッシュキー生成:', cacheKey.substring(0, 100) + '...')
-
-    // キャッシュされた結果があればそれを返す
-    if (this._mixerChannelsCache && this._mixerChannelsCacheKey === cacheKey) {
-      console.log('📥 getMixerChannels: キャッシュヒット', this._mixerChannelsCache.length, 'チャンネル')
-      console.log('🎛️ ==================== getMixerChannels() DEBUG END (CACHE) ====================')
-      return this._mixerChannelsCache
-    }
-
-    console.log('🔄 キャッシュミス → 新規生成実行')
-
-    // 新しいミキサーチャンネル配列を生成
-    const mixerChannels = this.currentProject.tracks.map(track => ({
+    return this.currentProject.tracks.map(track => ({
       id: track.id,
       name: track.name,
       type: track.type,
-      subtype: track.subtype,
-      volume: track.volume || 75,
-      pan: track.pan || 0,
-      muted: track.muted || false,
-      solo: track.solo || false,
-      color: track.color || '#3B82F6'
+      volume: track.volume,
+      pan: track.pan,
+      muted: track.muted,
+      solo: track.solo,
+      color: track.color
     }))
-
-    console.log('📦 生成されたmixerChannels:', mixerChannels.length, 'チャンネル')
-    console.log('📦 mixerChannels詳細:', mixerChannels.map(c => ({ id: c.id, name: c.name, type: c.type })))
-
-    // キャッシュに保存
-    this._mixerChannelsCache = mixerChannels
-    this._mixerChannelsCacheKey = cacheKey
-
-    console.log('✅ getMixerChannels: 新規生成完了', mixerChannels.length, 'チャンネル')
-    console.log('🎛️ ==================== getMixerChannels() DEBUG END (SUCCESS) ====================')
-    return mixerChannels
   }
 
-  /**
-   * トラックを更新
-   *
-   * 指定されたトラックIDのトラック情報を更新
-   *
-   * @param {string} trackId - トラックID
-   * @param {Object} updates - 更新するトラック情報
-   */
-  updateTrack(trackId, updates) {
-    if (!this.currentProject || !this.currentProject.tracks) {
-      console.error('❌ updateTrack: プロジェクトまたはトラックが存在しません')
-      return
-    }
-
-    const trackIndex = this.currentProject.tracks.findIndex(track => track.id === trackId)
-    if (trackIndex === -1) {
-      console.error('❌ updateTrack: トラックが見つかりません:', trackId)
-      return
-    }
-
-    // トラック情報を更新
-    Object.assign(this.currentProject.tracks[trackIndex], updates)
-    this.currentProject.tracks[trackIndex].metadata.modifiedAt = new Date().toISOString()
-    this.currentProject.modifiedAt = new Date().toISOString()
-
-    console.log('✅ updateTrack: トラック更新完了:', trackId, updates)
+  // 音楽理論設定を設定（互換性のため）
+  setMusicTheorySettings(settings) {
+    // 現在は何もしない
+    console.log('Music theory settings update:', settings)
   }
 
-  /**
-   * トラックを追加
-   *
-   * 新しいトラックをプロジェクトに追加
-   *
-   * @param {Object} trackData - 新しいトラックのデータ
-   * @returns {Object} 作成されたトラック
-   */
-  addTrack(trackData) {
-    if (!this.currentProject) {
-      throw new Error('No current project')
-    }
-
-    const newTrack = {
-      id: trackData.id || this.generateId(),
-      name: trackData.name || 'New Track',
-      type: trackData.type || 'instrument',
-      subtype: trackData.subtype || 'piano',
-      color: trackData.color || '#3B82F6',
-      volume: trackData.volume || 75,
-      pan: trackData.pan || 0,
-      muted: trackData.muted || false,
-      solo: trackData.solo || false,
-      armed: trackData.armed || false,
-      clips: trackData.clips || [],
-      effects: trackData.effects || [],
-      midiData: trackData.midiData || null,
-      audioData: trackData.audioData || null,
-      settings: trackData.settings || {
-        midiChannel: 0,
-        octave: 0,
-        transpose: 0,
-        velocity: 100
-      },
-      metadata: {
-        createdAt: new Date().toISOString(),
-        modifiedAt: new Date().toISOString(),
-        description: trackData.metadata?.description || '',
-        tags: trackData.metadata?.tags || []
-      }
-    }
-
-    this.currentProject.tracks.push(newTrack)
-    this.currentProject.modifiedAt = new Date().toISOString()
-
-    console.log('✅ addTrack: トラック追加完了:', newTrack.name)
-    return newTrack
+  // アプリ設定を設定（互換性のため）
+  setAppSettings(settings) {
+    // 現在は何もしない
+    console.log('App settings update:', settings)
   }
 
-  /**
-   * トラックを削除
-   *
-   * 指定されたトラックIDのトラックを削除
-   *
-   * @param {string} trackId - 削除するトラックのID
-   */
-  removeTrack(trackId) {
-    if (!this.currentProject || !this.currentProject.tracks) {
-      console.error('❌ removeTrack: プロジェクトまたはトラックが存在しません')
-      return
-    }
-
-    const trackIndex = this.currentProject.tracks.findIndex(track => track.id === trackId)
-    if (trackIndex === -1) {
-      console.error('❌ removeTrack: トラックが見つかりません:', trackId)
-      return
-    }
-
-    const removedTrack = this.currentProject.tracks.splice(trackIndex, 1)[0]
-    this.currentProject.modifiedAt = new Date().toISOString()
-
-    console.log('✅ removeTrack: トラック削除完了:', removedTrack.name)
-    return removedTrack
+  // 初回起動チェック（サンプルプロジェクト読み込みが必要か）
+  // 初回起動チェック（サンプルプロジェクト読み込みが必要か）
+  shouldLoadSampleProject() {
+    return !this.currentProject
   }
 
-  /**
-   * 全トラックを取得
-   *
-   * @returns {Array} 現在のプロジェクトの全トラック
-   */
-  getTracks() {
-    if (!this.currentProject || !this.currentProject.tracks) {
-      return []
-    }
-    return this.currentProject.tracks
-  }
-
-  /**
-   * 指定されたトラックを取得
-   *
-   * @param {string} trackId - トラックID
-   * @returns {Object|null} トラックオブジェクト
-   */
-  getTrack(trackId) {
-    if (!this.currentProject || !this.currentProject.tracks) {
-      return null
-    }
-    return this.currentProject.tracks.find(track => track.id === trackId) || null
+  // サンプルプロジェクトを読み込む（互換性のため）
+  loadSampleProject(sampleData) {
+    if (!sampleData) return
+    this.currentProject = sampleData
+    this.genreContext = sampleData.genreContext || null
+    this.demoSongMetadata = sampleData.demoSongMetadata || null
+    this.startAutoSave()
+    console.log("✅ Sample project loaded successfully")
   }
 }
 

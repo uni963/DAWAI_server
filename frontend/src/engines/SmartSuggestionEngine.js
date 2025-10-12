@@ -11,6 +11,38 @@ class SmartSuggestionEngine {
     this.evaluator = new MusicalQualityEvaluator();
     this.cache = new Map();
     this.suggestionHistory = [];
+    this.initialized = false; // 初期化状態管理
+  }
+
+  /**
+   * エンジン初期化
+   * @returns {Promise<void>}
+   */
+  async initialize() {
+    try {
+      console.log('🚀 SmartSuggestionEngine初期化開始...');
+
+      // 音楽理論エンジンの初期化
+      if (typeof this.musicTheoryEngine.initialize === 'function') {
+        await this.musicTheoryEngine.initialize();
+      }
+
+      // 品質評価器の初期化
+      if (typeof this.evaluator.initialize === 'function') {
+        await this.evaluator.initialize();
+      }
+
+      // キャッシュの初期化
+      this.cache.clear();
+      this.suggestionHistory = [];
+
+      this.initialized = true;
+      console.log('✅ SmartSuggestionEngine初期化完了');
+    } catch (error) {
+      console.error('❌ SmartSuggestionEngine初期化エラー:', error);
+      this.initialized = false;
+      throw error;
+    }
   }
 
   /**
@@ -203,6 +235,85 @@ class SmartSuggestionEngine {
   }
 
   /**
+   * ゴーストノート生成
+   * @param {Object} context - 提案コンテキスト
+   * @returns {Array} ゴーストノート配列
+   */
+  generateGhostNotes(context) {
+    if (!context || !context.genreContext) {
+      return [];
+    }
+
+    try {
+      console.log('👻 Generating ghost notes...');
+
+      // 基本的なゴーストノート生成
+      const suggestions = this.suggestNextNotes(context);
+
+      // ゴーストノート形式に変換
+      const ghostNotes = suggestions.map((suggestion, index) => ({
+        pitch: suggestion.pitch,
+        time: context.position + (index * 0.25), // 0.25秒間隔で配置
+        duration: 0.5, // 0.5秒の長さ
+        confidence: suggestion.confidence,
+        id: `ghost-${Date.now()}-${index}`,
+        isGhost: true
+      }));
+
+      console.log(`👻 Generated ${ghostNotes.length} ghost notes`);
+      return ghostNotes;
+
+    } catch (error) {
+      console.error('❌ Ghost note generation error:', error);
+      return [];
+    }
+  }
+
+  /**
+   * メロディライン提案
+   * @param {Object} context - 提案コンテキスト
+   * @returns {Array} メロディ提案配列
+   */
+  suggestMelodyLine(context) {
+    if (!context || !context.genreContext) {
+      return [];
+    }
+
+    try {
+      console.log('🎼 Generating melody line suggestions...');
+
+      // ノート提案をベースにメロディライン作成
+      const noteSuggestions = this.suggestNextNotes(context);
+
+      // メロディライン形式に変換
+      const melodyLines = noteSuggestions.slice(0, 2).map((suggestion, index) => ({
+        id: `melody-${Date.now()}-${index}`,
+        notes: [
+          {
+            pitch: suggestion.pitch,
+            duration: 0.5,
+            time: context.position
+          },
+          {
+            pitch: suggestion.pitch + (Math.random() > 0.5 ? 2 : -2),
+            duration: 0.5,
+            time: context.position + 0.5
+          }
+        ],
+        confidence: suggestion.confidence,
+        description: `${this._pitchToNoteName(suggestion.pitch)} based melody line`
+      }));
+
+      console.log(`🎼 Generated ${melodyLines.length} melody line suggestions`);
+      return melodyLines;
+
+    } catch (error) {
+      console.error('❌ Melody line suggestion error:', error);
+      return [];
+    }
+  }
+
+  /**
    * 提案採用フィードバック
    * @param {Object} suggestion - 採用された提案
    * @param {boolean} accepted - 採用されたかどうか
@@ -265,7 +376,8 @@ class SmartSuggestionEngine {
       const candidate = {
         pitch,
         confidence: 0,
-        reasoning: {
+        reasoning: '音楽理論に基づく提案', // 安全な文字列形式
+        reasoningDetails: {
           scaleMatch: true,  // すでにスケール制約済み
           harmonicMatch: false,
           melodicFlow: 0,
@@ -276,7 +388,7 @@ class SmartSuggestionEngine {
         visualHint: {
           ghostNote: true,
           color: '',
-          label: this.musicTheoryEngine.pitchToNoteName(pitch)
+          label: this._pitchToNoteName(pitch)
         }
       };
 
@@ -297,30 +409,33 @@ class SmartSuggestionEngine {
   _scoreNoteCandidates(candidates, melodicContext, harmonicContext, genreContext) {
     return candidates.map(candidate => {
       // メロディック評価
-      candidate.reasoning.melodicFlow = this._evaluateMelodicFlow(
+      candidate.reasoningDetails.melodicFlow = this._evaluateMelodicFlow(
         melodicContext.lastPitch,
         candidate.pitch,
         melodicContext
       );
 
       // ハーモニック評価
-      candidate.reasoning.harmonicMatch = this._evaluateHarmonicMatch(
+      candidate.reasoningDetails.harmonicMatch = this._evaluateHarmonicMatch(
         candidate.pitch,
         harmonicContext
       );
 
       // ジャンル典型性評価
-      candidate.reasoning.genreTypicality = this._evaluateGenreTypicality(
+      candidate.reasoningDetails.genreTypicality = this._evaluateGenreTypicality(
         candidate.pitch,
         melodicContext,
         genreContext.genre
       );
 
       // 総合信頼度計算
-      candidate.confidence = this._calculateConfidence(candidate.reasoning);
+      candidate.confidence = this._calculateConfidence(candidate.reasoningDetails);
 
       // 視覚ヒント設定
       candidate.visualHint.color = this._getConfidenceColor(candidate.confidence);
+
+      // 実用的な理由説明文を生成
+      candidate.reasoning = this._generateReasoningText(candidate.reasoningDetails, candidate.pitch);
 
       return candidate;
     });
@@ -581,15 +696,35 @@ class SmartSuggestionEngine {
   }
 
   _suggestInitialChords(genre, key) {
-    // ジャンル特有の初期コード提案
-    const progressions = genre.musicTheory.chordProgressions;
-    if (progressions.length > 0) {
-      const mostCommon = progressions.reduce((prev, current) =>
-        current.weight > prev.weight ? current : prev
-      );
-      return [{ chordProgression: mostCommon, confidence: 0.9 }];
+    try {
+      // ジャンル特有の初期コード提案（安全なアクセス）
+      if (!genre || !genre.musicTheory || !genre.musicTheory.chordProgressions) {
+        console.warn('⚠️ ジャンル情報または音楽理論データが不完全です');
+
+        // デフォルトのコード進行を返す
+        return [{
+          chordProgression: {
+            name: 'Basic Pop Progression',
+            chords: ['I', 'V', 'vi', 'IV'],
+            weight: 0.7
+          },
+          confidence: 0.5
+        }];
+      }
+
+      const progressions = genre.musicTheory.chordProgressions;
+      if (progressions.length > 0) {
+        const mostCommon = progressions.reduce((prev, current) =>
+          (current.weight || 0) > (prev.weight || 0) ? current : prev
+        );
+        return [{ chordProgression: mostCommon, confidence: 0.9 }];
+      }
+
+      return [];
+    } catch (error) {
+      console.error('❌ Initial chord suggestion error:', error);
+      return [];
     }
-    return [];
   }
 
   _suggestNextChord(lastChord, key, genre, position) {
@@ -623,6 +758,48 @@ class SmartSuggestionEngine {
     const pitchClass = pitch % 12;
     const blueNotes = [3, 6, 10];  // b3, b5, b7
     return blueNotes.includes(pitchClass);
+  }
+
+  /**
+   * ピッチ番号を音名に変換
+   * @param {number} pitch - MIDIピッチ番号 (0-127)
+   * @returns {string} 音名（例: "C4", "F#3"）
+   */
+  _pitchToNoteName(pitch) {
+    const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    const octave = Math.floor(pitch / 12) - 1;
+    const note = noteNames[pitch % 12];
+    return `${note}${octave}`;
+  }
+
+  /**
+   * 推論詳細から分かりやすい理由文を生成
+   * @param {Object} reasoningDetails - 推論詳細
+   * @param {number} pitch - ピッチ
+   * @returns {string} 理由説明文
+   */
+  _generateReasoningText(reasoningDetails, pitch) {
+    const parts = [];
+
+    if (reasoningDetails.scaleMatch) {
+      parts.push('スケール内');
+    }
+
+    if (reasoningDetails.harmonicMatch) {
+      parts.push('和声的に適合');
+    }
+
+    if (reasoningDetails.melodicFlow > 0.7) {
+      parts.push('滑らかなメロディライン');
+    } else if (reasoningDetails.melodicFlow < 0.3) {
+      parts.push('跳躍的なメロディ');
+    }
+
+    if (reasoningDetails.genreTypicality > 0.6) {
+      parts.push('ジャンル特性に合致');
+    }
+
+    return parts.length > 0 ? parts.join('・') : '音楽理論に基づく提案';
   }
 }
 

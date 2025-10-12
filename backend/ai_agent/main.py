@@ -1217,6 +1217,177 @@ async def load_voice_model(model_id: str):
             detail=f"Failed to load model {model_id}: {str(e)}"
         )
 
+# Ghost Text予測リクエストモデル
+class GhostTextPredictRequest(BaseModel):
+    track_summary: Optional[str] = ""
+    current_notes: List[Dict[str, Any]]
+    cursor_position: float
+    track_type: str = "melody"  # "melody" or "rhythm"
+    key_signature: str = "C"
+    time_signature: str = "4/4"
+    tempo: int = 120
+    genre: Optional[str] = "Lo-Fi Hip Hop"
+    scale_notes_midi: Optional[List[int]] = None
+    current_chord: Optional[Dict[str, Any]] = None
+
+@app.post("/ai/predict")
+async def ghost_text_predict(request: GhostTextPredictRequest):
+    """
+    Ghost Text補完機能：トラックタイプ別の音符提案
+    ジャンル固有の音楽理論とリズム定義に基づいた補完を提供
+    """
+    try:
+        # リズム定義（ジャンル別）
+        rhythm_definitions = {
+            "Lo-Fi Hip Hop": {
+                "time_signature": "4/4",
+                "strong_beats": [1, 3],  # 1拍目、3拍目
+                "weak_beats": [2, 4],
+                "off_beats_priority": [2, 4],  # 裏拍強調
+                "swing_ratio": 0.15,
+                "drum_pattern_hint": "Kick on 1 & 3. Snare on 2 & 4 (Backbeat)."
+            },
+            "Jazz": {
+                "time_signature": "4/4",
+                "strong_beats": [1, 3],
+                "weak_beats": [2, 4],
+                "off_beats_priority": [1, 2, 3, 4],  # すべての裏拍
+                "swing_ratio": 0.67,
+                "drum_pattern_hint": "Swing feel, ride cymbal on swing 8ths"
+            },
+            "Pop": {
+                "time_signature": "4/4",
+                "strong_beats": [1, 3],
+                "weak_beats": [2, 4],
+                "off_beats_priority": [2, 4],
+                "swing_ratio": 0.0,
+                "drum_pattern_hint": "Kick on 1, Snare on 2 & 4"
+            }
+        }
+
+        # 現在のジャンル設定を取得
+        genre = request.genre or "Lo-Fi Hip Hop"
+        rhythm_def = rhythm_definitions.get(genre, rhythm_definitions["Lo-Fi Hip Hop"])
+
+        # 現在の拍位置を計算（4/4拍子を想定）
+        beats_per_measure = 4
+        current_beat = (request.cursor_position % beats_per_measure) + 1
+        is_strong_beat = int(current_beat) in rhythm_def["strong_beats"]
+        is_weak_beat = int(current_beat) in rhythm_def["weak_beats"]
+
+        suggestions = []
+
+        if request.track_type == "melody" or request.track_type == "Melody":
+            # メロディトラックの提案ロジック
+            scale_notes = request.scale_notes_midi or [60, 62, 64, 65, 67, 69, 71]  # Cメジャースケール
+
+            # 現在のコード構成音
+            chord_notes = []
+            if request.current_chord and request.current_chord.get("midi_notes"):
+                chord_notes = request.current_chord["midi_notes"]
+
+            # 提案候補を生成
+            for note in scale_notes:
+                confidence = 0.5  # ベース確信度
+                reasoning_tag = "Scale_Note"
+
+                # 強拍の場合、コード構成音を優先
+                if is_strong_beat and note in chord_notes:
+                    confidence = 0.95
+                    reasoning_tag = "Current_Chord_Root_Strong_Beat"
+                elif is_strong_beat:
+                    # 強拍でコード構成音
+                    if note in chord_notes:
+                        confidence = 0.90
+                        reasoning_tag = "Chord_Tone_Strong_Beat"
+                    else:
+                        confidence = 0.65
+                        reasoning_tag = "Scale_Tone_Strong_Beat"
+                elif is_weak_beat:
+                    # 弱拍でテンションやパッシングトーン
+                    confidence = 0.70
+                    reasoning_tag = "Scale_Tone_Weak_Beat"
+                    if note not in chord_notes:
+                        reasoning_tag = "Tension_Note_Weak_Beat"
+
+                # 直前のノートとの関連性を考慮
+                if request.current_notes:
+                    last_note = request.current_notes[-1]["pitch"]
+                    interval = abs(note - last_note)
+                    if interval <= 2:  # 半音または全音の動き
+                        confidence += 0.1
+                        reasoning_tag += "_Stepwise_Motion"
+                    elif interval == 12:  # オクターブ
+                        confidence += 0.05
+                        reasoning_tag += "_Octave_Jump"
+
+                suggestions.append({
+                    "midi_note": int(note),
+                    "confidence": min(confidence, 1.0),
+                    "reasoning_tag": reasoning_tag
+                })
+
+        elif request.track_type == "rhythm" or request.track_type == "Rhythm" or request.track_type == "Drum":
+            # リズムトラック（ドラム）の提案ロジック
+
+            # ドラムMIDIマッピング（General MIDI準拠）
+            KICK = 36
+            SNARE = 38
+            CLOSED_HAT = 42
+            OPEN_HAT = 46
+
+            # Kick提案（強拍）
+            if is_strong_beat:
+                suggestions.append({
+                    "midi_note": KICK,
+                    "confidence": 0.98,
+                    "reasoning_tag": "Rhythm_Kick_on_Strong_Beat"
+                })
+
+            # Snare提案（弱拍 - バックビート）
+            if is_weak_beat:
+                suggestions.append({
+                    "midi_note": SNARE,
+                    "confidence": 0.95,
+                    "reasoning_tag": "Backbeat_Snare"
+                })
+
+            # Hi-Hat提案（常時）
+            suggestions.append({
+                "midi_note": CLOSED_HAT,
+                "confidence": 0.85,
+                "reasoning_tag": "Hi_Hat_8th_Note"
+            })
+
+            # スイング考慮
+            if rhythm_def["swing_ratio"] > 0.3:
+                # スイング時はオープンハットも提案
+                if int(current_beat) in rhythm_def["off_beats_priority"]:
+                    suggestions.append({
+                        "midi_note": OPEN_HAT,
+                        "confidence": 0.75,
+                        "reasoning_tag": "Swing_Open_Hat_Off_Beat"
+                    })
+
+        # 確信度順にソート
+        suggestions.sort(key=lambda x: x["confidence"], reverse=True)
+
+        # 上位5つの提案を返す
+        return {
+            "suggestions": suggestions[:5],
+            "track_type": request.track_type,
+            "current_beat": current_beat,
+            "is_strong_beat": is_strong_beat,
+            "genre": genre,
+            "rhythm_definition": rhythm_def
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ghost Text prediction failed: {str(e)}"
+        )
+
 def generate_agent_prompt(user_prompt: str, context: dict) -> str:
     """Sense-Plan-Actアーキテクチャに基づくAgent mode用プロンプトを生成"""
     

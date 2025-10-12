@@ -1,14 +1,9 @@
-import React, { useState, useEffect, useRef, memo } from "react";
+import React, { useState, useEffect, useRef, memo, useCallback } from "react";
 import { Wand2 } from "lucide-react";
-// import aiAgentEngine from "../../utils/aiAgentEngine"; // この行を削除
 import { DEFAULT_MODELS, PROCESSING_STATES } from "./constants";
 import ChatHeader from "./ChatHeader";
 import ChatMessages from "./ChatMessages";
 import ChatInput from "./ChatInput";
-
-// 強制的にログを出力
-console.log('=== AIAssistantChatBox.jsx: THIS FILE IS BEING LOADED ===');
-console.log('=== AIAssistantChatBox.jsx: File path: ./components/AIassistant/AIAssistantChatBox.jsx ===');
 
 const AIAssistantChatBox = ({
   isAIAssistantCollapsed,
@@ -27,14 +22,6 @@ const AIAssistantChatBox = ({
   projectInfo,
   existingTracks,
 }) => {
-  console.log('=== AIAssistantChatBox: THIS FILE IS BEING USED ===');
-  console.log('AIAssistantChatBox: Component rendered with props:', {
-    isAIAssistantCollapsed,
-    aiPanelWidth,
-    chatMode,
-    currentTrack: currentTrack?.id,
-    projectInfo: projectInfo?.name
-  });
 
   // 状態管理
   const [isModelPanelCollapsed, setIsModelPanelCollapsed] = useState(true);
@@ -70,30 +57,24 @@ const AIAssistantChatBox = ({
     // aiAgentEngineがグローバルに設定されているかを確認
     const initializeAIAgentEngine = async () => {
       if (!window.aiAgentEngine) {
-        console.log('AIAssistantChatBox: Setting aiAgentEngine to global window object');
         try {
           const module = await import("../../utils/aiAgentEngine.js");
           window.aiAgentEngine = module.default;
-          console.log('AIAssistantChatBox: aiAgentEngine successfully imported and set to global');
-          
+
           // 初期化を確実に実行
           if (window.aiAgentEngine && typeof window.aiAgentEngine.initialize === 'function') {
             await window.aiAgentEngine.initialize();
-            console.log('AIAssistantChatBox: aiAgentEngine initialized successfully');
           }
         } catch (error) {
-          console.error('AIAssistantChatBox: Failed to import aiAgentEngine:', error);
+          console.error('AIエージェントの初期化に失敗しました:', error);
         }
       } else {
-        console.log('AIAssistantChatBox: aiAgentEngine already exists in global window object');
-        
         // 既存のエンジンも初期化を確認
         if (window.aiAgentEngine && typeof window.aiAgentEngine.initialize === 'function') {
           try {
             await window.aiAgentEngine.initialize();
-            console.log('AIAssistantChatBox: Existing aiAgentEngine initialized successfully');
           } catch (error) {
-            console.error('AIAssistantChatBox: Failed to initialize existing aiAgentEngine:', error);
+            console.error('AIエージェントの初期化に失敗しました:', error);
           }
         }
       }
@@ -292,8 +273,6 @@ const AIAssistantChatBox = ({
           window.aiAgentEngine.setModel(currentModel);
         }
 
-        console.log('AIAssistantChatBox: Using streamAgentAction for agent mode');
-
         // ストリーミングレスポンス用のメッセージを作成
         const streamingMessage = {
           id: Date.now() + Math.random(),
@@ -449,8 +428,6 @@ const AIAssistantChatBox = ({
           window.aiAgentEngine.setModel(currentModel);
         }
 
-        console.log('AIAssistantChatBox: Using streamChat for chat mode');
-
         // ストリーミングレスポンス用のメッセージを作成
         const streamingMessage = {
           id: Date.now() + Math.random(),
@@ -484,10 +461,6 @@ const AIAssistantChatBox = ({
                   }
                 : section
             ));
-            
-            // デバッグログ
-            console.log('Streaming chunk received:', chunk);
-            console.log('Full response so far:', fullResponse);
           }
         );
         
@@ -532,10 +505,11 @@ const AIAssistantChatBox = ({
     }
   };
 
-  // テキスト入力ハンドラー
-  const handleTextChange = (e) => {
-    setNewMessage(e.target.value);
-  };
+  // テキスト入力ハンドラー（最適化版）
+  const handleTextChange = useCallback((e) => {
+    const value = e.target.value;
+    setNewMessage(value);
+  }, []);
 
   // 送信ボタンクリックハンドラー
   const handleSendClick = () => {
@@ -550,42 +524,39 @@ const AIAssistantChatBox = ({
 
   // 承認・拒否ハンドラー
   const handleApprove = async () => {
-    console.log('AIAssistantChatBox: Approving all changes');
     if (window.aiAgentEngine && approvalSessionId) {
       try {
         // 承認処理の前に、承認待ち状態を即座にクリア
         setApprovalSessionId(null);
         setPendingChanges({ tracks: [], notes: [], sessionId: null });
-        
+
         const result = await window.aiAgentEngine.approveAllChanges();
-        console.log('AIAssistantChatBox: Approval result:', result);
-        
+
         // MIDIエディターの強制更新をトリガー
         if (window.midiEditorForceUpdate) {
-          console.log('Triggering MIDI editor force update after approval');
           window.midiEditorForceUpdate();
         }
-        
+
         // 承認完了メッセージを追加
         const approvalMessage = {
           id: Date.now() + Math.random(),
           sender: 'assistant',
-          text: '✅ すべての変更が承認されました。',
+          text: '✅ 変更を適用しました',
           timestamp: new Date().toISOString()
         };
         addMessageToCurrentSection(approvalMessage);
       } catch (error) {
-        console.error('AIAssistantChatBox: Error approving changes:', error);
-        
+        console.error('変更の承認中にエラーが発生しました:', error);
+
         // エラーの場合は承認待ち状態を復元
         const pendingChangesData = window.aiAgentEngine.getPendingChanges();
         setApprovalSessionId(approvalSessionId);
         setPendingChanges(pendingChangesData);
-        
+
         const errorMessage = {
           id: Date.now() + Math.random(),
           sender: 'assistant',
-          text: '❌ 変更の承認中にエラーが発生しました。',
+          text: '❌ エラーが発生しました',
           timestamp: new Date().toISOString()
         };
         addMessageToCurrentSection(errorMessage);
@@ -594,49 +565,45 @@ const AIAssistantChatBox = ({
   };
 
   const handleReject = async () => {
-    console.log('AIAssistantChatBox: Rejecting all changes');
     if (window.aiAgentEngine && approvalSessionId) {
       try {
         // 拒否処理の前に、承認待ち状態を即座にクリア
         setApprovalSessionId(null);
         setPendingChanges({ tracks: [], notes: [], sessionId: null });
-        
+
         const result = await window.aiAgentEngine.rejectAllChanges();
-        console.log('AIAssistantChatBox: Rejection result:', result);
-        
+
         // 拒否処理完了後の状態クリアを確実にする
         setTimeout(() => {
           setApprovalSessionId(null);
           setPendingChanges({ tracks: [], notes: [], sessionId: null });
-          console.log('AIAssistantChatBox: Clearing approval session');
         }, 100);
-        
+
         // MIDIエディターの強制更新をトリガー
         if (window.midiEditorForceUpdate) {
-          console.log('AIAssistantChatBox: Triggering MIDI editor force update after rejection');
           window.midiEditorForceUpdate();
         }
-        
+
         // 拒否完了メッセージを追加
         const rejectionMessage = {
           id: Date.now() + Math.random(),
           sender: 'assistant',
-          text: '❌ すべての変更が拒否されました。',
+          text: '❌ 変更を破棄しました',
           timestamp: new Date().toISOString()
         };
         addMessageToCurrentSection(rejectionMessage);
       } catch (error) {
-        console.error('AIAssistantChatBox: Error rejecting changes:', error);
-        
+        console.error('変更の拒否中にエラーが発生しました:', error);
+
         // エラーの場合は承認待ち状態を復元
         const pendingChangesData = window.aiAgentEngine.getPendingChanges();
         setApprovalSessionId(approvalSessionId);
         setPendingChanges(pendingChangesData);
-        
+
         const errorMessage = {
           id: Date.now() + Math.random(),
           sender: 'assistant',
-          text: '❌ 変更の拒否中にエラーが発生しました。',
+          text: '❌ エラーが発生しました',
           timestamp: new Date().toISOString()
         };
         addMessageToCurrentSection(errorMessage);
@@ -687,10 +654,7 @@ const AIAssistantChatBox = ({
 
   // AI Agent Engineのイベントリスナー
   useEffect(() => {
-    console.log('AIAssistantChatBox: Setting up AI Agent Engine event listener');
-    
     const handleAgentEvent = (eventType, data) => {
-      console.log('AIAssistantChatBox: Received agent event:', eventType, data);
       
       switch (eventType) {
         case 'agentStreamingStarted':
@@ -778,22 +742,16 @@ const AIAssistantChatBox = ({
           // ストリーミングメッセージをクリア（Act段階が完了したため）
           setStreamingMessage(null);
           setStreamingPhase(null);
-          
+
+
           // MIDIエディターの強制更新をトリガー
           if (data.hasPendingChanges && window.midiEditorForceUpdate) {
-            console.log('Triggering MIDI editor force update');
             window.midiEditorForceUpdate();
           }
           break;
         case 'agentStreamingCompleted':
           setProcessingState({ isGenerating: false, isThinking: false, progress: 100 });
-          console.log('=== DEBUG: agentStreamingCompleted event ===');
-          console.log('data:', data);
-          console.log('data.result:', data?.result);
-          console.log('hasPendingChanges:', data?.result?.hasPendingChanges);
-          console.log('approvalSessionId:', approvalSessionId);
-          console.log('pendingChanges:', pendingChanges);
-          
+
           if (data && data.result) {
             // 承認セッションが開始されている場合は、hasPendingChangesを強制的にtrueにする
             const hasPendingChanges = data.result.hasPendingChanges || 
@@ -806,12 +764,10 @@ const AIAssistantChatBox = ({
               timestamp: new Date().toISOString(),
               hasPendingChanges: hasPendingChanges
             };
-            console.log('Created aiResponse with hasPendingChanges:', hasPendingChanges, aiResponse);
             addMessageToCurrentSection(aiResponse);
-            
+
             // MIDIエディターの強制更新をトリガー
             if (hasPendingChanges && window.midiEditorForceUpdate) {
-              console.log('Triggering MIDI editor force update');
               window.midiEditorForceUpdate();
             }
           }
@@ -834,13 +790,7 @@ const AIAssistantChatBox = ({
           break;
         case 'generationCompleted':
           setProcessingState({ isGenerating: false, isThinking: false, progress: 100 });
-          console.log('=== DEBUG: generationCompleted event ===');
-          console.log('data:', data);
-          console.log('data.result:', data?.result);
-          console.log('hasPendingChanges:', data?.result?.hasPendingChanges);
-          console.log('approvalSessionId:', approvalSessionId);
-          console.log('pendingChanges:', pendingChanges);
-          
+
           if (data && data.result) {
             // 承認セッションが開始されている場合は、hasPendingChangesを強制的にtrueにする
             const hasPendingChanges = data.result.hasPendingChanges || 
@@ -853,12 +803,10 @@ const AIAssistantChatBox = ({
               timestamp: new Date().toISOString(),
               hasPendingChanges: hasPendingChanges
             };
-            console.log('Created aiResponse with hasPendingChanges:', hasPendingChanges, aiResponse);
             addMessageToCurrentSection(aiResponse);
-            
+
             // MIDIエディターの強制更新をトリガー
             if (hasPendingChanges && window.midiEditorForceUpdate) {
-              console.log('Triggering MIDI editor force update');
               window.midiEditorForceUpdate();
             }
           }
@@ -879,33 +827,25 @@ const AIAssistantChatBox = ({
     };
 
     window.aiAgentEngine.addListener(handleAgentEvent);
-    console.log('AIAssistantChatBox: AI Agent Engine event listener added');
-    
+
     return () => {
       window.aiAgentEngine.removeListener(handleAgentEvent);
-      console.log('AIAssistantChatBox: AI Agent Engine event listener removed');
     };
   }, []);
 
   // AI Agent Engineのイベントリスナー（承認セッション管理）
   useEffect(() => {
-    console.log('AIAssistantChatBox: Setting up approval session event listener');
-    
     const handleApprovalEvents = (eventType, data) => {
-      console.log('AIAssistantChatBox: Received approval event:', eventType, data);
-      
       // 拒否処理中は承認待ちイベントを無視
       if (window.aiAgentEngine && window.aiAgentEngine.isRejectingChanges) {
-        console.log('AIAssistantChatBox: Ignoring approval event during rejection:', eventType, 'isRejectingChanges:', window.aiAgentEngine.isRejectingChanges);
         return;
       }
-      
+
+
       switch (eventType) {
         case 'approvalSessionStarted':
-          console.log('AIAssistantChatBox: Setting approvalSessionId to:', data.sessionId);
           setApprovalSessionId(data.sessionId);
           const pendingChangesData = window.aiAgentEngine.getPendingChanges();
-          console.log('AIAssistantChatBox: Setting pendingChanges to:', pendingChangesData);
           setPendingChanges(pendingChangesData);
           break;
         case 'pendingTrackChangeAdded':
@@ -913,20 +853,17 @@ const AIAssistantChatBox = ({
           // 拒否処理中はgetPendingChangesを呼ばない
           if (!window.aiAgentEngine || !window.aiAgentEngine.isRejectingChanges) {
             const updatedPendingChanges = window.aiAgentEngine.getPendingChanges();
-            console.log('AIAssistantChatBox: Updating pendingChanges to:', updatedPendingChanges);
             setPendingChanges(updatedPendingChanges);
           }
           break;
         case 'allChangesApproved':
         case 'allChangesRejected':
-          console.log('AIAssistantChatBox: Clearing approval session');
           setApprovalSessionId(null);
           setPendingChanges({ tracks: [], notes: [], sessionId: null });
-          
+
           // 拒否処理後のMIDIエディタ更新をトリガー（簡素化）
           setTimeout(() => {
             if (window.midiEditorForceUpdate) {
-              console.log('AIAssistantChatBox: Triggering MIDI editor force update after rejection');
               window.midiEditorForceUpdate();
             }
           }, 200);
@@ -935,13 +872,11 @@ const AIAssistantChatBox = ({
           break;
       }
     };
-    
+
     window.aiAgentEngine.addListener(handleApprovalEvents);
-    console.log('AIAssistantChatBox: Approval session event listener added');
-    
+
     return () => {
       window.aiAgentEngine.removeListener(handleApprovalEvents);
-      console.log('AIAssistantChatBox: Approval session event listener removed');
     };
   }, []);
 

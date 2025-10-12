@@ -56,6 +56,11 @@ export const useGlobalErrorHandler = () => {
 export const useKeyboardHandler = () => {
   useEffect(() => {
     const handleKeyDown = (event) => {
+      // Tab キー専用デバッグ
+      if (event.key === 'Tab') {
+        console.error('❗❗❗ GLOBAL HANDLER DEBUG: Tab key pressed in useEventHandlers ❗❗❗')
+      }
+
       // スペースキーが押された場合
       if (event.code === 'Space') {
         // フォーム要素やエディタ内でない場合のみ処理
