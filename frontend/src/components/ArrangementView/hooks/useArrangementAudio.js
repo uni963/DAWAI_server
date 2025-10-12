@@ -162,7 +162,7 @@ export const useArrangementAudio = (tracks, trackStates, currentTime, metronomeE
         if (success) {
           // ドラムトラック用のトラックを追加（ArrangementView用）
           try {
-            window.unifiedAudioSystem.addTrack('drum-track', 'Drum Track', 'drums', '#ff6b6b', null);
+            window.unifiedAudioSystem.addTrack('drum-track', 'Drums Track', 'drums', '#ff6b6b', null);
             console.log('🎵 [ArrangementAudio] Drum track added to SF2SoundFontEngine');
           } catch (error) {
             console.error('🎵 [ArrangementAudio] Failed to add drum track:', error);
@@ -458,7 +458,7 @@ export const useArrangementAudio = (tracks, trackStates, currentTime, metronomeE
           try {
             window.unifiedAudioSystem.addTrack(
               track.id,
-              track.name || 'Drum Track',
+              track.name || 'Drums Track',
               'drums',
               track.color || '#ff6b6b',
               track

@@ -27,8 +27,8 @@ class AIAgentEngine {
     // 拒否処理中のフラグ
     this.isRejectingChanges = false
 
-    // 自動承認設定（デフォルトはtrue - 即座に反映）
-    this.autoApprove = true
+    // 自動承認設定（デフォルトはfalse - ユーザーの承認を待つ）
+    this.autoApprove = false
     
     // getPendingChangesのキャッシュ機能
     this.pendingChangesCache = null
@@ -48,6 +48,42 @@ class AIAgentEngine {
     this.useRAGSystem = true
     this.maxMemoryTokens = 800
     this.maxRAGTokens = 1200
+  }
+
+  // 技術的な詳細をフィルタリングして、ユーザーフレンドリーなテキストのみを抽出
+  filterTechnicalContent(responseText) {
+    if (!responseText || typeof responseText !== 'string') {
+      return ''
+    }
+
+    // JSON形式のコードブロックを除去（```json ... ```）
+    let filtered = responseText.replace(/```json[\s\S]*?```/g, '')
+
+    // 単独のJSON構造を除去（{ ... } や [ ... ]）
+    filtered = filtered.replace(/\{[\s\S]*?"actions"[\s\S]*?\}/g, '')
+    filtered = filtered.replace(/\{[\s\S]*?"type"[\s\S]*?"params"[\s\S]*?\}/g, '')
+
+    // 技術的なパラメータリストを除去
+    filtered = filtered.replace(/[\[{]\s*"(?:pitch|velocity|time|duration|id)"[\s\S]*?[\]}]/g, '')
+
+    // 「技術的詳細」や「必要なパラメータ」などのセクションを除去
+    filtered = filtered.replace(/### 技術的詳細[\s\S]*?(?=###|$)/g, '')
+    filtered = filtered.replace(/\*\*技術的詳細\*\*[\s\S]*?(?=\n\n|$)/g, '')
+    filtered = filtered.replace(/【技術的詳細】[\s\S]*?(?=\n\n|$)/g, '')
+    filtered = filtered.replace(/- 使用する操作タイプ[\s\S]*?(?=\n\n|$)/g, '')
+    filtered = filtered.replace(/- 必要なパラメータ[\s\S]*?(?=\n\n|$)/g, '')
+
+    // MIDIノートの詳細リストを除去
+    filtered = filtered.replace(/\{ "id": "note-[^}]*\}/g, '')
+    filtered = filtered.replace(/pitch: \d+, velocity: [\d.]+, start: [\d.]+, duration: [\d.]+/g, '')
+
+    // 空行の連続を整理
+    filtered = filtered.replace(/\n{3,}/g, '\n\n')
+
+    // 前後の空白を削除
+    filtered = filtered.trim()
+
+    return filtered
   }
 
   // Load global settings from localStorage
@@ -641,12 +677,14 @@ class AIAgentEngine {
               
               if (data.type === 'text' && data.content) {
                 fullResponse += data.content
-                
+
                 // チャンクごとのコールバック（リアルタイム更新）
                 if (onChunk) {
-                  onChunk(data.content, fullResponse)
+                  // フィルタリングされたテキストをユーザーに表示
+                  const filteredResponse = this.filterTechnicalContent(fullResponse)
+                  onChunk(data.content, filteredResponse)
                 }
-                
+
                 // リスナーに通知
                 this.notifyListeners('streamingChunk', {
                   chunk: data.content,
@@ -847,9 +885,11 @@ class AIAgentEngine {
               
               if (data.type === 'text' && data.content) {
                 fullResponse += data.content
-                
+
                 if (onChunk) {
-                  onChunk(data.content, fullResponse, 'sense')
+                  // フィルタリングされたテキストをユーザーに表示
+                  const filteredResponse = this.filterTechnicalContent(fullResponse)
+                  onChunk(data.content, filteredResponse, 'sense')
                 }
                 
                 this.notifyListeners('agentStreamingChunk', {
@@ -948,11 +988,13 @@ class AIAgentEngine {
               
               if (data.type === 'text' && data.content) {
                 fullResponse += data.content
-                
+
                 if (onChunk) {
-                  onChunk(data.content, fullResponse, 'plan')
+                  // フィルタリングされたテキストをユーザーに表示
+                  const filteredResponse = this.filterTechnicalContent(fullResponse)
+                  onChunk(data.content, filteredResponse, 'plan')
                 }
-                
+
                 this.notifyListeners('agentStreamingChunk', {
                   chunk: data.content,
                   fullResponse: fullResponse,
@@ -1051,11 +1093,13 @@ class AIAgentEngine {
               
               if (data.type === 'text' && data.content) {
                 fullResponse += data.content
-                
+
                 if (onChunk) {
-                  onChunk(data.content, fullResponse, 'act')
+                  // フィルタリングされたテキストをユーザーに表示
+                  const filteredResponse = this.filterTechnicalContent(fullResponse)
+                  onChunk(data.content, filteredResponse, 'act')
                 }
-                
+
                 this.notifyListeners('agentStreamingChunk', {
                   chunk: data.content,
                   fullResponse: fullResponse,
@@ -1157,16 +1201,13 @@ class AIAgentEngine {
       `- ID: "${track.id}", 名前: "${track.name}", タイプ: ${track.type}, ノート数: ${track.midiData?.notes?.length || 0}`
     ).join('\n') || 'なし';
 
-    return `前回の計画を基に、具体的なJSONファイルを生成して実行してください。Actでは行える具体的な行動を詳細に伝えます。
+    return `前回の計画を基に、JSONアクションを生成し実行します。
 
 [実行計画]
 ${planResult.summary || '計画が策定されました'}
 
-[現在のプロジェクト情報]
-- プロジェクト名: ${context.projectInfo?.name || 'Unknown'}
-- テンポ: ${context.projectInfo?.tempo || 120} BPM
-- キー: ${context.projectInfo?.key || 'C'}
-- 拍子記号: ${context.projectInfo?.timeSignature || '4/4'}
+[プロジェクト情報]
+プロジェクト: ${context.projectInfo?.name || 'Unknown'}, テンポ: ${context.projectInfo?.tempo || 120}BPM, キー: ${context.projectInfo?.key || 'C'}, 拍子: ${context.projectInfo?.timeSignature || '4/4'}
 
 [利用可能なトラック]
 ${tracksInfo}${ragContent}
@@ -1174,54 +1215,24 @@ ${tracksInfo}${ragContent}
 [ユーザーの要求]
 ${prompt}
 
-[重要な注意事項]
-- トラックIDは必ず引用符で囲んでください（例: "track-1234567890-abc123"）
-- 既存のトラックに操作する場合は、上記のトラックIDを正確に使用してください
-- コード進行を使用する場合は、上記のコード進行IDを指定してください（例: "pop_1"）
-- 自然な音楽的なフレーズを生成してください
-- 短い文字数でコード進行を指定してください
+**重要**: JSONのみ生成し、説明は summary と nextSteps に簡潔に記載してください。
 
-以下のJSON形式で実行するアクションを生成してください：
-
+JSON形式:
 {
   "actions": [
     {
-      "type": "操作タイプ",
-      "params": {
-        "trackId": "正確なトラックID",
-        // その他の操作に必要なパラメータ
-        // MIDIノートの場合:
-        "notes": [
-          {
-            "id": "note-123",
-            "pitch": 60,        // MIDIノート番号（0-127）
-            "time": 0,          // 開始時間（秒）
-            "duration": 0.5,    // 持続時間（秒）
-            "velocity": 0.8     // 音量（0-1）
-          }
-        ],
-        // コード進行の場合:
-        "progressionId": "pop_1"  // コード進行ID
-      },
-      "description": "実行する操作の説明"
+      "type": "addMidiNotes|updateTrack等",
+      "params": { "trackId": "正確なID", "notes": [...] },
+      "description": "操作の簡潔な説明"
     }
   ],
-  "summary": "実行した操作の要約",
-  "nextSteps": "次のステップの提案"
+  "summary": "実行内容の1行要約",
+  "nextSteps": "次のステップの簡潔な提案"
 }
 
-**サポートされている操作タイプ**
-- \`addTrack\`: 新しいトラックを追加
-- \`updateTrack\`: 既存のトラックを更新
-- \`deleteTrack\`: トラックを削除
-- \`addMidiNotes\`: MIDIノートを追加
-- \`updateMidiNotes\`: MIDIノートを更新
-- \`deleteMidiNotes\`: MIDIノートを削除
-- \`applyEffect\`: エフェクトを適用
-- \`updateProjectSettings\`: プロジェクト設定を更新
-- \`useChordProgression\`: 事前定義されたコード進行を使用
+操作タイプ: addTrack, updateTrack, deleteTrack, addMidiNotes, updateMidiNotes, deleteMidiNotes, applyEffect, updateProjectSettings, useChordProgression
 
-計画に基づいて、具体的で実行可能なJSONファイルを生成してください。`
+**JSONのみを出力し、技術的な説明や詳細パラメータの解説は不要です。**`
   }
 
   // Act段階のJSONレスポンス解析
@@ -1361,16 +1372,12 @@ ${prompt}
       `ID: "${context.currentTrack.id}", 名前: "${context.currentTrack.name}", タイプ: ${context.currentTrack.type}, ノート数: ${context.currentTrack.midiData?.notes?.length || 0}` : 
       'なし';
 
-    return `あなたはAI統合型ブラウザDAWであるDAWAIのAIアシスタントです。次に表示されるユーザーのリクエストに対し適切な返答をしてください。まずは、現状把握をお願いします。RAGとしてトラックとノートの情報が渡されているのでそれを確認してください。
+    return `DAWAIアシスタントとして、現状を把握してください。
 
-[現在のプロジェクト情報]
-- プロジェクト名: ${context.projectInfo?.name || 'Unknown'}
-- テンポ: ${context.projectInfo?.tempo || 120} BPM
-- キー: ${context.projectInfo?.key || 'C'}
-- 拍子記号: ${context.projectInfo?.timeSignature || '4/4'}
-- トラック数: ${context.existingTracks?.length || 0}
+[プロジェクト]
+プロジェクト: ${context.projectInfo?.name || 'Unknown'}, テンポ: ${context.projectInfo?.tempo || 120}BPM, キー: ${context.projectInfo?.key || 'C'}, 拍子: ${context.projectInfo?.timeSignature || '4/4'}, トラック数: ${context.existingTracks?.length || 0}
 
-[利用可能なトラック]
+[トラック]
 ${tracksInfo}
 
 [現在のトラック]
@@ -1379,16 +1386,10 @@ ${currentTrackInfo}${ragTrackInfo}${memoryInfo}
 [ユーザーの要求]
 ${prompt}
 
-上記の情報を基に、現在のプロジェクト状況とユーザーの要求を分析し、理解した内容を自然な日本語で説明してください。
-
-分析のポイント：
-1. 現在のプロジェクトの状態（トラック数、楽器構成など）
-2. ユーザーが何を求めているか
-3. 実現可能な操作の範囲
-4. 注意が必要な点や制約事項
-5. 過去の会話や操作との関連性
-
-自然な会話形式で、現在の状況を整理して説明してください。`
+**簡潔に3-4文で状況を説明してください:**
+- 現在の状態
+- ユーザーの要求
+- 次に何をするか`
   }
 
   // Plan段階用のプロンプト生成
@@ -1423,57 +1424,25 @@ ${prompt}
       `- ID: "${track.id}", 名前: "${track.name}", タイプ: ${track.type}, ノート数: ${track.midiData?.notes?.length || 0}`
     ).join('\n') || 'なし';
 
-    return `前回の分析を踏まえて、具体的な実行計画を立ててください。音楽知識にアクセスできるようにRAGをわたします。
+    return `分析を踏まえ、簡潔な実行計画を立ててください。
 
-[利用可能な操作]
-1. トラック操作:
-   - addTrack: 新しいトラックを追加
-   - updateTrack: 既存トラックを更新
-   - deleteTrack: トラックを削除
+[プロジェクト情報]
+プロジェクト: ${context.projectInfo?.name || 'Unknown'}, テンポ: ${context.projectInfo?.tempo || 120}BPM, キー: ${context.projectInfo?.key || 'C'}, 拍子: ${context.projectInfo?.timeSignature || '4/4'}
 
-2. MIDI操作:
-   - addMidiNotes: MIDIノートを追加
-   - updateMidiNotes: MIDIノートを更新
-   - deleteMidiNotes: MIDIノートを削除
-
-3. プロジェクト設定:
-   - updateProjectSettings: テンポ、キー、拍子記号などを更新
-
-4. コード進行:
-   - useChordProgression: 事前定義されたコード進行を使用
-
-[現在のプロジェクト情報]
-- プロジェクト名: ${context.projectInfo?.name || 'Unknown'}
-- テンポ: ${context.projectInfo?.tempo || 120} BPM
-- キー: ${context.projectInfo?.key || 'C'}
-- 拍子記号: ${context.projectInfo?.timeSignature || '4/4'}
-
-[利用可能なトラック]
+[トラック]
 ${tracksInfo}${ragMusicKnowledge}
 
 [ユーザーの要求]
 ${prompt}
 
-[重要な注意事項]
-- トラックIDは必ず引用符で囲んでください（例: "track-1234567890-abc123"）
-- 既存のトラックに操作する場合は、上記のトラックIDを正確に使用してください
-- 音楽理論に基づいた適切なコード進行やメロディラインを提案してください
+利用可能な操作: addTrack, updateTrack, deleteTrack, addMidiNotes, updateMidiNotes, deleteMidiNotes, updateProjectSettings, useChordProgression
 
-以下の形式で実行計画を立ててください：
+**簡潔に計画を説明してください（3-5文程度）:**
+1. 何をするか
+2. どのトラックに
+3. どんな効果が期待できるか
 
-**実行計画**
-
-1. **実施する操作**: [具体的な操作内容]
-2. **対象トラック**: [トラックIDと名前]
-3. **追加する内容**: [MIDIノート、エフェクトなど]
-4. **期待される結果**: [操作後の状態]
-
-**技術的詳細**
-- 使用する操作タイプ: [addTrack/addMidiNotes等]
-- 必要なパラメータ: [具体的な値]
-- 実行順序: [複数操作がある場合の順序]
-
-自然な日本語で、段階的に実行計画を説明してください。`
+**技術的詳細や長い説明は不要です。**`
   }
 
   // Sense段階の理解度評価

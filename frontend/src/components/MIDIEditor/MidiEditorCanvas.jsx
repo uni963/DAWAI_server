@@ -1230,13 +1230,20 @@ const MidiEditorCanvas = ({
   }, [onAcceptAllPredictions, onAcceptPrediction, ghostPredictions.length, state.selectedPredictionIndex, state.setSelectedPredictionIndex])
 
   return (
-    <div 
+    <div
       className="flex-1 relative midi-editor-container"
       ref={containerRef}
       tabIndex={0}
       onFocus={() => console.log('MIDI Editor focused')}
       onBlur={() => {}} // ←ここを空に
       onKeyDown={handleKeyDown}
+      onClick={() => {
+        // MIDIエディター内をクリックした時、コンテナにフォーカスを設定
+        // これによりTabキーイベントが確実にキャプチャされる
+        if (containerRef.current) {
+          containerRef.current.focus()
+        }
+      }}
       onWheel={e => {
         if (e.shiftKey) {
           try { e.preventDefault(); } catch (error) { console.warn('preventDefault failed:', error); }

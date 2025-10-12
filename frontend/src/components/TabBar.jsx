@@ -33,8 +33,7 @@ const TabBar = ({
       // 楽器タイプ別の短縮記号
       const shortNames = {
         'Piano Track': 'P',
-        'Drum Track': 'D',
-        'Drums Track': 'Dr',
+        'Drums Track': 'D',
         'Bass Track': 'B',
         'Arrangement': 'Arr'
       }
@@ -130,20 +129,21 @@ const TabBar = ({
     }
   }, [activeTab])
 
-  // アクティブタブにフォーカスを設定
-  useEffect(() => {
-    if (tabBarRef.current && activeTab) {
-      const activeTabElement = tabBarRef.current.querySelector(`[data-tab-id="${activeTab}"]`)
-      if (activeTabElement && document.activeElement !== activeTabElement) {
-        // 他の要素にフォーカスが当たっていない場合のみ設定
-        if (document.activeElement === document.body ||
-            !document.activeElement ||
-            !document.activeElement.closest('.tab-scroll-container')) {
-          activeTabElement.focus()
-        }
-      }
-    }
-  }, [activeTab])
+  // アクティブタブにフォーカスを設定 - コメントアウト
+  // tabIndex={-1}に変更したため、自動フォーカスは不要
+  // useEffect(() => {
+  //   if (tabBarRef.current && activeTab) {
+  //     const activeTabElement = tabBarRef.current.querySelector(`[data-tab-id="${activeTab}"]`)
+  //     if (activeTabElement && document.activeElement !== activeTabElement) {
+  //       // 他の要素にフォーカスが当たっていない場合のみ設定
+  //       if (document.activeElement === document.body ||
+  //           !document.activeElement ||
+  //           !document.activeElement.closest('.tab-scroll-container')) {
+  //         activeTabElement.focus()
+  //       }
+  //     }
+  //   }
+  // }, [activeTab])
 
   // グローバルマウスイベントリスナーを追加
   useEffect(() => {
@@ -160,14 +160,17 @@ const TabBar = ({
     }
 
     const handleKeyDown = (e) => {
-      // タブボタンがフォーカスされている場合のみトラック移動を処理
-      const focusedElement = document.activeElement
-      const isTabButtonFocused = focusedElement && focusedElement.hasAttribute('data-tab-id')
+      // 矢印キーの強制処理（最優先）
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        console.log('🔄 強制矢印キー処理:', e.key)
+        e.preventDefault()
+        e.stopPropagation() // 他のイベントリスナーをブロック
 
-      if (isTabButtonFocused) {
-        // 矢印キーでトラック移動
-        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-          e.preventDefault()
+        const focusedElement = document.activeElement
+        const isTabButtonFocused = focusedElement && focusedElement.hasAttribute('data-tab-id')
+
+        if (isTabButtonFocused || tabs.length > 1) {
+          // タブ移動を実行
           const currentIndex = tabs.findIndex(t => t.id === activeTab)
           let nextIndex
 
@@ -179,24 +182,28 @@ const TabBar = ({
 
           const nextTab = tabs[nextIndex]
           if (nextTab) {
+            console.log('🔄 タブ切り替え:', activeTab, '→', nextTab.id)
             setActiveTab(nextTab.id)
+
+            // フォーカスを強制的に新しいタブに移動
             setTimeout(() => {
               const nextTabButton = tabBarRef.current?.querySelector(`[data-tab-id="${nextTab.id}"]`)
               if (nextTabButton) {
                 nextTabButton.focus()
+                console.log('🔄 新しいタブにフォーカス設定:', nextTab.id)
               }
             }, 10)
           }
+        } else if (tabBarRef.current) {
+          // タブが1つの場合はスクロール
+          if (e.key === 'ArrowLeft') {
+            tabBarRef.current.scrollLeft -= 100
+          } else {
+            tabBarRef.current.scrollLeft += 100
+          }
         }
-      } else if (tabBarRef.current) {
-        // タブボタンがフォーカスされていない場合は通常のスクロール
-        if (e.key === 'ArrowLeft') {
-          e.preventDefault()
-          tabBarRef.current.scrollLeft -= 100
-        } else if (e.key === 'ArrowRight') {
-          e.preventDefault()
-          tabBarRef.current.scrollLeft += 100
-        }
+
+        return // 他の処理をスキップ
       }
     }
 
@@ -245,9 +252,24 @@ const TabBar = ({
               data-tab-id={tab.id}
               onClick={(e) => {
                 console.log('🔧 TAB CLICK: ', tab.id, 'current active:', activeTab)
+
+                // MIDIエディターのフォーカスを強制的に解除
+                const midiEditor = document.querySelector('.midi-editor-container') ||
+                                  document.querySelector('[data-component="midi-editor"]')
+                if (midiEditor && midiEditor.contains(document.activeElement)) {
+                  document.activeElement.blur()
+                  console.log('🔧 MIDIエディターフォーカスを解除')
+                }
+
                 setActiveTab(tab.id)
-                // クリック後、ボタンに確実にフォーカスを設定
+
+                // クリック後、ボタンに確実にフォーカスを設定（複数回試行）
                 e.currentTarget.focus()
+                setTimeout(() => {
+                  e.currentTarget.focus()
+                  console.log('🔧 タブボタンフォーカス強制設定:', tab.id)
+                }, 10)
+
                 console.log('🔧 TAB CLICK END: ', tab.id)
               }}
               title={tab.title}
@@ -305,6 +327,7 @@ const TabBar = ({
               <button
                 className="ml-1 p-1 h-6 w-6 text-gray-400 hover:text-white hover:bg-gray-700 flex items-center justify-center rounded transition-colors flex-shrink-0"
                 onClick={() => closeTab(tab.id)}
+                tabIndex={-1}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -319,6 +342,7 @@ const TabBar = ({
           className="text-gray-400 hover:text-white hover:bg-gray-700 ml-1 h-8 w-8 p-0"
           data-track-menu-trigger
           onClick={handleTrackMenuToggle}
+          tabIndex={-1}
         >
           <Plus className="h-4 w-4" />
         </Button>

@@ -627,10 +627,20 @@ class UnifiedAudioSystem {
     if (currentMuted === muted) {
       return;
     }
-    
+
     console.log(`🎵 setTrackMuted called: trackId=${trackId}, muted=${muted} (type: ${typeof muted})`);
     this.trackMuted.set(trackId, muted);
     console.log(`🎵 トラックミュート設定: ${trackId} = ${muted}`);
+  }
+
+  // トラックをミュート（便利メソッド）
+  muteTrack(trackId) {
+    this.setTrackMuted(trackId, true);
+  }
+
+  // トラックのミュートを解除（便利メソッド）
+  unmuteTrack(trackId) {
+    this.setTrackMuted(trackId, false);
   }
 
   // トラックソロを設定

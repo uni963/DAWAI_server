@@ -249,7 +249,20 @@ const EnhancedMidiEditor = ({
   
   // キーボード入力用の音の管理
   const keyboardAudioRef = useRef(new Map()) // keyCode -> { noteId, startTime }
-  
+
+  // コールバック関数の安定化用Ref（依存配列の変更を防ぐ）
+  const onNoteAddRef = useRef(onNoteAdd)
+  const onNoteEditRef = useRef(onNoteEdit)
+  const audioRef = useRef(audio)
+  const trackIdRef = useRef(trackId)
+
+  // Refを最新の値で更新
+  useEffect(() => {
+    onNoteAddRef.current = onNoteAdd
+    onNoteEditRef.current = onNoteEdit
+    audioRef.current = audio
+    trackIdRef.current = trackId
+  }, [onNoteAdd, onNoteEdit, audio, trackId])
 
   // ライブ録音中のノートのリアルタイム更新
   useEffect(() => {
@@ -301,12 +314,11 @@ const EnhancedMidiEditor = ({
       stateAudioEnabled: state.audioEnabled,
       audio: !!audio,
       manualOctaveOffset,
-      onNoteAdd: !!onNoteAdd,
-      onNoteEdit: !!onNoteEdit,
+      isActive,
       trackId,
       keyboardListenersSetupRef: keyboardListenersSetupRef.current
     })
-    
+
     if (keyboardListenersSetupRef.current) {
       console.log('🎹 Keyboard listeners already set up, skipping')
       return // 既に設定済みの場合はスキップ
@@ -317,18 +329,35 @@ const EnhancedMidiEditor = ({
     const handleKeyDown = (event) => {
       console.log(`🎹 KeyDown: ${event.code}`)
 
-      // Tab キー専用デバッグ
-      if (event.code === 'Tab') {
-        console.warn('🚨🚨🚨 TAB DEBUG: Tab key pressed in EnhancedMidiEditor 🚨🚨🚨')
-        console.warn('🚨🚨🚨 TAB DEBUG: isActive =', isActive, '🚨🚨🚨')
+      // システムキーと矢印キーの明示的ガード（最優先で処理）
+      if (event.code === 'Tab' || event.key === 'Tab' ||
+          event.code === 'Escape' || event.key === 'Escape' ||
+          event.code === 'F5' || event.key === 'F5' ||
+          event.code === 'ArrowLeft' || event.key === 'ArrowLeft' ||
+          event.code === 'ArrowRight' || event.key === 'ArrowRight' ||
+          event.code === 'ArrowUp' || event.key === 'ArrowUp' ||
+          event.code === 'ArrowDown' || event.key === 'ArrowDown' ||
+          (event.ctrlKey && event.code === 'KeyR')) {
+        console.log('🎹 システムキー/矢印キーを検出、MIDI処理をスキップ:', event.code)
+        return; // 早期リターン、preventDefault/stopPropagationは絶対に実行しない
       }
 
       // MIDIエディタがアクティブでない場合は処理しない
       if (!isActive) {
         console.log('🎹 MIDIエディタが非アクティブのため、キーボード入力を無視');
-        if (event.code === 'Tab') {
-          console.warn('🚨🚨🚨 TAB DEBUG: Early return - MIDI editor not active, Tab should work normally 🚨🚨🚨')
-        }
+        return;
+      }
+
+      // フォーカス状態チェック - MIDI Editor内にフォーカスがある場合のみ処理
+      const midiEditorContainer = document.querySelector('.midi-editor-container') ||
+                                  document.querySelector('[data-component="midi-editor"]')
+      const focusedElement = document.activeElement
+      const isFocusedInMidiEditor = midiEditorContainer &&
+                                   (midiEditorContainer.contains(focusedElement) ||
+                                    focusedElement === midiEditorContainer)
+
+      if (!isFocusedInMidiEditor) {
+        console.log('🎹 フォーカスがMIDIエディター外のため、キーボード入力を無視')
         return;
       }
       
@@ -388,19 +417,19 @@ const EnhancedMidiEditor = ({
       setActiveKeys(prev => new Set([...prev, event.code]))
       
       // 音を再生（再生中でも常に音を鳴らす）
-      if (state.audioEnabled && audio) {
+      if (state.audioEnabled && audioRef.current) {
         console.log(`🎹 Attempting to play note ${midiNote} with audio enabled: ${state.audioEnabled}`)
-        
+
         // キーボード入力の音を記録
         keyboardAudioRef.current.set(event.code, {
           noteId: midiNote,
           startTime: Date.now()
         })
-        
+
         // 音を再生（useMidiAudioを使用）
-        const result = audio.playNote(midiNote, 0.8, 0.25); // useMidiAudioを使用
+        const result = audioRef.current.playNote(midiNote, 0.8, 0.25); // useMidiAudioを使用
         console.log(`🎹 NoteOn result for ${midiNote}:`, result)
-        
+
         // キーボード入力の音を記録（noteOffで確実に停止するため）
         if (result) {
           keyboardAudioRef.current.set(event.code, {
@@ -411,7 +440,7 @@ const EnhancedMidiEditor = ({
           })
         }
       } else {
-        console.log(`🎹 Audio not enabled or audio not available. audioEnabled: ${state.audioEnabled}, audio: ${!!audio}`)
+        console.log(`🎹 Audio not enabled or audio not available. audioEnabled: ${state.audioEnabled}, audio: ${!!audioRef.current}`)
       }
       
       // 再生中のキーボード挿入機能
@@ -445,11 +474,11 @@ const EnhancedMidiEditor = ({
         }))
         
         // 親コンポーネントに通知
-        if (onNoteAdd) {
-          onNoteAdd(newNote, trackId)
+        if (onNoteAddRef.current) {
+          onNoteAddRef.current(newNote, trackIdRef.current)
         }
       }
-      
+
       // 視覚的フィードバック（複数キー対応）
       state.setPressedKey(prev => {
         if (prev === null) return midiNote
@@ -494,11 +523,11 @@ const EnhancedMidiEditor = ({
         event.stopPropagation();
         
         console.log(`🎹 Stopping note: ${midiNote}`)
-        
+
         // 音を停止（統一された音声システムでは自動的に管理される）
-        if (state.audioEnabled && audio) {
+        if (state.audioEnabled && audioRef.current) {
           // useMidiAudioのnoteOffを使用
-          audio.noteOff(midiNote);
+          audioRef.current.noteOff(midiNote);
           // キーボード入力の音を記録から削除
           keyboardAudioRef.current.delete(event.code)
         }
@@ -530,10 +559,10 @@ const EnhancedMidiEditor = ({
           })
           
           // 親コンポーネントに通知
-          if (onNoteEdit) {
+          if (onNoteEditRef.current) {
             const updatedNote = state.notes.find(note => note.id === recordingData.noteId)
             if (updatedNote) {
-              onNoteEdit(updatedNote, trackId)
+              onNoteEditRef.current(updatedNote, trackIdRef.current)
             }
           }
         }
@@ -553,7 +582,7 @@ const EnhancedMidiEditor = ({
     
     document.addEventListener('keydown', handleKeyDown)
     document.addEventListener('keyup', handleKeyUp)
-    
+
     return () => {
       console.log('🎹 Keyboard useEffect cleanup triggered')
       document.removeEventListener('keydown', handleKeyDown)
@@ -561,7 +590,7 @@ const EnhancedMidiEditor = ({
       console.log('🎹 Keyboard listeners removed')
       keyboardListenersSetupRef.current = false
     }
-  }, [state.audioEnabled, audio, manualOctaveOffset, onNoteAdd, onNoteEdit, trackId])
+  }, [state.audioEnabled, manualOctaveOffset, isActive])
 
   // オーディオ初期化
   useEffect(() => {
@@ -1948,6 +1977,35 @@ const EnhancedMidiEditor = ({
     }, 0)
   }, [trackId, state.audioEnabled, onNoteAdd, persistence, ghostText, state.isPlaying, audio]) // 🔧 修正: state.notesを依存配列から削除（無限ループ防止）
 
+  // Ghost Text予測の全適用は専用フックで処理
+  const acceptAllGhostPredictions = useCallback(() => {
+    ghostText.acceptAllGhostPredictions(state.notes, addNote)
+  }, [ghostText, state.notes, addNote])
+
+  // グローバルGhost Text補完イベントのリスナー
+  useEffect(() => {
+    const handleGlobalAcceptGhostText = (event) => {
+      if (!isActive) return // アクティブなタブのみ処理
+
+      console.log('🎹 Global Ghost Text accept event received')
+
+      if (event.detail.shiftKey) {
+        // Shift+Tab: 前の予測を選択（将来的に実装）
+        console.log('🎹 Shift+Tab: 前の予測選択（未実装）')
+      } else {
+        // Tab: 全予測を受け入れる
+        acceptAllGhostPredictions()
+        console.log('✅ Tab: Ghost Text予測を全適用')
+      }
+    }
+
+    window.addEventListener('accept-ghost-text-global', handleGlobalAcceptGhostText)
+
+    return () => {
+      window.removeEventListener('accept-ghost-text-global', handleGlobalAcceptGhostText)
+    }
+  }, [isActive, acceptAllGhostPredictions])
+
   // ノート削除関数
   const removeNote = useCallback((noteId) => {
     if (!trackId || !state.isInitialized) return
@@ -2235,11 +2293,6 @@ const EnhancedMidiEditor = ({
   // Ghost Text予測の受け入れは専用フックで処理
   const acceptGhostPrediction = useCallback((predictionIndex = 0) => {
     ghostText.acceptGhostPrediction(predictionIndex, state.notes, addNote)
-  }, [ghostText, state.notes, addNote])
-
-  // Ghost Text予測の全適用は専用フックで処理
-  const acceptAllGhostPredictions = useCallback(() => {
-    ghostText.acceptAllGhostPredictions(state.notes, addNote)
   }, [ghostText, state.notes, addNote])
 
   // Ghost Textのトグルは専用フックで処理

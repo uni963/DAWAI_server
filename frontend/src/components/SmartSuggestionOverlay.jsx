@@ -62,8 +62,11 @@ const SmartSuggestionOverlay = ({
   }, []);
 
   // 自動フェードアウト処理（5秒後に透明化）
+  // 🔧 修正: サジェスチョンの存在を直接監視（isVisibleステートに依存しない）
   useEffect(() => {
-    if (isVisible && suggestions.length > 0) {
+    const hasAnySuggestions = suggestions.length > 0 || chordSuggestions.length > 0 || rhythmSuggestions.length > 0;
+
+    if (hasAnySuggestions) {
       // 表示時は不透明にリセット
       setOpacity(1);
 
@@ -84,11 +87,25 @@ const SmartSuggestionOverlay = ({
         clearTimeout(fadeTimeoutRef.current);
       }
     };
-  }, [isVisible, suggestions]);
+  }, [suggestions, chordSuggestions, rhythmSuggestions]);
 
   // サジェスチョン生成（デバウンス処理）
   useEffect(() => {
+    // 🔍 診断ログ: useEffect トリガー
+    console.log('🔍 SmartSuggestionOverlay useEffect triggered:', {
+      isEnabled,
+      hasGenreContext: !!genreContext,
+      engineInitialized: smartSuggestionEngine.initialized,
+      currentNotesCount: currentNotes.length,
+      currentTrackType
+    });
+
     if (!isEnabled || !genreContext || !smartSuggestionEngine.initialized) {
+      console.warn('⚠️ サジェスチョン生成スキップ:', {
+        isEnabled,
+        hasGenreContext: !!genreContext,
+        engineInitialized: smartSuggestionEngine.initialized
+      });
       setSuggestions([]);
       setIsVisible(false);
       return;
@@ -125,13 +142,19 @@ const SmartSuggestionOverlay = ({
         aggressiveness
       };
 
+      // 生成された提案を一時変数に格納（状態更新の非同期性を回避）
+      let noteSuggestions = [];
+      let chordSuggestions = [];
+      let rhythmSuggestions = [];
+      let ghostNotes = [];
+
       switch (currentTrackType) {
         case 'midi':
-          const noteSuggestions = await smartSuggestionEngine.suggestNextNotes(context);
+          noteSuggestions = await smartSuggestionEngine.suggestNextNotes(context);
           setSuggestions(noteSuggestions);
 
           // 修正: 正しい引数形式でコード進行提案を呼び出し
-          const chordSuggestions = await smartSuggestionEngine.suggestChordProgression(
+          chordSuggestions = await smartSuggestionEngine.suggestChordProgression(
             context.genreContext,
             currentNotes,
             context.position
@@ -140,14 +163,14 @@ const SmartSuggestionOverlay = ({
 
           // ゴーストノート生成
           if (showGhostNotes) {
-            const ghostNotes = await smartSuggestionEngine.generateGhostNotes(context);
+            ghostNotes = await smartSuggestionEngine.generateGhostNotes(context);
             setGhostNotes(ghostNotes);
           }
           break;
 
         case 'drum':
           // 修正: 正しい引数形式でリズムパターン提案を呼び出し
-          const rhythmSuggestions = await smartSuggestionEngine.suggestRhythmPattern(
+          rhythmSuggestions = await smartSuggestionEngine.suggestRhythmPattern(
             context.genreContext,
             'drum',
             null
@@ -156,21 +179,22 @@ const SmartSuggestionOverlay = ({
           break;
 
         case 'diffsinger':
-          const melodySuggestions = await smartSuggestionEngine.suggestMelodyLine(context);
-          setSuggestions(melodySuggestions);
+          noteSuggestions = await smartSuggestionEngine.suggestMelodyLine(context);
+          setSuggestions(noteSuggestions);
           break;
       }
 
-      // 信頼度計算
-      const avgConfidence = suggestions.length > 0
-        ? suggestions.reduce((sum, s) => sum + s.confidence, 0) / suggestions.length
+      // 🔧 修正: 新しく生成した配列を使用して信頼度計算（状態更新の非同期性を回避）
+      const avgConfidence = noteSuggestions.length > 0
+        ? noteSuggestions.reduce((sum, s) => sum + s.confidence, 0) / noteSuggestions.length
         : 0;
       setConfidence(avgConfidence);
 
-      // サジェスチョンがある場合は表示
-      setIsVisible(suggestions.length > 0 || chordSuggestions.length > 0 || rhythmSuggestions.length > 0);
+      // 🔧 修正: 新しく生成した配列を使用して表示判定（状態更新の非同期性を回避）
+      const shouldBeVisible = noteSuggestions.length > 0 || chordSuggestions.length > 0 || rhythmSuggestions.length > 0;
+      setIsVisible(shouldBeVisible);
 
-      console.log(`💡 サジェスチョン生成完了: ${suggestions.length}候補, 信頼度: ${(avgConfidence * 100).toFixed(1)}%`);
+      console.log(`💡 サジェスチョン生成完了: ${noteSuggestions.length}候補, コード: ${chordSuggestions.length}, リズム: ${rhythmSuggestions.length}, 信頼度: ${(avgConfidence * 100).toFixed(1)}%, 表示: ${shouldBeVisible}`);
     } catch (err) {
       console.error('❌ サジェスチョン生成エラー:', err);
       setSuggestions([]);
@@ -219,6 +243,20 @@ const SmartSuggestionOverlay = ({
     return 'text-gray-600 bg-gray-100 border-gray-200';
   };
 
+  // ゴーストノートカラー取得（提案の視覚的区別用）
+  const getGhostNoteColor = (confidence, index) => {
+    // 信頼度に基づくカラー（高信頼度ほど濃い色）
+    const colors = [
+      { dot: '#10b981', ghost: 'rgba(16, 185, 129, 0.3)' }, // green - 1st suggestion
+      { dot: '#3b82f6', ghost: 'rgba(59, 130, 246, 0.3)' }, // blue - 2nd suggestion
+      { dot: '#8b5cf6', ghost: 'rgba(139, 92, 246, 0.3)' }, // purple - 3rd suggestion
+    ];
+
+    // インデックスに基づいてカラーを選択（循環）
+    const colorIndex = index % colors.length;
+    return colors[colorIndex];
+  };
+
   // 音名表示
   const formatNoteName = (pitch) => {
     const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -259,8 +297,37 @@ const SmartSuggestionOverlay = ({
     return { left, top, width };
   };
 
-  // レンダリング条件
-  if (!isEnabled || !isVisible || (!suggestions.length && !chordSuggestions.length && !rhythmSuggestions.length)) {
+  // レンダリング条件（デバッグログ付き）
+  // 🔧 修正: サジェスチョンの実際の存在を基にレンダリング判定（isVisibleステートに依存しない）
+  const hasSuggestions = suggestions.length > 0;
+  const hasChordSuggestions = chordSuggestions.length > 0;
+  const hasRhythmSuggestions = rhythmSuggestions.length > 0;
+  const hasAnySuggestions = hasSuggestions || hasChordSuggestions || hasRhythmSuggestions;
+
+  const renderConditions = {
+    isEnabled,
+    isVisible,
+    hasSuggestions,
+    hasChordSuggestions,
+    hasRhythmSuggestions,
+    hasAnySuggestions,
+    opacity
+  };
+
+  // 🔧 修正: isVisibleステートではなく、実際のサジェスチョン存在でレンダリング判定
+  const shouldRender = isEnabled && hasAnySuggestions;
+
+  // 🔍 診断ログ: レンダリング判定（毎回）
+  console.log('🎨 SmartSuggestionOverlay レンダリングチェック:', renderConditions);
+
+  // デバッグ: レンダリング状態のログ
+  if (shouldRender) {
+    console.log('✅ SmartSuggestionOverlay: レンダリング中', renderConditions);
+  } else if (hasAnySuggestions) {
+    console.warn('⚠️ SmartSuggestionOverlay: サジェスチョンあるが非表示（isEnabled=false）', renderConditions);
+  }
+
+  if (!shouldRender) {
     return null;
   }
 

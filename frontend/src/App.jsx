@@ -760,10 +760,10 @@ const App = () => {
               // ドラムトラックの処理（重複レンダリングを防ぐ）
               if (currentTab?.type === TAB_TYPES.DRUM_TRACK && currentTrack) {
                 return (
-                  <DrumTrack 
+                  <DrumTrack
                     key={`drum-track-${currentTrack.id}`}
                     trackId={currentTrack.id}
-                    trackName={currentTrack.name || 'Drum Track'}
+                    trackName={currentTrack.name || 'Drums Track'}
                     trackColor={currentTrack.color || '#3B82F6'}
                     drumData={currentTrack.drumData || { grid: [], instruments: [], tempo: globalTempo, timeSignature: '4/4' }}
                     onDrumDataUpdate={(drumData) => eventHandlersManager.updateTrackDrumData(currentTrack.id, drumData)}

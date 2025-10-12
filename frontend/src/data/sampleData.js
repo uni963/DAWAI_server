@@ -327,7 +327,7 @@ export const SAMPLE_PROJECT_GUIDE = {
       ]
     },
     {
-      name: 'Drum Track',
+      name: 'Drums Track',
       description: '🥁 Basic Rockパターンが4小節入っています',
       tips: [
         'ドラムグリッドでリズムパターンを確認できます',

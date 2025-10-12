@@ -6,6 +6,7 @@
 import DEMO_SONGS from '../data/demoSongs.js';
 import genreManager from './GenreManager.js';
 import { mapInstrumentTypeToTrackType } from '../data/trackTypes.js';
+import drumTrackManager from '../utils/drumTrackManager.js';
 
 class DemoSongManager {
   constructor() {
@@ -170,6 +171,13 @@ class DemoSongManager {
 
       // 既存プロジェクトクリア
       projectManager.newProject();
+
+      // デフォルトトラックをクリア（Demo Song専用トラックのみ読み込むため）
+      if (projectManager.currentProject && projectManager.currentProject.tracks) {
+        projectManager.currentProject.tracks = [];
+        projectManager.currentProject.tabs = projectManager.currentProject.tabs.filter(tab => tab.id === 'arrangement');
+        console.log('🧹 Default tracks cleared for Demo Song loading');
+      }
 
       // プロジェクトメタデータ設定
       projectManager.setProjectName(demoSong.metadata.title.ja);
@@ -668,7 +676,7 @@ class DemoSongManager {
         // ★ 統一トラックタイプシステム対応: ドラムトラック用の統一タイプを使用
         const unifiedTrackType = mapInstrumentTypeToTrackType('drums');
         // ★ 統一メニュー名を強制使用: ドラムトラックの統一性を確保
-        const trackDisplayName = unifiedTrackType.name || track.name || `Drum Track ${index + 1}`;
+        const trackDisplayName = unifiedTrackType.name || track.name || `Drums Track ${index + 1}`;
         const uniqueTrackId = track.id || `demo_drum_${Date.now()}_${index}`;
 
         const trackData = {
@@ -726,6 +734,18 @@ class DemoSongManager {
           projectManager.currentProject.tracks.push(trackData);
         } else {
           console.warn('ProjectManager.currentProject.tracks not found');
+        }
+
+        // drumTrackManager にドラムトラックを登録
+        // これにより、ドラムトラックのパターンデータが drumTrackManager で管理されるようになる
+        try {
+          if (track.pattern) {
+            // パターンデータがある場合は、drumTrackManager に登録
+            drumTrackManager.createDrumTrack(uniqueTrackId, track.pattern);
+            console.log(`✅ Drum track registered with drumTrackManager: ${uniqueTrackId}`);
+          }
+        } catch (error) {
+          console.error(`⚠️ Failed to register drum track with drumTrackManager: ${uniqueTrackId}`, error);
         }
 
         console.log(`✅ Drum track loaded: ${trackData.name}`);

@@ -26,9 +26,9 @@ const useDrumTrackAudio = () => {
       if (success) {
         setIsInitialized(true);
         console.log('🥁 [DrumTrackAudio] 統一音声システム初期化完了');
-        
+
         // ドラムトラック追加
-        window.unifiedAudioSystem.addTrack('drum-track', 'Drum Track', 'drums', '#ff6b6b', null);
+        window.unifiedAudioSystem.addTrack('drum-track', 'Drums Track', 'drums', '#ff6b6b', null);
         console.log('🥁 [DrumTrackAudio] ドラムトラック追加完了');
         
         return true;

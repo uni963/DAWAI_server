@@ -56,9 +56,33 @@ export const useGlobalErrorHandler = () => {
 export const useKeyboardHandler = () => {
   useEffect(() => {
     const handleKeyDown = (event) => {
-      // Tab キー専用デバッグ
+      // Tab キー処理: Ghost Text補完機能
       if (event.key === 'Tab') {
-        console.error('❗❗❗ GLOBAL HANDLER DEBUG: Tab key pressed in useEventHandlers ❗❗❗')
+        console.log('⌨️ Tab key pressed globally')
+
+        // フォーム要素内では通常のTab動作を許可
+        const target = event.target
+        const isFormElement = target.matches('input, textarea, [contenteditable], select')
+
+        if (!isFormElement) {
+          // Ghost Text予測がある場合は補完を適用
+          if (window.magentaGhostTextEngine &&
+              window.magentaGhostTextEngine.isActive &&
+              window.magentaGhostTextEngine.lastPredictions &&
+              window.magentaGhostTextEngine.lastPredictions.length > 0) {
+
+            event.preventDefault()
+            event.stopPropagation()
+
+            // カスタムイベントを発行してMIDIエディタに通知
+            const acceptGhostTextEvent = new CustomEvent('accept-ghost-text-global', {
+              detail: { shiftKey: event.shiftKey }
+            })
+            window.dispatchEvent(acceptGhostTextEvent)
+            console.log('✅ Tab: Ghost Text補完イベント発行')
+            return
+          }
+        }
       }
 
       // スペースキーが押された場合

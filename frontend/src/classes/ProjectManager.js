@@ -154,7 +154,7 @@ class ProjectManager {
 
     // 初期トラックを作成
     const track1 = createTrack('track-1', 'Piano Track', TRACK_TYPES.MIDI, TRACK_SUBTYPES.PIANO, TRACK_COLORS[0])
-    const track2 = createTrack('track-2', 'Drum Track', TRACK_TYPES.DRUMS, TRACK_SUBTYPES.DRUMS, TRACK_COLORS[1])
+    const track2 = createTrack('track-2', 'Drums Track', TRACK_TYPES.DRUMS, TRACK_SUBTYPES.DRUMS, TRACK_COLORS[1])
 
     // ドラムトラックの場合は、drumTrackManagerに登録
     if (track2.type === TRACK_TYPES.DRUMS) {

@@ -21,9 +21,9 @@ import {
   SYNC_GROUP_SETTINGS
 } from '../../utils/drumTrackDataStructure.js';
 
-const DrumTrack = ({ 
-  trackId, 
-  trackName = 'Drum Track',
+const DrumTrack = ({
+  trackId,
+  trackName = 'Drums Track',
   trackColor = '#3B82F6',
   drumData,
   onDrumDataUpdate,
