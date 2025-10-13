@@ -87,7 +87,11 @@ export const useGenreManagement = (dependencies) => {
       // スケール制約とジャンル自動設定
       await applyMusicTheoryAutoSettings(demoSong)
 
-      // ✅ 全処理完了後にプロジェクト状態を更新（ちらつき防止）
+      // アクティブタブをArrangementに戻す（updateProjectState前に設定）
+      projectManager.setActiveTab('arrangement')
+      console.log('🔧 アクティブタブをArrangementに設定')
+
+      // プロジェクト状態を更新（アクティブタブ設定後）
       eventHandlersManager.updateProjectState()
 
       console.log('✅ Demo Song読み込み完了:', demoSong.metadata.title.ja)
@@ -119,9 +123,9 @@ export const useGenreManagement = (dependencies) => {
         if (!tabExists) {
           const { tabType, tabTitle } = determineTabType(track)
 
-          // タブを作成して追加
+          // タブを作成して追加 - ProjectManagerの標準形式に合わせる
           const newTab = createTab(
-            `${track.type}-${track.id}`,
+            `tab-${track.id}`,
             tabTitle,
             tabType,
             track.id
@@ -132,11 +136,15 @@ export const useGenreManagement = (dependencies) => {
         }
       })
 
+      // React状態にタブを手動更新
+      eventHandlersManager.setTabs(currentProject.tabs)
+      console.log('🎵 React状態にタブを手動更新:', currentProject.tabs.length, 'タブ')
+
       // タブ作成完了後、プロジェクトを保存
       projectManager.saveToLocalStorage()
       console.log('🎵 Demo Songタブ作成完了:', currentProject.tabs.length, 'タブ')
     }
-  }, [projectManager])
+  }, [projectManager, eventHandlersManager])
 
   /**
    * トラックタイプに応じたタブタイプの決定

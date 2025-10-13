@@ -6,6 +6,8 @@
 import DEMO_SONGS from '../data/demoSongs.js';
 import genreManager from './GenreManager.js';
 import { mapInstrumentTypeToTrackType } from '../data/trackTypes.js';
+import { TAB_TYPES } from '../constants/trackTypes.js';
+import { createTab } from '../factories/projectFactory.js';
 import drumTrackManager from '../utils/drumTrackManager.js';
 
 class DemoSongManager {
@@ -256,6 +258,9 @@ class DemoSongManager {
 
       // ★ 統一トラックシステム対応: 全トラックタイプを統一メソッドで読み込み
       this._loadAllTracksUnified(halfCompleteData, projectManager);
+
+      // ★ タブ作成: 読み込まれたトラックに対応するタブを作成
+      this._createTabsForLoadedTracks(projectManager);
 
       // ★ ジャンルとスケールの強化自動設定
       // UIでジャンル選択と推奨スケールが自動表示されるよう詳細設定
@@ -848,6 +853,74 @@ class DemoSongManager {
         console.error(`❌ Failed to load DiffSinger track ${index}:`, error);
       }
     });
+  }
+
+  /**
+   * 読み込み済みトラックに対応するタブを作成
+   * @param {Object} projectManager - ProjectManagerインスタンス
+   */
+  _createTabsForLoadedTracks(projectManager) {
+    const currentProject = projectManager.getCurrentProject();
+    if (!currentProject || !currentProject.tracks) {
+      console.warn('⚠️ No project or tracks found for tab creation');
+      return;
+    }
+
+    console.log('🎯 DemoSongManager: 読み込み済みトラック用タブ作成開始:', currentProject.tracks.length, 'トラック検出');
+
+    // 読み込まれたトラックに対してタブを作成
+    currentProject.tracks.forEach(track => {
+      // すでにタブが存在するかチェック
+      const tabExists = currentProject.tabs.some(tab => tab.trackId === track.id);
+      if (!tabExists) {
+        const { tabType, tabTitle } = this._determineTabType(track);
+
+        // タブを作成して追加 - ProjectManagerの標準形式に合わせる
+        const newTab = createTab(
+          `tab-${track.id}`,
+          tabTitle,
+          tabType,
+          track.id
+        );
+
+        currentProject.tabs.push(newTab);
+        console.log(`✅ Demo Songトラック用タブ作成: ${tabTitle} (${track.type}/${track.subtype})`);
+      }
+    });
+
+    // プロジェクトを保存
+    projectManager.saveToLocalStorage();
+    console.log('🎵 DemoSongManager: タブ作成完了:', currentProject.tabs.length, 'タブ');
+  }
+
+  /**
+   * トラックタイプに応じたタブタイプの決定
+   * @param {Object} track - トラックオブジェクト
+   * @returns {Object} { tabType, tabTitle }
+   */
+  _determineTabType(track) {
+    let tabType, tabTitle;
+
+    // トラックタイプに応じてタブタイプを決定（統一タイプ対応）
+    if (track.type === 'voiceSynth' || track.subtype === 'diffsinger') {
+      // 歌声合成トラック
+      tabType = TAB_TYPES.DIFFSINGER_TRACK;
+      tabTitle = track.displayName || track.name || '歌声合成トラック';
+    } else if (track.type === 'instrument' && track.subtype === 'drums') {
+      // ドラムトラック（統一システムでは instrument/drums）
+      tabType = TAB_TYPES.DRUM_TRACK;
+      tabTitle = track.displayName || track.name || 'Drums Track';
+    } else if (track.type === 'instrument') {
+      // その他の楽器トラック（Piano Track, Bass Track, Synth Track）
+      tabType = TAB_TYPES.MIDI_EDITOR;
+      tabTitle = track.displayName || track.name || `${track.subtype} Track`;
+    } else {
+      // デフォルトはMIDIエディタ
+      tabType = TAB_TYPES.MIDI_EDITOR;
+      tabTitle = track.displayName || track.name || 'MIDI Track';
+    }
+
+    return { tabType, tabTitle };
   }
 }
 

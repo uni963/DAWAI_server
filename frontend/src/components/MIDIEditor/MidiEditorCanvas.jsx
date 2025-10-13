@@ -686,10 +686,8 @@ const MidiEditorCanvas = ({
       ctx.lineWidth = 3 // より太い枠線
       ctx.strokeRect(x, y, width, height)
       
-      // 承認待ちのノートに目立つ点滅効果を追加
-      const time = Date.now() / 1000
-      const alpha = 0.3 + 0.4 * Math.sin(time * 3) // より目立つ点滅効果
-      ctx.globalAlpha = alpha
+      // 承認待ちのノートに半透明の白いオーバーレイを追加
+      ctx.globalAlpha = 0.5 // 静的な半透明表示
       ctx.fillStyle = '#ffffff'
       ctx.fillRect(x + 3, y + 3, width - 6, height - 6)
       ctx.globalAlpha = 1

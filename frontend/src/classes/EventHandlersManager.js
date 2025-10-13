@@ -81,8 +81,9 @@ class EventHandlersManager {
       // 🔥 INFINITE LOOP FIX: setActiveTabを削除 - useTabManagementで処理済み
       // this.setActiveTab(this.projectManager.getActiveTab())
 
-      // 強制再レンダリングをトリガー
-      this.setForceRerender(prev => prev + 1)
+      // 🔧 MIDI INPUT FIX: 音符記録時の強制再レンダリングを無効化
+      // マウスイベントリスナーの破壊を防ぐため、局所的なデータ更新では強制再レンダリングを行わない
+      // this.setForceRerender(prev => prev + 1)
 
       console.log('📊 Project state updated (activeTab sync removed to prevent infinite loop)')
     }, 50) // 🔧 10ms→50ms: 複数の状態更新を統合してちらつき削減
@@ -305,17 +306,61 @@ class EventHandlersManager {
       })
 
       // Demo Songデータを読み込み
+      let firstTrackId = null
       if (demoSong.tracks) {
         for (const trackData of demoSong.tracks) {
           const newTrack = this.addNewTrack(trackData.type, trackData.subtype, true)
 
-          if (newTrack && trackData.midiData) {
-            this.updateTrackMidiData(newTrack.id, trackData.midiData, true)
+          if (newTrack) {
+            // 最初のトラックIDを記録
+            if (!firstTrackId) {
+              firstTrackId = newTrack.id
+            }
+
+            if (trackData.midiData) {
+              this.updateTrackMidiData(newTrack.id, trackData.midiData, true)
+            }
           }
         }
       }
 
+      // 🔧 DEMO SONG TAB FIX: 読み込み完了後、最初のトラックのタブに切り替える
+      console.log('🔍 DEMO SONG DEBUG: Total tracks loaded:', demoSong.tracks?.length)
+      console.log('🔍 DEMO SONG DEBUG: First track ID:', firstTrackId)
+      console.log('🔍 DEMO SONG DEBUG: Current tabs:', this.projectManager.getTabs().map(t => t.id))
+
+      if (firstTrackId) {
+        const firstTabId = `tab-${firstTrackId}`
+        console.log('🎵 Demo Song loaded, switching to first track tab:', firstTabId)
+
+        // ProjectManagerでアクティブタブを設定
+        const setResult = this.projectManager.setActiveTab(firstTabId)
+        console.log('🔍 DEMO SONG DEBUG: setActiveTab result:', setResult)
+
+        if (setResult) {
+          // React状態も更新
+          console.log('🔍 DEMO SONG DEBUG: Calling this.setActiveTab with:', firstTabId)
+          this.setActiveTab(firstTabId)
+          console.log('✅ Successfully switched to first track tab after Demo Song load')
+        } else {
+          console.error('❌ Failed to set active tab in ProjectManager:', firstTabId)
+        }
+      } else {
+        console.error('❌ No first track ID found for tab switching')
+      }
+
       this.setShowDemoSongBrowser(false)
+
+      // 🔧 DEMO SONG FIX: updateProjectState後にタブ切り替えを再度実行
+      // updateProjectState()のデバウンス処理の後にタブ切り替えを確実に実行
+      setTimeout(() => {
+        if (firstTrackId) {
+          const firstTabId = `tab-${firstTrackId}`
+          console.log('🎵 DEMO SONG DELAYED: Re-switching to first track tab:', firstTabId)
+          this.setActiveTab(firstTabId)
+        }
+      }, 100) // updateProjectStateのデバウンス(50ms)より長く設定
+
       this.updateProjectState()
     } catch (error) {
       console.error('❌ Error loading Demo Song:', error)

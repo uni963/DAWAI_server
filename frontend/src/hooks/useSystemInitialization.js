@@ -91,23 +91,73 @@ export const useEngineInitialization = (projectManager) => {
             // MIDIノート操作
             addMidiNotes: async (params) => {
               console.log('AI Agent Callback: addMidiNotes', params)
-              projectManager.addMidiNotes(params)
+              const result = projectManager.addMidiNotes(params)
+
+              // UIの強制更新をトリガー
+              if (result && window) {
+                window.dispatchEvent(new CustomEvent('aiAgentMidiDataChanged', {
+                  detail: { trackId: params.trackId, action: 'add', noteCount: params.notes?.length || 0 }
+                }))
+                console.log('✅ AI Agent: Dispatched aiAgentMidiDataChanged event for addMidiNotes')
+              }
+
+              return result
             },
             updateMidiNotes: async (params) => {
               console.log('AI Agent Callback: updateMidiNotes', params)
-              projectManager.updateMidiNotes(params)
+              const result = projectManager.updateMidiNotes(params)
+
+              // UIの強制更新をトリガー
+              if (result && window) {
+                window.dispatchEvent(new CustomEvent('aiAgentMidiDataChanged', {
+                  detail: { trackId: params.trackId, action: 'update', noteCount: params.notes?.length || 0 }
+                }))
+                console.log('✅ AI Agent: Dispatched aiAgentMidiDataChanged event for updateMidiNotes')
+              }
+
+              return result
             },
             deleteMidiNotes: async (params) => {
               console.log('AI Agent Callback: deleteMidiNotes', params)
-              projectManager.deleteMidiNotes(params)
+              const result = projectManager.deleteMidiNotes(params)
+
+              // UIの強制更新をトリガー
+              if (result && window) {
+                window.dispatchEvent(new CustomEvent('aiAgentMidiDataChanged', {
+                  detail: { trackId: params.trackId, action: 'delete', noteCount: params.noteIds?.length || 0 }
+                }))
+                console.log('✅ AI Agent: Dispatched aiAgentMidiDataChanged event for deleteMidiNotes')
+              }
+
+              return result
             },
             approveMidiNotes: async (params) => {
               console.log('AI Agent Callback: approveMidiNotes', params)
-              projectManager.approveMidiNotes(params)
+              const result = projectManager.approveMidiNotes(params)
+
+              // UIの強制更新をトリガー（approveMidiNotesは既にmidiDataApprovedイベントを発火）
+              if (result && window) {
+                window.dispatchEvent(new CustomEvent('aiAgentMidiDataChanged', {
+                  detail: { trackId: params.trackId, action: 'approve', noteCount: params.notes?.length || 0 }
+                }))
+                console.log('✅ AI Agent: Dispatched aiAgentMidiDataChanged event for approveMidiNotes')
+              }
+
+              return result
             },
             rejectMidiNotes: async (params) => {
               console.log('AI Agent Callback: rejectMidiNotes', params)
-              projectManager.rejectMidiNotes(params)
+              const result = projectManager.rejectMidiNotes(params)
+
+              // UIの強制更新をトリガー
+              if (result && window) {
+                window.dispatchEvent(new CustomEvent('aiAgentMidiDataChanged', {
+                  detail: { trackId: params.trackId, action: 'reject', noteCount: params.noteIds?.length || 0 }
+                }))
+                console.log('✅ AI Agent: Dispatched aiAgentMidiDataChanged event for rejectMidiNotes')
+              }
+
+              return result
             },
 
             // プロジェクト設定

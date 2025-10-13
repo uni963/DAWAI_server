@@ -83,6 +83,9 @@ export const useTabManagement = (dependencies) => {
     }
   }, [tabs, tracks, globalTempo, eventHandlersManager])
 
+  // デバッグ: processMidiDataValidationの再作成回数を監視
+  console.log('🎼 HOOK processMidiDataValidation useCallback triggered - potential re-creation')
+
   /**
    * タブ切り替えハンドラー
    *
@@ -93,6 +96,7 @@ export const useTabManagement = (dependencies) => {
    */
   const handleTabChange = useCallback((tabId) => {
     console.log('🔄 HOOK handleTabChange 開始:', tabId, 'current:', activeTab)
+    console.log('🔍 HOOK handleTabChange 呼び出し元スタック:', new Error().stack.split('\n').slice(1, 4).join('\n'))
 
     // 1. MIDIデータ検証（条件付き - 修正1適用後）
     processMidiDataValidation(tabId)
@@ -103,14 +107,26 @@ export const useTabManagement = (dependencies) => {
       console.log('🔄 HOOK projectManager.setActiveTab 成功:', tabId)
 
       // 即座にReact stateを更新してUI応答性を確保
-      setActiveTab(tabId)
-      console.log('✅ HOOK handleTabChange 完了:', tabId)
+      console.log('🔥🔥🔥 HOOK: About to call setActiveTab with:', tabId)
+      console.log('🔥🔥🔥 HOOK: setActiveTab function type:', typeof setActiveTab)
+
+      try {
+        setActiveTab(tabId)
+        console.log('🔥🔥🔥 HOOK: setActiveTab call completed successfully')
+        console.log('✅ HOOK handleTabChange 完了:', tabId)
+      } catch (error) {
+        console.error('🚨🚨🚨 HOOK: setActiveTab call failed:', error)
+        console.error('🚨🚨🚨 HOOK: Error details:', error.message, error.stack)
+      }
     } else {
       console.log('❌ HOOK projectManager.setActiveTab 失敗:', tabId)
     }
   }, [projectManager, setActiveTab, processMidiDataValidation])
   // ✅ 修正: tabs, tracks, globalTempoは不要な依存関係のため削除
   // ✅ 修正: processMidiDataValidationを依存配列に追加（TDZ回避のため関数定義を先に移動）
+
+  // デバッグ: handleTabChangeの再作成回数を監視
+  console.log('🔄 HOOK handleTabChange useCallback triggered - potential re-creation')
 
   /**
    * タブクローズハンドラー

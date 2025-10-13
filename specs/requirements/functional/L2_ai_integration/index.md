@@ -334,6 +334,10 @@ const diffsingerSettings = {
 
 歌詞・楽譜入力時のリアルタイムAI補完機能。ユーザーの入力パターンを学習し、適切な続きを予測提案します。
 
+**詳細ドキュメント**:
+- **[L3: Ghost Text補完機能 - ユーザーガイド](./L3_ghost_text_user_guide.md)** - 初心者向けの詳しい使い方ガイド
+- **[L3: Ghost Textジャンル・スケール対応機能要件](./L3_ghost_text_enhancement.md)** - 音楽理論統合の技術仕様
+
 ### Ghost Text システム
 
 ```mermaid

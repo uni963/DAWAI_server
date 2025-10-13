@@ -22,6 +22,11 @@ const TabBar = ({
   addNewTab
 }) => {
 
+  // デバッグ: TabBarの再レンダリングとactiveTab状態を監視
+  console.log('🎨🎨🎨 TABBAR RENDER: activeTab =', activeTab, 'tabs =', tabs.map(t => t.id))
+  console.log('🎨🎨🎨 TABBAR RENDER: tabs count =', tabs.length, 'tabs array =', tabs)
+  console.log('🎨🎨🎨 TABBAR RENDER: timestamp =', new Date().toISOString())
+
 
   // タブタイトルに番号を付ける関数
   const getDisplayTitle = (tab, index) => {
@@ -239,18 +244,23 @@ const TabBar = ({
         minWidth: '0'
       }}
     >
-      {tabs.map((tab) => (
+      {tabs.map((tab) => {
+        const isActive = activeTab === tab.id
+        console.log(`🎨 TABBAR TAB RENDER: ${tab.id} isActive=${isActive} (activeTab=${activeTab})`)
+
+        return (
         <div key={tab.id} className="flex items-center flex-shrink-0">
                       <Button
-              variant={activeTab === tab.id ? "default" : "ghost"}
+              variant={isActive ? "default" : "ghost"}
               size="sm"
               className={`text-sm whitespace-nowrap max-w-32 truncate h-8 px-3 ${
-                activeTab === tab.id
+                isActive
                   ? 'bg-blue-600 text-white'
                   : 'text-gray-300 hover:text-white hover:bg-gray-700'
               }`}
               data-tab-id={tab.id}
               onClick={(e) => {
+                console.log('🚀🚀🚀 TABBAR ONCLICK HANDLER CALLED!!! Tab:', tab.id, 'current active:', activeTab)
                 console.log('🔧 TAB CLICK: ', tab.id, 'current active:', activeTab)
 
                 // MIDIエディターのフォーカスを強制的に解除
@@ -260,6 +270,9 @@ const TabBar = ({
                   document.activeElement.blur()
                   console.log('🔧 MIDIエディターフォーカスを解除')
                 }
+
+                console.log('🔥🔥🔥 TABBAR: About to call setActiveTab with:', tab.id)
+                console.log('🔥🔥🔥 TABBAR: Current activeTab before setActiveTab:', activeTab)
 
                 setActiveTab(tab.id)
 
@@ -333,7 +346,8 @@ const TabBar = ({
               </button>
             )}
         </div>
-      ))}
+        )
+      })}
       
       <div className="relative flex-shrink-0">
         <Button

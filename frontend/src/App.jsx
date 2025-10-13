@@ -45,6 +45,7 @@ import useTabManagement from './hooks/useTabManagement.js'
 import useGenreManagement from './hooks/useGenreManagement.js'
 import useSuggestionManagement from './hooks/useSuggestionManagement.js'
 import useMixerManagement from './hooks/useMixerManagement.js'
+import GlobalMouseDebugger from './components/GlobalMouseDebugger.jsx'
 
 
 
@@ -56,13 +57,13 @@ const App = () => {
 
   // プロジェクトマネージャーのインスタンス
   const [projectManager] = useState(() => new ProjectManager())
-  
+
   // プロジェクト状態
   const [project, setProject] = useState(projectManager.getProject())
   const [tracks, setTracks] = useState(projectManager.getTracks())
   const [tabs, setTabs] = useState(projectManager.getTabs())
   const [activeTab, setActiveTab] = useState(projectManager.getActiveTab())
-  
+
   // グローバルBPM管理
   const [globalTempo, setGlobalTempo] = useState(projectManager.getProject()?.settings?.tempo || 120)
 
@@ -86,13 +87,41 @@ const App = () => {
     rootNote: 'C'
   })
 
+  // デバッグ: tabs stateの変更を監視
+  useEffect(() => {
+    console.log('🔧 APP TABS STATE CHANGED:', tabs.length, 'tabs:', tabs.map(t => `${t.id}(${t.title})`))
+    console.log('🔧 APP TABS STATE: full array:', tabs)
+  }, [tabs])
+
+  // setTabsのラッパー関数 - EventHandlersManager用の詳細監視
+  // 🔧 FIX: クロージャー問題を修正 - 依存配列から`tabs`を削除し、関数型更新を使用
+  const setTabsWithDebug = useCallback((newTabs) => {
+    console.log('🚀 setTabsWithDebug CALLED! newTabs:', newTabs?.length, 'tabs')
+    console.log('🚀 setTabsWithDebug: Tab IDs:', newTabs?.map(t => `${t.id}(${t.title})`))
+    console.log('🚀 setTabsWithDebug: Stack trace:', new Error().stack?.split('\n').slice(1, 4).join('\n'))
+
+    // 🔧 FIX: 関数型更新を使用してクロージャー問題を回避
+    // 理由: EventHandlersManagerは初期化時の参照を保持し続けるため、
+    //       依存配列に`tabs`を含めるとクロージャーが古くなり、状態が更新されない
+    setTabs(prevTabs => {
+      console.log('🚀 setTabsWithDebug: Previous tabs:', prevTabs.length)
+      console.log('🚀 setTabsWithDebug: Updating to:', newTabs.length, 'tabs')
+      return newTabs
+    })
+
+    // 非同期で結果を確認
+    setTimeout(() => {
+      console.log('🚀 setTabsWithDebug: State after 10ms - should be updated by now')
+    }, 10)
+  }, [])  // 🔧 FIX: 依存配列を空にして、setTabsWithDebugが再作成されないようにする
+
   // EventHandlersManager インスタンス（依存関係を注入）
   const [eventHandlersManager] = useState(() => new EventHandlersManager({
     projectManager,
     appSettingsManager,
     setProject,
     setTracks,
-    setTabs,
+    setTabs: setTabsWithDebug,
     setActiveTab,
     setGlobalTempo,
     setForceRerender,
@@ -254,7 +283,7 @@ const App = () => {
   // eventHandlersManager.updateProjectStateはEventHandlersManagerで管理
 
   // プロジェクト状態の変更を監視（初回のみ実行） - useSystemInitializationで管理
-  
+
   // グローバルBPM変更ハンドラー
   // eventHandlersManager.handleGlobalTempoChangeはEventHandlersManagerで管理
 
@@ -341,16 +370,16 @@ const App = () => {
   // 後方互換性のため、addNewTabをeventHandlersManager.addNewTrackのエイリアスとして保持
   const addNewTab = useCallback((trackType = 'piano', keepInArrangement = false) => {
     console.log('App: addNewTab called with:', { trackType, keepInArrangement })
-    
+
     // トラックタイプのマッピング
     const trackTypeMap = {
       'midi': { type: TRACK_TYPES.MIDI, subtype: TRACK_SUBTYPES.PIANO },
       'drum': { type: TRACK_TYPES.DRUMS, subtype: TRACK_SUBTYPES.DRUMS },
       'diffsinger': { type: TRACK_TYPES.DIFFSINGER, subtype: TRACK_SUBTYPES.DIFFSINGER }
     }
-    
+
     const mappedType = trackTypeMap[trackType] || { type: TRACK_TYPES.MIDI, subtype: TRACK_SUBTYPES.PIANO }
-    
+
     // TabBarから呼ばれる場合は通常のトラック追加（新しいタブを開く）
     // ArrangementViewから呼ばれる場合はkeepInArrangement=trueが渡される
     return eventHandlersManager.addNewTrack(mappedType.type, mappedType.subtype, keepInArrangement)
@@ -390,13 +419,13 @@ const App = () => {
 
   // 包括的な設定管理
   const [globalSettings, setGlobalSettings] = useState(null)
-  
+
   // 設定の初期化と読み込み - useSystemInitializationで管理
 
   // グローバル設定の更新関数
   const updateGlobalSettings = useCallback((newSettings) => {
     setGlobalSettings(newSettings)
-    
+
     // localStorageにも保存
     try {
       localStorage.setItem('dawai_ai_settings', JSON.stringify(newSettings))
@@ -430,7 +459,7 @@ const App = () => {
       setMessages([...messages, message])
       const currentMessage = newMessage
       setNewMessage('')
-      
+
       try {
         // FastAPI バックエンドにリクエストを送信
         const response = await fetch('/ai/api/chat', {
@@ -443,9 +472,9 @@ const App = () => {
             context: messages.slice(-5).map(m => `${m.sender}: ${m.text}`).join('\n')
           })
         })
-        
+
         const data = await response.json()
-        
+
         const aiResponse = {
           id: messages.length + 2,
           sender: 'assistant',
@@ -453,7 +482,7 @@ const App = () => {
           timestamp: new Date().toISOString()
         }
         setMessages(prev => [...prev, aiResponse])
-        
+
       } catch (error) {
         console.error('API Error:', error)
         const errorResponse = {
@@ -471,15 +500,15 @@ const App = () => {
   const exportMelodiaFile = useCallback(() => {
     try {
       const projectData = projectManager.exportAsMelodiaFile()
-      
+
       // JSONをBlobに変換
       const jsonString = JSON.stringify(projectData, null, 2)
       const blob = new Blob([jsonString], { type: 'application/json' })
-      
+
       // ファイル名を生成
       const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-')
       const fileName = `${projectData.name.replace(/[^a-zA-Z0-9]/g, '_')}_${timestamp}.melodia`
-      
+
       // ダウンロード
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -489,7 +518,7 @@ const App = () => {
       link.click()
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
-      
+
 
     } catch (error) {
       console.error('Failed to export melodia file:', error)
@@ -502,10 +531,10 @@ const App = () => {
     try {
       const fileContent = await file.text()
       const projectData = JSON.parse(fileContent)
-      
+
       const importedProject = projectManager.importFromMelodiaFile(projectData)
       eventHandlersManager.updateProjectState()
-      
+
 
       return importedProject
     } catch (error) {
@@ -518,7 +547,7 @@ const App = () => {
   // 強制再レンダリング関数
   const forceRerenderApp = useCallback(() => {
     setForceRerender(prev => prev + 1)
-    
+
     // プロジェクト状態も強制的に再読み込み
     // requestIdleCallbackは削除 - React Hooksのルール違反を回避
     if (projectManager) {
@@ -564,10 +593,37 @@ const App = () => {
 
   // 音声システムの初期化 - useSystemInitializationで管理
 
+  // AI Agent からの MIDI データ変更イベントをリッスン
+  useEffect(() => {
+    const handleAiAgentMidiDataChanged = (event) => {
+      console.log('🎵 App: AI Agent MIDI data changed event received:', event.detail)
+
+      // ProjectManager から最新のトラックデータを取得
+      const updatedTracks = projectManager.getTracks()
+
+      // React の状態を更新して UI を再描画
+      setTracks([...updatedTracks])
+
+      // 強制再レンダリングをトリガー
+      setForceRerender(prev => prev + 1)
+
+      console.log('✅ App: Tracks state updated, UI should re-render')
+    }
+
+    window.addEventListener('aiAgentMidiDataChanged', handleAiAgentMidiDataChanged)
+
+    return () => {
+      window.removeEventListener('aiAgentMidiDataChanged', handleAiAgentMidiDataChanged)
+    }
+  }, [projectManager, setTracks, setForceRerender])
+
   return (
     <div className="h-screen text-white flex flex-col main-container">
+      {/* グローバルマウスデバッガー（開発用） */}
+      <GlobalMouseDebugger />
+
       {/* ヘッダー */}
-      <Header 
+      <Header
         isPlaying={isPlaying}
         setIsPlaying={setIsPlaying}
         showSettings={showSettings}
@@ -629,11 +685,11 @@ const App = () => {
         <div className="flex-1 flex flex-col min-w-0">
           {/* タブバー */}
           <div className="w-full overflow-hidden flex-shrink-0">
-                      <TabBar 
+                      <TabBar
             key={`tabbar-${forceRerender}`}
-            tabs={tabs} 
-            activeTab={activeTab} 
-            setActiveTab={handleTabChange} 
+            tabs={tabs}
+            activeTab={activeTab}
+            setActiveTab={handleTabChange}
             closeTab={closeTab}
             showTrackMenu={showTrackMenu}
             setShowTrackMenu={setShowTrackMenu}
@@ -643,6 +699,7 @@ const App = () => {
 
           {/* タブコンテンツ */}
           <div className="flex-1 overflow-hidden min-h-0">
+
             {activeTab === 'arrangement' && (
               <ArrangementView
                 key={`arrangement-${forceRerender}`}
@@ -665,7 +722,7 @@ const App = () => {
             {(activeTab.startsWith('tab-') || activeTab.startsWith('instrument-') || activeTab.startsWith('voiceSynth-') || activeTab.startsWith('diffsinger-')) && (() => {
               const currentTab = tabs.find(tab => tab.id === activeTab)
               const currentTrack = tracks.find(track => track.id === currentTab?.trackId)
-              
+
               if (currentTab?.type === TAB_TYPES.MIDI_EDITOR && currentTrack) {
                 // デバッグ用：音量情報をログ出力
                 console.log('App: Passing volume info to Enhanced Midi Editor:', {
@@ -676,7 +733,7 @@ const App = () => {
                   trackMuted: trackMutedState[currentTrack.id] || false,
                   masterVolume: masterVolume
                 })
-                
+
                 return (
                   <EnhancedMidiEditor
                     key={`midi-editor-${currentTrack.id}`}
@@ -708,7 +765,7 @@ const App = () => {
                       const currentMidiData = currentTrack.midiData || { notes: [], tempo: globalTempo, timeSignature: '4/4' }
                       const updatedMidiData = {
                         ...currentMidiData,
-                        notes: (currentMidiData.notes || []).map(note => 
+                        notes: (currentMidiData.notes || []).map(note =>
                           note.id === noteId ? { ...note, ...changes } : note
                         ),
                         lastModified: new Date().toISOString()
@@ -732,7 +789,7 @@ const App = () => {
                   />
                 )
               }
-              
+
               // Diffsingerトラックの処理
               if (currentTab?.type === TAB_TYPES.DIFFSINGER_TRACK && currentTrack) {
                 return (
@@ -756,7 +813,7 @@ const App = () => {
                   />
                 )
               }
-              
+
               // ドラムトラックの処理（重複レンダリングを防ぐ）
               if (currentTab?.type === TAB_TYPES.DRUM_TRACK && currentTrack) {
                 return (
@@ -779,7 +836,7 @@ const App = () => {
                   />
                 )
               }
-              
+
               return (
                 <div className="flex items-center justify-center h-full text-gray-500">
                   <p>No track found for this tab</p>
@@ -790,11 +847,11 @@ const App = () => {
         </div>
 
         {/* 右側：AIチャット/エージェントパネル */}
-        <div 
+        <div
           className="flex-shrink-0 transition-all duration-300"
           style={{ width: isAIAssistantCollapsed ? '48px' : `${aiPanelWidth}px` }}
         >
-          <AIAssistantChatBox 
+          <AIAssistantChatBox
             isAIAssistantCollapsed={isAIAssistantCollapsed}
             setIsAIAssistantCollapsed={setIsAIAssistantCollapsed}
             aiPanelWidth={aiPanelWidth}
@@ -873,7 +930,12 @@ const App = () => {
       )}
 
       {/* スマートサジェスチョンオーバーレイ */}
-      {smartSuggestionsEnabled && genreContext && (
+      {/* 🎹 Piano track編集中のみ表示（DEMO SONG読み込み時は非表示） */}
+      {smartSuggestionsEnabled && genreContext && (() => {
+        const currentTab = tabs.find(tab => tab.id === activeTab)
+        // Piano track (MIDIエディタ) 編集中のみサジェスチョンを表示
+        return currentTab && currentTab.type === TAB_TYPES.MIDI_EDITOR
+      })() && (
         <SmartSuggestionOverlay
           genreContext={genreContext}
           currentNotes={(() => {
@@ -889,7 +951,7 @@ const App = () => {
           })()}
           isEnabled={smartSuggestionsEnabled}
           aggressiveness={suggestionAggressiveness}
-          showGhostNotes={true}
+          showGhostNotes={false}
           onSuggestionAccept={handleSuggestionAccept}
           onSuggestionReject={handleSuggestionReject}
         />
@@ -906,7 +968,7 @@ const App = () => {
       />
 
       {/* 設定画面 */}
-      <SettingsModal 
+      <SettingsModal
         showSettings={showSettings}
         setShowSettings={setShowSettings}
         activeSettingsSection={activeSettingsSection}
@@ -921,5 +983,4 @@ const App = () => {
 }
 
 export default App
-
 

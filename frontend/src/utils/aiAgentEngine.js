@@ -1448,51 +1448,227 @@ ${prompt}
   // Sense段階の理解度評価
   evaluateSenseUnderstanding(responseText, context) {
     console.log('AIAgentEngine: Evaluating sense understanding')
-    
+
     const responseLower = responseText.toLowerCase()
-    const contextKeywords = this.extractContextKeywords(context)
-    
+
     if (!context || Object.keys(context).length === 0) {
+      console.log('AIAgentEngine: No context provided, assuming understood')
       return {
         understood: true,
         ratio: 1.0,
-        keywords: []
+        keywords: [],
+        matchedKeywords: []
       }
     }
-    
-    if (contextKeywords.length === 0) {
-      const basicKeywords = ['track', 'トラック', 'note', 'ノート', 'music', '音楽', 'melody', 'メロディ']
-      let basicMatchCount = 0
-      
-      for (const keyword of basicKeywords) {
-        if (responseLower.includes(keyword)) {
-          basicMatchCount++
-        }
+
+    // 基本音楽用語（最優先で評価）
+    const basicMusicTerms = [
+      'track', 'トラック', 'note', 'ノート', 'music', '音楽', 'melody', 'メロディ',
+      'piano', 'ピアノ', 'drum', 'ドラム', 'bass', 'ベース', 'chord', 'コード',
+      'tempo', 'テンポ', 'key', 'キー', 'project', 'プロジェクト', 'create', '作成',
+      'add', '追加', 'play', '再生', 'sound', '音', 'arrange', 'アレンジ'
+    ]
+
+    let basicMatchCount = 0
+    const matchedBasicTerms = []
+
+    for (const term of basicMusicTerms) {
+      if (responseLower.includes(term.toLowerCase())) {
+        basicMatchCount++
+        matchedBasicTerms.push(term)
       }
-      
-      const basicRatio = basicMatchCount / basicKeywords.length
-      
+    }
+
+    console.log(`AIAgentEngine: Basic music terms matched: ${basicMatchCount}/${basicMusicTerms.length}`, matchedBasicTerms)
+
+    // 基本音楽用語が2つ以上含まれていれば理解OKと判定
+    if (basicMatchCount >= 2) {
+      console.log('AIAgentEngine: Understanding OK (basic music terms >= 2)')
       return {
-        understood: basicRatio >= 0.2,
+        understood: true,
+        ratio: basicMatchCount / basicMusicTerms.length,
+        keywords: basicMusicTerms,
+        matchedKeywords: matchedBasicTerms,
+        reason: 'basic_terms'
+      }
+    }
+
+    // 意味的キーワードで評価（技術的詳細を除外）
+    const semanticKeywords = this.extractSemanticKeywords(context)
+
+    if (semanticKeywords.length === 0) {
+      console.log('AIAgentEngine: No semantic keywords, checking basic ratio')
+      const basicRatio = basicMatchCount / basicMusicTerms.length
+      return {
+        understood: basicRatio >= 0.1,
         ratio: basicRatio,
-        keywords: basicKeywords
+        keywords: basicMusicTerms,
+        matchedKeywords: matchedBasicTerms,
+        reason: 'basic_ratio'
       }
     }
-    
-    let understoodCount = 0
-    for (const keyword of contextKeywords) {
+
+    let semanticMatchCount = 0
+    const matchedSemanticKeywords = []
+
+    for (const keyword of semanticKeywords) {
       if (responseLower.includes(keyword.toLowerCase())) {
-        understoodCount++
+        semanticMatchCount++
+        matchedSemanticKeywords.push(keyword)
       }
     }
-    
-    const understandingRatio = contextKeywords.length > 0 ? understoodCount / contextKeywords.length : 1
-    
+
+    const semanticRatio = semanticMatchCount / semanticKeywords.length
+    console.log(`AIAgentEngine: Semantic keywords matched: ${semanticMatchCount}/${semanticKeywords.length} (${(semanticRatio * 100).toFixed(1)}%)`, matchedSemanticKeywords)
+
+    // 15%以上マッチすれば理解OKと判定
+    const understood = semanticRatio >= 0.15
+
+    console.log(`AIAgentEngine: Final understanding: ${understood ? 'OK' : 'NG'} (threshold: 15%)`)
+
     return {
-      understood: understandingRatio >= 0.3,
-      ratio: understandingRatio,
-      keywords: contextKeywords
+      understood: understood,
+      ratio: semanticRatio,
+      keywords: semanticKeywords,
+      matchedKeywords: matchedSemanticKeywords,
+      reason: 'semantic_ratio'
     }
+  }
+
+  // 意味的キーワードの抽出（技術的詳細を除外）
+  extractSemanticKeywords(context) {
+    console.log('AIAgentEngine: Extracting semantic keywords from context')
+    const keywords = []
+
+    if (!context) {
+      console.log('AIAgentEngine: No context provided')
+      return keywords
+    }
+
+    // 技術的IDかどうかを判定するヘルパー関数
+    const isTechnicalId = (str) => {
+      if (!str || typeof str !== 'string') return false
+      // track-1234... のようなパターンを除外
+      return /^(track|note|project)-[a-f0-9-]+$/i.test(str.trim())
+    }
+
+    // 現在のトラック情報
+    if (context.currentTrack) {
+      const track = context.currentTrack
+      if (track.name && !isTechnicalId(track.name)) {
+        keywords.push(track.name)
+      }
+      if (track.type && !isTechnicalId(track.type)) {
+        keywords.push(track.type)
+      }
+      // track.id は技術的詳細なので除外
+      console.log('AIAgentEngine: Added current track semantic keywords:', [track.name, track.type])
+    }
+
+    // 既存のトラック情報
+    if (context.existingTracks && Array.isArray(context.existingTracks)) {
+      context.existingTracks.forEach((track, index) => {
+        if (track.name && !isTechnicalId(track.name)) {
+          keywords.push(track.name)
+        }
+        if (track.type && !isTechnicalId(track.type)) {
+          keywords.push(track.type)
+        }
+        // track.id は除外
+        if (index < 3) {
+          console.log('AIAgentEngine: Added existing track semantic keywords:', [track.name, track.type])
+        }
+      })
+    }
+
+    // プロジェクト設定情報
+    if (context.projectSettings) {
+      const settings = context.projectSettings
+      if (settings.name && !isTechnicalId(settings.name)) {
+        keywords.push(settings.name)
+      }
+      if (settings.tempo) {
+        keywords.push('tempo')
+        keywords.push(settings.tempo.toString())
+      }
+      if (settings.key) {
+        keywords.push(settings.key)
+      }
+      console.log('AIAgentEngine: Added project settings semantic keywords')
+    }
+
+    // プロジェクト情報（別の形式）
+    if (context.projectInfo) {
+      const info = context.projectInfo
+      if (info.name && !isTechnicalId(info.name)) {
+        keywords.push(info.name)
+      }
+      if (info.tempo) {
+        keywords.push('tempo')
+        keywords.push(info.tempo.toString())
+      }
+      if (info.key) {
+        keywords.push(info.key)
+      }
+      if (info.timeSignature) {
+        keywords.push(info.timeSignature)
+      }
+      console.log('AIAgentEngine: Added project info semantic keywords')
+    }
+
+    // 音楽コンテキスト情報
+    if (context.musicContext) {
+      const music = context.musicContext
+      if (music.projectName && !isTechnicalId(music.projectName)) {
+        keywords.push(music.projectName)
+      }
+      if (music.tempo) {
+        keywords.push('tempo')
+        keywords.push(music.tempo.toString())
+      }
+      if (music.key) {
+        keywords.push(music.key)
+      }
+      if (music.timeSignature) {
+        keywords.push(music.timeSignature)
+      }
+      console.log('AIAgentEngine: Added music context semantic keywords')
+    }
+
+    // 現在のトラック詳細情報
+    if (context.musicContext?.currentTrackDetails) {
+      const trackDetails = context.musicContext.currentTrackDetails
+      if (trackDetails.name && !isTechnicalId(trackDetails.name)) {
+        keywords.push(trackDetails.name)
+      }
+      if (trackDetails.type && !isTechnicalId(trackDetails.type)) {
+        keywords.push(trackDetails.type)
+      }
+      // trackDetails.id は除外
+      console.log('AIAgentEngine: Added current track details semantic keywords')
+    }
+
+    // ノートを持つトラック情報
+    if (context.musicContext?.tracksWithNotes && Array.isArray(context.musicContext.tracksWithNotes)) {
+      context.musicContext.tracksWithNotes.forEach((track, index) => {
+        if (track.name && !isTechnicalId(track.name)) {
+          keywords.push(track.name)
+        }
+        if (track.type && !isTechnicalId(track.type)) {
+          keywords.push(track.type)
+        }
+        // track.id は除外
+        if (index < 2) {
+          console.log('AIAgentEngine: Added tracks with notes semantic keywords')
+        }
+      })
+    }
+
+    // 重複を除去
+    const uniqueKeywords = [...new Set(keywords.filter(k => k && k.toString().trim() !== ''))]
+
+    console.log('AIAgentEngine: Final semantic keywords:', uniqueKeywords)
+    return uniqueKeywords
   }
 
   // Plan段階のレスポンス解析

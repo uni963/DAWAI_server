@@ -52,15 +52,29 @@ const MidiEditorEventHandlers = ({
                           e.target.closest('[data-track-menu-trigger]')
 
     if (isTabBarClick) {
-      console.error('🟢🟢🟢 MIDI MOUSE DEBUG: TabBar click detected, isActive:', isActive, ', SHOULD IGNORE 🟢🟢🟢')
-      // isActive が true の場合、Piano track特有の問題
-      if (isActive) {
-        console.error('🔥🔥🔥 CRITICAL: Piano track is active and capturing TabBar clicks! 🔥🔥🔥')
-        console.error('✅ FIX: Stopping event propagation to allow TabBar to handle click')
-        // イベント伝播を停止してTabBarのクリックハンドラーが正常に動作するようにする
-        e.stopPropagation()
-        e.preventDefault()
+      console.log('🟢✅ MIDI MOUSE: TabBar click detected, allowing normal propagation, isActive:', isActive)
+      // TabBarクリックの場合は、MIDIエディターでは処理せずに早期リターン
+      // イベント伝播を阻害せず、TabBarのクリックハンドラーが正常に動作できるようにする
+
+      // CRITICAL: Click生成を確実にするため、TabBarクリック時のドキュメント状態をリセット
+      try {
+        // アクティブ要素のblur（フォーカス解除）
+        if (document.activeElement && document.activeElement !== document.body) {
+          console.log('🔄 MIDI MOUSE: Blurring active element to ensure click generation:', document.activeElement)
+          document.activeElement.blur()
+        }
+
+        // マウス状態をクリア
+        document.getSelection()?.removeAllRanges()
+
+        // 強制的にフォーカスをbodyに戻す
+        document.body.focus()
+
+        console.log('🔄 MIDI MOUSE: Document state reset for click generation')
+      } catch (error) {
+        console.warn('🔄 MIDI MOUSE: Failed to reset document state:', error)
       }
+
       return
     }
 
