@@ -1417,16 +1417,20 @@ def generate_agent_prompt(user_prompt: str, context: dict) -> str:
 
 操作タイプ:
 addTrack(params: {{instrument, trackName}})
-addMidiNotes(params: {{trackId, notes: [{{pitch, time, duration, velocity}}]}})
+addMidiNotes(params: {{trackId, notes: [{{id, pitch, time, duration, velocity}}]}})
 updateTrack, deleteTrack, updateMidiNotes, deleteMidiNotes, updateProjectSettings
 
-応答形式:
-{{"actions": [{{"type": "操作タイプ", "params": {{...}}, "description": "説明"}}], "summary": "要約", "nextSteps": "次のステップ"}}
+応答形式（必ず厳守）:
+{{"actions": [{{"type": "addMidiNotes", "params": {{"trackId": "track-1", "notes": [{{"id": "note-1234", "pitch": 60, "time": 0, "duration": 1.0, "velocity": 0.8}}]}}, "description": "説明"}}], "summary": "要約", "nextSteps": "次のステップ"}}
 
-注意:
-- トラックIDは文字列で正確に指定
-- pitch: 0-127, time/duration: 秒, velocity: 0-1
-- 各ノートにユニークなid: "note-{{timestamp}}-{{random}}"を付与
+ノートフォーマット（厳守）:
+- id: 文字列 "note-{{timestamp}}-{{random}}" 例: "note-1728825600-4567"
+- pitch: 整数 0-127 (MIDIノート番号) 例: 60=C4
+- time: 浮動小数点 秒単位 例: 0, 0.5, 1.0
+- duration: 浮動小数点 秒単位 例: 0.5, 1.0, 2.0
+- velocity: 浮動小数点 0-1 例: 0.8
+
+警告: tick, note等の他のフィールド名は使用不可。上記フォーマット以外は拒否されます。
 
 要求: {user_prompt}"""
 
