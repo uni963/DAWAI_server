@@ -340,12 +340,59 @@ const EnhancedMidiEditor = ({
       }
     }
 
+    // AI Agentからの直接的なノート追加イベントのリスナー
+    const handleAiAgentMidiDataChanged = (event) => {
+      console.log('MIDI Editor: AI Agent data changed event received', event.detail)
+
+      // trackIdが一致する場合のみ処理
+      if (event.detail?.trackId === trackId) {
+        console.log('MIDI Editor: Forcing redraw for AI Agent changes', {
+          action: event.detail.action,
+          noteCount: event.detail.noteCount
+        })
+        state.setNeedsRedraw(true)
+
+        // midiDataプロップからノートデータを再読み込み
+        if (midiData?.notes) {
+          console.log('MIDI Editor: Reloading notes from midiData', {
+            notesCount: midiData.notes.length,
+            trackId
+          })
+          state.setNotes(midiData.notes)
+        }
+      }
+    }
+
+    // 強制的なトラック更新イベントのリスナー
+    const handleForceTrackUpdate = (event) => {
+      console.log('MIDI Editor: Force track update event received', event.detail)
+
+      // trackIdが一致する場合のみ処理
+      if (event.detail?.trackId === trackId) {
+        console.log('MIDI Editor: Forcing redraw for track update')
+        state.setNeedsRedraw(true)
+
+        // midiDataプロップからノートデータを再読み込み
+        if (midiData?.notes) {
+          console.log('MIDI Editor: Reloading notes from midiData', {
+            notesCount: midiData.notes.length,
+            trackId
+          })
+          state.setNotes(midiData.notes)
+        }
+      }
+    }
+
     window.addEventListener('midiDataApproved', handleMidiDataApproved)
     window.addEventListener('midiDataRejected', handleMidiDataRejected)
+    window.addEventListener('aiAgentMidiDataChanged', handleAiAgentMidiDataChanged)
+    window.addEventListener('forceTrackUpdate', handleForceTrackUpdate)
 
     return () => {
       window.removeEventListener('midiDataApproved', handleMidiDataApproved)
       window.removeEventListener('midiDataRejected', handleMidiDataRejected)
+      window.removeEventListener('aiAgentMidiDataChanged', handleAiAgentMidiDataChanged)
+      window.removeEventListener('forceTrackUpdate', handleForceTrackUpdate)
     }
   }, [midiData, trackId, state.setNeedsRedraw, state.setNotes]) // 🔧 修正: state全体ではなく使用する関数のみ
 
