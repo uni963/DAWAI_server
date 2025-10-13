@@ -92,44 +92,52 @@ const Mixer = ({
 
   const updateChannelVolume = useCallback((channelId, volume) => {
     console.log('Mixer: updateChannelVolume called:', channelId, volume)
-    
+
     // ローカル状態を即座に更新
     setChannels(prevChannels => {
-      const updatedChannels = prevChannels.map(channel => 
-        channel.id === channelId 
-          ? { ...channel, volume } 
+      const updatedChannels = prevChannels.map(channel =>
+        channel.id === channelId
+          ? { ...channel, volume }
           : channel
       )
-      
-      // ✅ 双方向循環参照を防ぐため、setMixerChannels呼び出しを除去
-      // Mixerはローカル状態のみを管理し、永続化は親コンポーネントに委ね
-      
+
+      // 親コンポーネント(App.jsx)に非同期で通知して循環参照を回避
+      if (setMixerChannels) {
+        setTimeout(() => {
+          setMixerChannels(updatedChannels)
+        }, 0)
+      }
+
       return updatedChannels
     })
-  }, [])
+  }, [setMixerChannels])
 
   const toggleMute = useCallback((channelId) => {
     console.log('Mixer: toggleMute called:', channelId)
-    
+
     setChannels(prevChannels => {
       const currentChannel = prevChannels.find(channel => channel.id === channelId)
       if (!currentChannel) return prevChannels
-      
+
       const newMutedState = !currentChannel.muted
       console.log('Mixer: Toggling mute for channel:', channelId, 'from', currentChannel.muted, 'to', newMutedState)
-      
-      const updatedChannels = prevChannels.map(channel => 
-        channel.id === channelId 
-          ? { ...channel, muted: newMutedState } 
+
+      const updatedChannels = prevChannels.map(channel =>
+        channel.id === channelId
+          ? { ...channel, muted: newMutedState }
           : channel
       )
-      
-      // ✅ 双方向循環参照を防ぐため、setMixerChannels呼び出しを除去
-      // Mixerはローカル状態のみを管理し、永続化は親コンポーネントに委ね
-      
+
+      // 親コンポーネント(App.jsx)に非同期で通知して循環参照を回避
+      if (setMixerChannels) {
+        setTimeout(() => {
+          setMixerChannels(updatedChannels)
+        }, 0)
+      }
+
       return updatedChannels
     })
-  }, [])
+  }, [setMixerChannels])
 
   const handleMasterVolumeChange = useCallback((volume) => {
     setMasterVolume(volume)

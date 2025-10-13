@@ -140,9 +140,26 @@ export const useMixerManagement = (dependencies) => {
   const updateAudioSystemChannel = useCallback((channel) => {
     if (window.unifiedAudioSystem && window.unifiedAudioSystem.isInitialized) {
       try {
-        // 統一された音声システムではトラック管理は別途実装が必要
-        // 現在はログ出力のみ
-        console.log('🔊 音声システム: チャンネル更新成功:', channel.id)
+        // 音量設定を適用
+        if (channel.volume !== undefined) {
+          const normalizedVolume = channel.volume / 100 // 0-100 → 0-1 に正規化
+          window.unifiedAudioSystem.setTrackVolume(channel.id, normalizedVolume)
+          console.log('🔊 音声システム: トラック音量更新:', channel.id, normalizedVolume)
+        }
+
+        // ミュート設定を適用
+        if (channel.muted !== undefined) {
+          window.unifiedAudioSystem.setTrackMuted(channel.id, channel.muted)
+          console.log('🔇 音声システム: トラックミュート更新:', channel.id, channel.muted)
+        }
+
+        // ソロ設定を適用
+        if (channel.solo !== undefined) {
+          window.unifiedAudioSystem.setTrackSolo(channel.id, channel.solo)
+          console.log('⭐ 音声システム: トラックソロ更新:', channel.id, channel.solo)
+        }
+
+        console.log('✅ 音声システム: チャンネル更新成功:', channel.id)
       } catch (error) {
         console.error('❌ 音声システム: チャンネル更新失敗:', error)
       }
@@ -182,9 +199,9 @@ export const useMixerManagement = (dependencies) => {
     // 音声システムのマスターボリュームを更新
     if (window.unifiedAudioSystem && window.unifiedAudioSystem.isInitialized) {
       try {
-        // 統一された音声システムではマスターボリューム設定は別途実装が必要
-        // 現在はログ出力のみ
-        console.log('🔊 音声システム: マスターボリューム更新成功:', volume)
+        const normalizedVolume = volume / 100 // 0-100 → 0-1 に正規化
+        window.unifiedAudioSystem.setMasterVolume(normalizedVolume)
+        console.log('🔊 音声システム: マスターボリューム更新成功:', normalizedVolume)
       } catch (error) {
         console.error('❌ 音声システム: マスターボリューム更新失敗:', error)
       }
