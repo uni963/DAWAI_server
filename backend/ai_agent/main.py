@@ -1389,126 +1389,69 @@ async def ghost_text_predict(request: GhostTextPredictRequest):
         )
 
 def generate_agent_prompt(user_prompt: str, context: dict) -> str:
-    """Sense-Plan-Actアーキテクチャに基づくAgent mode用プロンプトを生成"""
-    
-    # コンテキスト情報の構築
+    """Sense-Plan-Actアーキテクチャに基づくAgent mode用プロンプトを生成（簡潔版）"""
+
+    # コンテキスト情報の構築（最小限）
     context_info = ""
     if context:
         if context.get('currentTrack'):
             track = context['currentTrack']
-            context_info += f"\n現在のトラック: {track.get('name', 'Unknown')} (ID: {track.get('id', 'Unknown')})"
-        
+            context_info += f"\n現在: {track.get('name', 'Unknown')} (ID: {track.get('id', 'Unknown')})"
+
         if context.get('existingTracks'):
             tracks = context['existingTracks']
-            context_info += f"\n既存のトラック ({len(tracks)}個):"
-            for track in tracks:
-                context_info += f"\n- {track.get('name', 'Unknown')} (ID: {track.get('id', 'Unknown')}, タイプ: {track.get('type', 'Unknown')})"
-        
+            context_info += f"\nトラック({len(tracks)}個): "
+            context_info += ", ".join([f"{t.get('name', 'Unknown')} (ID: {t.get('id', 'Unknown')})" for t in tracks[:3]])
+            if len(tracks) > 3:
+                context_info += f" 他{len(tracks)-3}個"
+
         if context.get('projectSettings'):
             settings = context['projectSettings']
-            context_info += f"\nプロジェクト設定:"
-            context_info += f"\n- 名前: {settings.get('name', 'Unknown')}"
-            context_info += f"\n- テンポ: {settings.get('tempo', 'Unknown')} BPM"
-            context_info += f"\n- キー: {settings.get('key', 'Unknown')}"
+            context_info += f"\n設定: {settings.get('tempo', 120)}BPM, {settings.get('key', 'C')}, {settings.get('timeSignature', '4/4')}"
 
-    prompt = f"""あなたは音楽制作アシスタントです。Sense-Plan-Actアーキテクチャに従って、ユーザーの要求を理解し、適切なアクションを実行してください。
+    # 簡潔なプロンプト（トークン数削減）
+    prompt = f"""音楽制作AIアシスタント。ユーザーの要求を理解し、JSONで応答してください。
 
-## Sense（理解）段階
-現在のプロジェクト状況を理解してください：
-{context_info}
+コンテキスト:{context_info}
 
-## Plan（計画）段階
-ユーザーの要求を分析し、実行可能なアクションを計画してください：
-- トラックの追加/編集/削除
-- MIDIノートの追加/編集/削除
-- エフェクトの適用
-- プロジェクト設定の変更
-- その他の音楽制作関連操作
+操作タイプ:
+addTrack(params: {{instrument, trackName}})
+addMidiNotes(params: {{trackId, notes: [{{pitch, time, duration, velocity}}]}})
+updateTrack, deleteTrack, updateMidiNotes, deleteMidiNotes, updateProjectSettings
 
-## Act（実行）段階
-計画したアクションを以下のJSON形式で出力してください：
+応答形式:
+{{"actions": [{{"type": "操作タイプ", "params": {{...}}, "description": "説明"}}], "summary": "要約", "nextSteps": "次のステップ"}}
 
-{{
-  "actions": [
-    {{
-      "type": "操作タイプ",
-      "params": {{
-        "trackId": "正確なトラックID",
-        // その他の操作に必要なパラメータ
-        // MIDIノートの場合:
-        "notes": [
-          {{
-            "id": "note-123",
-            "pitch": 60,        // MIDIノート番号（0-127）
-            "time": 0,          // 開始時間（秒）
-            "duration": 0.5,    // 持続時間（秒）
-            "velocity": 0.8     // 音量（0-1）
-          }}
-        ]
-      }},
-      "description": "実行する操作の説明"
-    }}
-  ],
-  "summary": "実行した操作の要約",
-  "nextSteps": "次のステップの提案"
-}}
+注意:
+- トラックIDは文字列で正確に指定
+- pitch: 0-127, time/duration: 秒, velocity: 0-1
+- 各ノートにユニークなid: "note-{{timestamp}}-{{random}}"を付与
 
-## 重要な注意事項
-- トラックIDは必ず引用符で囲んでください（例: "track-1234567890-abc123"）
-- 既存のトラックに操作する場合は、上記のトラックIDを正確に使用してください
-- トラックIDは文字列として扱い、数値ではありません
-- 自然な音楽的なフレーズを生成してください
-- ユーザーの要求に応じて適切な楽器やスタイルを選択してください
-
-## サポートされている操作タイプ
-- `addTrack`: 新しいトラックを追加
-- `updateTrack`: 既存のトラックを更新
-- `deleteTrack`: トラックを削除
-- `addMidiNotes`: MIDIノートを追加
-- `updateMidiNotes`: MIDIノートを更新
-- `deleteMidiNotes`: MIDIノートを削除
-- `applyEffect`: エフェクトを適用
-- `updateProjectSettings`: プロジェクト設定を更新
-
-ユーザーの要求: {user_prompt}"""
+要求: {user_prompt}"""
 
     return prompt
 
 def parse_agent_response(response_text: str, context: dict) -> dict:
-    """Agent modeのレスポンスを解析"""
+    """Agent modeのレスポンスを解析（簡潔版）"""
     import re
-    def remove_json_comments(text):
-        # // 以降のコメントを除去（行末コメント対応）
-        return re.sub(r'//.*', '', text)
-    
+
     try:
-        # JSONの抽出を試行
-        json_match = re.search(r'\{[\s\S]*\}', response_text)
+        # JSONブロックを抽出（```json ... ```またはJSONオブジェクトのみ）
+        json_match = re.search(r'```json\s*(\{[\s\S]*?\})\s*```', response_text)
+        if not json_match:
+            json_match = re.search(r'(\{[\s\S]*?"actions"[\s\S]*?\})', response_text)
+
         if json_match:
-            json_str = json_match.group(0)
-            # コメント除去
-            json_str = remove_json_comments(json_str)
+            json_str = json_match.group(1) if len(json_match.groups()) > 0 else json_match.group(0)
+            # コメント除去（//で始まる行）
+            json_str = re.sub(r'//.*', '', json_str)
             parsed = json.loads(json_str)
-            
-            # 基本的な検証
-            if isinstance(parsed, dict):
-                # 文字列に変換してバリデーションエラーを防ぐ
-                summary = parsed.get("summary", "操作が完了しました")
-                if not isinstance(summary, str):
-                    summary = str(summary)
-                
-                next_steps = parsed.get("nextSteps", "次のステップを実行してください")
-                if not isinstance(next_steps, str):
-                    if isinstance(next_steps, list):
-                        next_steps = " ".join(str(step) for step in next_steps)
-                    else:
-                        next_steps = str(next_steps)
-                
-                return {
-                    "actions": parsed.get("actions", []),
-                    "summary": summary,
-                    "nextSteps": next_steps
-                }
+
+            return {
+                "actions": parsed.get("actions", []),
+                "summary": str(parsed.get("summary", "操作が完了しました")),
+                "nextSteps": str(parsed.get("nextSteps", "次のステップを実行してください"))
+            }
     except Exception as e:
         print(f"Failed to parse agent response: {e}")
     

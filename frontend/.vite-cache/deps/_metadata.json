@@ -1,0 +1,220 @@
+{
+  "hash": "092b0b5a",
+  "configHash": "f7ec01e5",
+  "lockfileHash": "c0165439",
+  "browserHash": "ac7df9cf",
+  "optimized": {
+    "react": {
+      "src": "../../node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "91f15ee5",
+      "needsInterop": true
+    },
+    "react-dom": {
+      "src": "../../node_modules/react-dom/index.js",
+      "file": "react-dom.js",
+      "fileHash": "c71dc98f",
+      "needsInterop": true
+    },
+    "react/jsx-dev-runtime": {
+      "src": "../../node_modules/react/jsx-dev-runtime.js",
+      "file": "react_jsx-dev-runtime.js",
+      "fileHash": "d927d2c3",
+      "needsInterop": true
+    },
+    "react/jsx-runtime": {
+      "src": "../../node_modules/react/jsx-runtime.js",
+      "file": "react_jsx-runtime.js",
+      "fileHash": "69cb074e",
+      "needsInterop": true
+    },
+    "@magenta/music": {
+      "src": "../../node_modules/@magenta/music/esm/index.js",
+      "file": "@magenta_music.js",
+      "fileHash": "8e51bf6e",
+      "needsInterop": false
+    },
+    "@radix-ui/react-checkbox": {
+      "src": "../../node_modules/@radix-ui/react-checkbox/dist/index.mjs",
+      "file": "@radix-ui_react-checkbox.js",
+      "fileHash": "c1c5b989",
+      "needsInterop": false
+    },
+    "@radix-ui/react-dialog": {
+      "src": "../../node_modules/@radix-ui/react-dialog/dist/index.mjs",
+      "file": "@radix-ui_react-dialog.js",
+      "fileHash": "c396a2f3",
+      "needsInterop": false
+    },
+    "@radix-ui/react-label": {
+      "src": "../../node_modules/@radix-ui/react-label/dist/index.mjs",
+      "file": "@radix-ui_react-label.js",
+      "fileHash": "2e4697e7",
+      "needsInterop": false
+    },
+    "@radix-ui/react-progress": {
+      "src": "../../node_modules/@radix-ui/react-progress/dist/index.mjs",
+      "file": "@radix-ui_react-progress.js",
+      "fileHash": "58f7b4a6",
+      "needsInterop": false
+    },
+    "@radix-ui/react-scroll-area": {
+      "src": "../../node_modules/@radix-ui/react-scroll-area/dist/index.mjs",
+      "file": "@radix-ui_react-scroll-area.js",
+      "fileHash": "1629d25d",
+      "needsInterop": false
+    },
+    "@radix-ui/react-select": {
+      "src": "../../node_modules/@radix-ui/react-select/dist/index.mjs",
+      "file": "@radix-ui_react-select.js",
+      "fileHash": "c0815977",
+      "needsInterop": false
+    },
+    "@radix-ui/react-separator": {
+      "src": "../../node_modules/@radix-ui/react-separator/dist/index.mjs",
+      "file": "@radix-ui_react-separator.js",
+      "fileHash": "c05567b2",
+      "needsInterop": false
+    },
+    "@radix-ui/react-slider": {
+      "src": "../../node_modules/@radix-ui/react-slider/dist/index.mjs",
+      "file": "@radix-ui_react-slider.js",
+      "fileHash": "4f86da2c",
+      "needsInterop": false
+    },
+    "@radix-ui/react-slot": {
+      "src": "../../node_modules/@radix-ui/react-slot/dist/index.mjs",
+      "file": "@radix-ui_react-slot.js",
+      "fileHash": "ef6f7181",
+      "needsInterop": false
+    },
+    "@radix-ui/react-switch": {
+      "src": "../../node_modules/@radix-ui/react-switch/dist/index.mjs",
+      "file": "@radix-ui_react-switch.js",
+      "fileHash": "5f83a0d2",
+      "needsInterop": false
+    },
+    "@radix-ui/react-tabs": {
+      "src": "../../node_modules/@radix-ui/react-tabs/dist/index.mjs",
+      "file": "@radix-ui_react-tabs.js",
+      "fileHash": "92ecb3d8",
+      "needsInterop": false
+    },
+    "@tensorflow/tfjs": {
+      "src": "../../node_modules/@tensorflow/tfjs/dist/index.js",
+      "file": "@tensorflow_tfjs.js",
+      "fileHash": "b0c94a4a",
+      "needsInterop": false
+    },
+    "class-variance-authority": {
+      "src": "../../node_modules/class-variance-authority/dist/index.mjs",
+      "file": "class-variance-authority.js",
+      "fileHash": "91d13901",
+      "needsInterop": false
+    },
+    "clsx": {
+      "src": "../../node_modules/clsx/dist/clsx.mjs",
+      "file": "clsx.js",
+      "fileHash": "3f2eaf44",
+      "needsInterop": false
+    },
+    "lucide-react": {
+      "src": "../../node_modules/lucide-react/dist/esm/lucide-react.js",
+      "file": "lucide-react.js",
+      "fileHash": "6e3943af",
+      "needsInterop": false
+    },
+    "react-dom/client": {
+      "src": "../../node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "7cb45e2f",
+      "needsInterop": true
+    },
+    "tailwind-merge": {
+      "src": "../../node_modules/tailwind-merge/dist/bundle-mjs.mjs",
+      "file": "tailwind-merge.js",
+      "fileHash": "d7ce52bf",
+      "needsInterop": false
+    },
+    "tonal": {
+      "src": "../../node_modules/tonal/index.js",
+      "file": "tonal.js",
+      "fileHash": "9177cfb9",
+      "needsInterop": false
+    },
+    "tone": {
+      "src": "../../node_modules/tone/build/esm/index.js",
+      "file": "tone.js",
+      "fileHash": "504826ee",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "chunk-KDVGFZWC": {
+      "file": "chunk-KDVGFZWC.js"
+    },
+    "chunk-TCQMTAGU": {
+      "file": "chunk-TCQMTAGU.js"
+    },
+    "chunk-FSU2EBKP": {
+      "file": "chunk-FSU2EBKP.js"
+    },
+    "chunk-RMSIKCPF": {
+      "file": "chunk-RMSIKCPF.js"
+    },
+    "chunk-JWDMXHVH": {
+      "file": "chunk-JWDMXHVH.js"
+    },
+    "chunk-HJF5HSTF": {
+      "file": "chunk-HJF5HSTF.js"
+    },
+    "chunk-PGJMDC7L": {
+      "file": "chunk-PGJMDC7L.js"
+    },
+    "chunk-EQSZBQFM": {
+      "file": "chunk-EQSZBQFM.js"
+    },
+    "chunk-Q64CMPGS": {
+      "file": "chunk-Q64CMPGS.js"
+    },
+    "chunk-72EC6E55": {
+      "file": "chunk-72EC6E55.js"
+    },
+    "chunk-E6GWRJA3": {
+      "file": "chunk-E6GWRJA3.js"
+    },
+    "chunk-JROP2DDR": {
+      "file": "chunk-JROP2DDR.js"
+    },
+    "chunk-DIXKIWX7": {
+      "file": "chunk-DIXKIWX7.js"
+    },
+    "chunk-OQGUXZDM": {
+      "file": "chunk-OQGUXZDM.js"
+    },
+    "chunk-TMTQHPOA": {
+      "file": "chunk-TMTQHPOA.js"
+    },
+    "chunk-USWVL52G": {
+      "file": "chunk-USWVL52G.js"
+    },
+    "chunk-4VSXMMR2": {
+      "file": "chunk-4VSXMMR2.js"
+    },
+    "chunk-HYWJPHSN": {
+      "file": "chunk-HYWJPHSN.js"
+    },
+    "chunk-LJXWR6UH": {
+      "file": "chunk-LJXWR6UH.js"
+    },
+    "chunk-JO3Y3TZY": {
+      "file": "chunk-JO3Y3TZY.js"
+    },
+    "chunk-65KY755N": {
+      "file": "chunk-65KY755N.js"
+    },
+    "chunk-V4OQ3NZ2": {
+      "file": "chunk-V4OQ3NZ2.js"
+    }
+  }
+}

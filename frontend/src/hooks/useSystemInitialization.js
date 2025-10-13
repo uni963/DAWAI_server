@@ -91,7 +91,20 @@ export const useEngineInitialization = (projectManager) => {
             // MIDIノート操作
             addMidiNotes: async (params) => {
               console.log('AI Agent Callback: addMidiNotes', params)
-              const result = projectManager.addMidiNotes(params)
+
+              // ノートを追加（isPendingフラグ付き）
+              const notesWithPending = params.notes.map(note => ({
+                ...note,
+                isPending: true
+              }))
+
+              const result = projectManager.addMidiNotes({
+                ...params,
+                notes: notesWithPending
+              })
+
+              console.log('AI Agent: addMidiNotes result:', result)
+              console.log('AI Agent: Track after adding notes:', projectManager.currentProject?.tracks.find(t => t.id === params.trackId)?.midiData?.notes?.length)
 
               // UIの強制更新をトリガー
               if (result && window) {
@@ -99,6 +112,11 @@ export const useEngineInitialization = (projectManager) => {
                   detail: { trackId: params.trackId, action: 'add', noteCount: params.notes?.length || 0 }
                 }))
                 console.log('✅ AI Agent: Dispatched aiAgentMidiDataChanged event for addMidiNotes')
+
+                // 追加のイベント発火（MIDIエディタの再描画を確実にする）
+                window.dispatchEvent(new CustomEvent('forceTrackUpdate', {
+                  detail: { trackId: params.trackId }
+                }))
               }
 
               return result

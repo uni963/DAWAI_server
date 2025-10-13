@@ -27,8 +27,9 @@ class AIAgentEngine {
     // 拒否処理中のフラグ
     this.isRejectingChanges = false
 
-    // 自動承認設定（デフォルトはfalse - ユーザーの承認を待つ）
-    this.autoApprove = false
+    // 自動承認設定（デフォルトはtrue - 即座に変更を適用）
+    // ユーザーは承認/拒否UIを使わずに直接変更が反映される
+    this.autoApprove = true
     
     // getPendingChangesのキャッシュ機能
     this.pendingChangesCache = null
