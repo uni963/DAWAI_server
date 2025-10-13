@@ -11,6 +11,7 @@ from typing import Optional, Dict, Any, List
 import time # Added for time.time()
 import asyncio
 import aiohttp
+import random
 
 
 
@@ -1515,35 +1516,35 @@ def parse_agent_response(response_text: str, context: dict) -> dict:
                                     "trackId": "new-piano-track",  # 新しく作成されるトラックのID
                                     "notes": [
                                         {
-                                            "id": f"note-{int(time.time())}-1",
+                                            "id": f"note-{int(time.time() * 1000)}-{random.randint(1000, 9999)}",
                                             "pitch": 60,  # 中央のC
                                             "time": 0,    # 開始時間（秒）
                                             "duration": 1,  # 持続時間（秒）
                                             "velocity": 0.8  # 音量（0-1）
                                         },
                                         {
-                                            "id": f"note-{int(time.time())}-2",
+                                            "id": f"note-{int(time.time() * 1000) + 1}-{random.randint(1000, 9999)}",
                                             "pitch": 62,  # D
                                             "time": 1,    # 1秒後
                                             "duration": 1,
                                             "velocity": 0.8
                                         },
                                         {
-                                            "id": f"note-{int(time.time())}-3",
+                                            "id": f"note-{int(time.time() * 1000) + 2}-{random.randint(1000, 9999)}",
                                             "pitch": 64,  # E
                                             "time": 2,    # 2秒後
                                             "duration": 1,
                                             "velocity": 0.8
                                         },
                                         {
-                                            "id": f"note-{int(time.time())}-4",
+                                            "id": f"note-{int(time.time() * 1000) + 3}-{random.randint(1000, 9999)}",
                                             "pitch": 65,  # F
                                             "time": 3,    # 3秒後
                                             "duration": 1,
                                             "velocity": 0.8
                                         },
                                         {
-                                            "id": f"note-{int(time.time())}-5",
+                                            "id": f"note-{int(time.time() * 1000) + 4}-{random.randint(1000, 9999)}",
                                             "pitch": 67,  # G
                                             "time": 4,    # 4秒後
                                             "duration": 1,
@@ -1559,6 +1560,8 @@ def parse_agent_response(response_text: str, context: dict) -> dict:
                     }
             
             # ベートーベンスタイルのメロディー（C major scale）
+            # ユニークなノートIDを生成（ミリ秒タイムスタンプ + ランダム数）
+            timestamp_ms = int(time.time() * 1000)
             return {
                 "actions": [{
                     "type": "addMidiNotes",
@@ -1566,35 +1569,35 @@ def parse_agent_response(response_text: str, context: dict) -> dict:
                         "trackId": track_id,
                         "notes": [
                             {
-                                "id": f"note-{int(time.time())}-1",
+                                "id": f"note-{timestamp_ms}-{random.randint(1000, 9999)}",
                                 "pitch": 60,  # 中央のC
                                 "time": 0,    # 開始時間（秒）
                                 "duration": 0.5,  # 持続時間（秒）
                                 "velocity": 0.8  # 音量（0-1）
                             },
                             {
-                                "id": f"note-{int(time.time())}-2",
+                                "id": f"note-{timestamp_ms + 1}-{random.randint(1000, 9999)}",
                                 "pitch": 62,  # D
                                 "time": 0.5,  # 0.5秒後
                                 "duration": 0.5,
                                 "velocity": 0.8
                             },
                             {
-                                "id": f"note-{int(time.time())}-3",
+                                "id": f"note-{timestamp_ms + 2}-{random.randint(1000, 9999)}",
                                 "pitch": 64,  # E
                                 "time": 1.0,  # 1秒後
                                 "duration": 0.5,
                                 "velocity": 0.8
                             },
                             {
-                                "id": f"note-{int(time.time())}-4",
+                                "id": f"note-{timestamp_ms + 3}-{random.randint(1000, 9999)}",
                                 "pitch": 65,  # F
                                 "time": 1.5,  # 1.5秒後
                                 "duration": 0.5,
                                 "velocity": 0.8
                             },
                             {
-                                "id": f"note-{int(time.time())}-5",
+                                "id": f"note-{timestamp_ms + 4}-{random.randint(1000, 9999)}",
                                 "pitch": 67,  # G
                                 "time": 2.0,  # 2秒後
                                 "duration": 1.0,  # 最後のノートは長めに

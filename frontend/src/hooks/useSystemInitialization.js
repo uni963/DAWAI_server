@@ -106,6 +106,21 @@ export const useEngineInitialization = (projectManager) => {
               console.log('AI Agent: addMidiNotes result:', result)
               console.log('AI Agent: Track after adding notes:', projectManager.currentProject?.tracks.find(t => t.id === params.trackId)?.midiData?.notes?.length)
 
+              // 各ノートを承認待ちリストに追加（重要: autoApproveが機能するために必須）
+              if (result && window.aiAgentEngine && params.notes) {
+                params.notes.forEach(note => {
+                  const noteWithPending = { ...note, isPending: true }
+                  window.aiAgentEngine.addPendingNoteChange(
+                    note.id,
+                    params.trackId,
+                    null, // originalNote
+                    noteWithPending, // newNote
+                    'add' // type
+                  )
+                })
+                console.log('✅ AI Agent: Added notes to pending changes list')
+              }
+
               // UIの強制更新をトリガー
               if (result && window) {
                 window.dispatchEvent(new CustomEvent('aiAgentMidiDataChanged', {
