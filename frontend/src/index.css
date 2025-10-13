@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* スクロールバーを非表示にするカスタムクラス */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* Internet Explorer 10+ */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Safari and Chrome */
+}
+
+/* タブバーのスクロール時のスタイル */
+.tab-scroll-container {
+  scroll-behavior: smooth;
+}
+
+/* ブラウザの戻る/進むを防ぐためのスタイル */
+html, body {
+  overscroll-behavior-x: none;
+  overscroll-behavior-y: auto;
+}
+
+/* MIDIエディタのスクロール制御 */
+.midi-editor-container {
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* トラックのスクロールバーを細くする */
+.track-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #4B5563 #1F2937;
+}
+
+.track-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.track-scrollbar::-webkit-scrollbar-track {
+  background: #1F2937;
+}
+
+.track-scrollbar::-webkit-scrollbar-thumb {
+  background: #4B5563;
+  border-radius: 3px;
+}
+
+.track-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #6B7280;
+}
+
+/* メインの縦スクロールバーを細くする */
+.main-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #4B5563 #1F2937;
+}
+
+.main-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.main-scrollbar::-webkit-scrollbar-track {
+  background: #1F2937;
+}
+
+.main-scrollbar::-webkit-scrollbar-thumb {
+  background: #4B5563;
+  border-radius: 4px;
+}
+
+.main-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #6B7280;
+}
+
+/* 横スクロールバーを確実に表示する */
+.main-scrollbar::-webkit-scrollbar:horizontal {
+  height: 12px;
+}
+
+.main-scrollbar::-webkit-scrollbar-track:horizontal {
+  background: #1F2937;
+}
+
+.main-scrollbar::-webkit-scrollbar-thumb:horizontal {
+  background: #4B5563;
+  border-radius: 6px;
+}
+
+.main-scrollbar::-webkit-scrollbar-thumb:horizontal:hover {
+  background: #6B7280;
+}
+

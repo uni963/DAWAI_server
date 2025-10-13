@@ -4,15 +4,15 @@ nixPkgs = ["python311", "python311Packages.pip", "nodejs-18_x"]
 [phases.install]
 cmds = [
     "python -m venv /opt/venv",
-    "source /opt/venv/bin/activate && pip install -r requirements.txt",
-    "cd frontend && npm install"
+    "source /opt/venv/bin/activate && pip install -r DAWAI_server/requirements.txt",
+    "cd DAWAI_server/frontend && npm install"
 ]
 
 [phases.build]
 cmds = [
-    "cd frontend && npm run build",
+    "cd DAWAI_server/frontend && npm run build",
     "echo 'Lightweight frontend build completed'"
 ]
 
 [start]
-cmd = "source /opt/venv/bin/activate && python main.py"
+cmd = "source /opt/venv/bin/activate && cd DAWAI_server && python main.py"
