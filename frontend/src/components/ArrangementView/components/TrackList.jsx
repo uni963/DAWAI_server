@@ -340,7 +340,8 @@ const TrackList = ({
 
                          if (notes.length > 0) {
                            for (const note of notes) {
-                             const noteStart = note.time !== undefined ? note.time : (note.start / 1000)
+                             // 問題2の修正: startフィールドは既に秒単位なので1000で割らない
+                             const noteStart = note.time !== undefined ? note.time : note.start
                              const noteDuration = note.duration || 0.5
                              const pitch = note.pitch || 60
                              const velocity = note.velocity || 0.8

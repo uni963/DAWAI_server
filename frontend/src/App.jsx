@@ -617,6 +617,23 @@ const App = () => {
     }
   }, [projectManager, setTracks, setForceRerender])
 
+  // App.jsxの強制再レンダリングイベントリスナー（2回目以降のノート配置の修正）
+  useEffect(() => {
+    const handleForceRerender = (event) => {
+      console.log('🔄 App: Force rerender requested:', event.detail)
+
+      // ProjectManagerから最新のプロジェクト状態を取得
+      setProject(projectManager.getProject())
+      setTracks(projectManager.getTracks())
+      setForceRerender(prev => prev + 1)
+
+      console.log('✅ App: Force rerender completed, React state updated')
+    }
+
+    window.addEventListener('forceAppRerender', handleForceRerender)
+    return () => window.removeEventListener('forceAppRerender', handleForceRerender)
+  }, [projectManager])
+
   return (
     <div className="h-screen text-white flex flex-col main-container">
       {/* グローバルマウスデバッガー（開発用） */}

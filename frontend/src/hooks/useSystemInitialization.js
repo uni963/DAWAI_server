@@ -117,6 +117,12 @@ export const useEngineInitialization = (projectManager) => {
                 window.dispatchEvent(new CustomEvent('forceTrackUpdate', {
                   detail: { trackId: params.trackId }
                 }))
+
+                // App.jsxの強制再レンダリングをトリガー（2回目以降のノート配置の修正）
+                window.dispatchEvent(new CustomEvent('forceAppRerender', {
+                  detail: { reason: 'midiNotesAdded', trackId: params.trackId }
+                }))
+                console.log('✅ AI Agent: Dispatched forceAppRerender event for addMidiNotes')
               }
 
               return result

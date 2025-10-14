@@ -2388,8 +2388,17 @@ ${currentTrackInfo}
             action.params.trackId = this.lastCreatedTrackId
             console.log('AIAgentEngine: Using last created track ID for MIDI notes:', this.lastCreatedTrackId)
           }
-          
-          await this.projectCallbacks.addMidiNotes(action.params)
+
+          // AIからのstartフィールドをtimeフィールドに正規化（問題1の修正）
+          const normalizedNotes = action.params.notes.map(note => ({
+            ...note,
+            time: note.time !== undefined ? note.time : note.start
+          }))
+
+          await this.projectCallbacks.addMidiNotes({
+            ...action.params,
+            notes: normalizedNotes
+          })
           // 注意: addMidiNotesコールバック内で既にaddPendingNoteChangeが呼び出されているため、
           // ここでは重複して呼び出さない
         }
