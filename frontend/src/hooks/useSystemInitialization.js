@@ -90,87 +90,26 @@ export const useEngineInitialization = (projectManager) => {
 
             // MIDIノート操作
             addMidiNotes: async (params) => {
-              console.log('AI Agent Callback: addMidiNotes (RAW)', params)
+              console.log('AI Agent Callback: addMidiNotes', params)
 
-              // 🔧 データフォーマット変換（AIが間違ったフォーマットを送信する場合に対応）
-              const tempo = projectManager.currentProject?.tempo || 120
-              const ticksPerBeat = 480 // 標準的なMIDI解像度
-              const secondsPerBeat = 60 / tempo
-              const secondsPerTick = secondsPerBeat / ticksPerBeat
-
-              const normalizedNotes = params.notes.map((note, index) => {
-                // フォーマット検出と変換
-                const normalized = {
-                  // IDフィールド生成（存在しない場合）
-                  id: note.id || `note-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-
-                  // pitchフィールド（noteフィールドから変換する場合もある）
-                  pitch: note.pitch !== undefined ? note.pitch : note.note,
-
-                  // timeフィールド（tickから変換する場合もある）
-                  time: note.time !== undefined
-                    ? note.time
-                    : (note.tick !== undefined ? note.tick * secondsPerTick : 0),
-
-                  // durationフィールド（ticksから変換する場合もある）
-                  duration: note.duration !== undefined
-                    ? (note.duration > 10 ? note.duration * secondsPerTick : note.duration) // ticksか秒かを判定
-                    : 0.5,
-
-                  // velocityフィールド（0-127を0-1に正規化）
-                  velocity: note.velocity !== undefined
-                    ? (note.velocity > 1 ? note.velocity / 127 : note.velocity)
-                    : 0.7,
-
-                  // isPendingフラグ
-                  isPending: true
-                }
-
-                // 検証ログ
-                if (note.note !== undefined || note.tick !== undefined) {
-                  console.log(`🔧 AI Agent: Note format conversion [${index}]:`, {
-                    original: note,
-                    normalized: normalized
-                  })
-                }
-
-                return normalized
-              })
-
-              console.log('AI Agent Callback: addMidiNotes (NORMALIZED)', {
-                trackId: params.trackId,
-                originalCount: params.notes.length,
-                normalizedCount: normalizedNotes.length,
-                sampleOriginal: params.notes[0],
-                sampleNormalized: normalizedNotes[0]
-              })
+              // ノートを追加（isPendingフラグ付き）
+              const notesWithPending = params.notes.map(note => ({
+                ...note,
+                isPending: true
+              }))
 
               const result = projectManager.addMidiNotes({
                 ...params,
-                notes: normalizedNotes
+                notes: notesWithPending
               })
 
               console.log('AI Agent: addMidiNotes result:', result)
               console.log('AI Agent: Track after adding notes:', projectManager.currentProject?.tracks.find(t => t.id === params.trackId)?.midiData?.notes?.length)
 
-              // 各ノートを承認待ちリストに追加（重要: autoApproveが機能するために必須）
-              if (result && window.aiAgentEngine && normalizedNotes) {
-                normalizedNotes.forEach(note => {
-                  window.aiAgentEngine.addPendingNoteChange(
-                    note.id,
-                    params.trackId,
-                    null, // originalNote
-                    note, // newNote (already has isPending)
-                    'add' // type
-                  )
-                })
-                console.log('✅ AI Agent: Added notes to pending changes list')
-              }
-
               // UIの強制更新をトリガー
               if (result && window) {
                 window.dispatchEvent(new CustomEvent('aiAgentMidiDataChanged', {
-                  detail: { trackId: params.trackId, action: 'add', noteCount: normalizedNotes?.length || 0 }
+                  detail: { trackId: params.trackId, action: 'add', noteCount: params.notes?.length || 0 }
                 }))
                 console.log('✅ AI Agent: Dispatched aiAgentMidiDataChanged event for addMidiNotes')
 

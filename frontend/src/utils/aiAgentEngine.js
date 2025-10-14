@@ -2388,10 +2388,10 @@ ${currentTrackInfo}
             action.params.trackId = this.lastCreatedTrackId
             console.log('AIAgentEngine: Using last created track ID for MIDI notes:', this.lastCreatedTrackId)
           }
-
+          
           await this.projectCallbacks.addMidiNotes(action.params)
-          // 注意: addMidiNotesコールバック内でaddPendingNoteChangeが呼び出されるため、
-          // ここでは重複して呼び出さない（useSystemInitialization.js:109-122参照）
+          // 注意: addMidiNotesコールバック内で既にaddPendingNoteChangeが呼び出されているため、
+          // ここでは重複して呼び出さない
         }
         break
         

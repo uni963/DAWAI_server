@@ -11,12 +11,6 @@ const ChatInput = ({
   onSendClick,
   onCancelGeneration
 }) => {
-  // コピペを明示的に有効化するハンドラー
-  const handlePaste = (e) => {
-    // デフォルトのペースト動作を許可
-    console.log('Paste event triggered in chat input')
-  }
-
   return (
     <div className="p-2 border-t border-gray-700/50">
       {processingState.isGenerating && (
@@ -25,10 +19,10 @@ const ChatInput = ({
             <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></div>
             <span className="text-xs text-gray-400">Generating...</span>
           </div>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={onCancelGeneration}
+          <Button 
+            variant="destructive" 
+            size="sm" 
+            onClick={onCancelGeneration} 
             className="flex-shrink-0 h-5 px-1.5 text-xs"
           >
             <StopCircle className="h-3 w-3 mr-1" />
@@ -42,7 +36,6 @@ const ChatInput = ({
           value={newMessage}
           onChange={onTextChange}
           onKeyDown={onKeyDown}
-          onPaste={handlePaste}
           className="flex-1 bg-gray-700 border-gray-600 text-white placeholder-gray-400 resize-y min-h-[50px] max-h-[150px] text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
           disabled={processingState.isGenerating}
           spellCheck="false"
@@ -50,12 +43,10 @@ const ChatInput = ({
           autoCorrect="off"
           autoCapitalize="off"
           data-testid="chat-input"
-          style={{
+          style={{ 
             fontFamily: 'inherit',
             lineHeight: '1.4',
-            wordBreak: 'break-word',
-            WebkitUserSelect: 'text',
-            userSelect: 'text'
+            wordBreak: 'break-word'
           }}
         />
         <Button 
