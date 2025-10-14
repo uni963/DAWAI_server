@@ -506,10 +506,10 @@ const AIAssistantChatBox = ({
   };
 
   // テキスト入力ハンドラー（最適化版）
-  const handleTextChange = useCallback((e) => {
+  const handleTextChange = (e) => {
     const value = e.target.value;
     setNewMessage(value);
-  }, []);
+  };
 
   // 送信ボタンクリックハンドラー
   const handleSendClick = () => {
