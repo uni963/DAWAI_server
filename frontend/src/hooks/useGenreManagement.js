@@ -60,7 +60,13 @@ export const useGenreManagement = (dependencies) => {
 
       console.log('✅ ジャンルコンテキスト設定完了:', genre.name.ja)
     } catch (error) {
-      console.error('❌ ジャンル選択エラー:', error)
+      console.error('❌ ジャンル選択エラー詳細:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+        genreName: genre?.name?.ja,
+        fullError: error
+      });
       throw error
     }
   }, [projectManager, eventHandlersManager, setGenreContext])

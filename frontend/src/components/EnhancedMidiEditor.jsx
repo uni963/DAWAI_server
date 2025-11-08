@@ -2216,6 +2216,86 @@ const EnhancedMidiEditor = ({
     }
   }, [ghostText, state.notes, addNote])
 
+  // ノート削除関数
+  const removeNote = useCallback((noteId) => {
+    if (!trackId || !state.isInitialized) return
+
+    state.setNotes(prev => {
+      const updatedNotes = prev.filter(note => note.id !== noteId)
+
+      // 履歴に保存（同期的に実行）
+      persistence.addToHistory(updatedNotes, `Remove note ${noteId}`)
+
+      return updatedNotes
+    })
+
+    // 再生中のスケジュールをクリア
+    if (scheduledNotesRef.current.has(noteId)) {
+      const { startTimeout, endTimeout } = scheduledNotesRef.current.get(noteId)
+      if (startTimeout) clearTimeout(startTimeout)
+      if (endTimeout) clearTimeout(endTimeout)
+      scheduledNotesRef.current.delete(noteId)
+
+      console.log('🎵 Cleared scheduled note:', noteId)
+    }
+
+    // 再生中のオーディオノードを停止
+    if (activeAudioNodesRef.current.has(noteId)) {
+      const audioNodes = activeAudioNodesRef.current.get(noteId)
+      if (audioNodes.isUnifiedSystem) {
+        // 統一音声システムで管理されているノードは自動的に停止される
+        console.log(`🎵 統一音声システムで管理されているノート ${noteId} は自動的に停止されます`);
+      } else {
+        // 従来のオーディオノードの場合は手動で停止
+        if (audioNodes.oscillator) {
+          audioNodes.oscillator.stop()
+        }
+        if (audioNodes.gainNode) {
+          audioNodes.gainNode.gain.cancelScheduledValues(0)
+          audioNodes.gainNode.gain.setValueAtTime(audioNodes.gainNode.gain.value, 0)
+          audioNodes.gainNode.gain.linearRampToValueAtTime(0, 0.1)
+        }
+      }
+      activeAudioNodesRef.current.delete(noteId)
+
+      console.log('🎵 Stopped playing note:', noteId)
+    }
+
+    // 選択状態からも削除
+    state.setSelectedNotes(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(noteId)
+      return newSet
+    })
+    state.setNeedsRedraw(true)
+
+    // 親コンポーネントに即座に通知
+    if (onNoteRemove) onNoteRemove(noteId)
+
+    // 親コンポーネントにMIDIデータ更新を通知
+    setTimeout(() => {
+      if (onMidiDataUpdate) {
+        const currentNotes = state.notes.filter(note => note.id !== noteId)
+        const updateData = {
+          notes: currentNotes,
+          trackId: trackId,
+          lastModified: new Date().toISOString(),
+          metadata: {
+            modified: new Date().toISOString(),
+            noteCount: currentNotes.length
+          },
+          settings: {
+            channel: 0,
+            octave: 0,
+            transpose: 0,
+            velocity: 100
+          }
+        }
+        onMidiDataUpdate(updateData)
+      }
+    }, 0)
+  }, [trackId, onNoteRemove, persistence]) // 🔧 修正: state.isInitializedを依存配列から削除
+
   // 🔴 [NEW] Wrapper function for undoLastGhostApproval (Issue #146)
   const undoLastGhostApproval = useCallback(() => {
     console.log('↩️ Undoing last approval')
@@ -2281,86 +2361,6 @@ const EnhancedMidiEditor = ({
       window.removeEventListener('accept-ghost-text-global', handleGlobalAcceptGhostText)
     }
   }, [isActive, acceptNextGhostNote, undoLastGhostApproval])
-
-  // ノート削除関数
-  const removeNote = useCallback((noteId) => {
-    if (!trackId || !state.isInitialized) return
-    
-    state.setNotes(prev => {
-      const updatedNotes = prev.filter(note => note.id !== noteId)
-      
-      // 履歴に保存（同期的に実行）
-      persistence.addToHistory(updatedNotes, `Remove note ${noteId}`)
-      
-      return updatedNotes
-    })
-    
-    // 再生中のスケジュールをクリア
-    if (scheduledNotesRef.current.has(noteId)) {
-      const { startTimeout, endTimeout } = scheduledNotesRef.current.get(noteId)
-      if (startTimeout) clearTimeout(startTimeout)
-      if (endTimeout) clearTimeout(endTimeout)
-      scheduledNotesRef.current.delete(noteId)
-      
-      console.log('🎵 Cleared scheduled note:', noteId)
-    }
-    
-    // 再生中のオーディオノードを停止
-    if (activeAudioNodesRef.current.has(noteId)) {
-      const audioNodes = activeAudioNodesRef.current.get(noteId)
-      if (audioNodes.isUnifiedSystem) {
-        // 統一音声システムで管理されているノードは自動的に停止される
-        console.log(`🎵 統一音声システムで管理されているノート ${noteId} は自動的に停止されます`);
-      } else {
-        // 従来のオーディオノードの場合は手動で停止
-        if (audioNodes.oscillator) {
-          audioNodes.oscillator.stop()
-        }
-        if (audioNodes.gainNode) {
-          audioNodes.gainNode.gain.cancelScheduledValues(0)
-          audioNodes.gainNode.gain.setValueAtTime(audioNodes.gainNode.gain.value, 0)
-          audioNodes.gainNode.gain.linearRampToValueAtTime(0, 0.1)
-        }
-      }
-      activeAudioNodesRef.current.delete(noteId)
-      
-      console.log('🎵 Stopped playing note:', noteId)
-    }
-    
-    // 選択状態からも削除
-    state.setSelectedNotes(prev => {
-      const newSet = new Set(prev)
-      newSet.delete(noteId)
-      return newSet
-    })
-    state.setNeedsRedraw(true)
-    
-    // 親コンポーネントに即座に通知
-    if (onNoteRemove) onNoteRemove(noteId)
-    
-    // 親コンポーネントにMIDIデータ更新を通知
-    setTimeout(() => {
-      if (onMidiDataUpdate) {
-        const currentNotes = state.notes.filter(note => note.id !== noteId)
-        const updateData = {
-          notes: currentNotes,
-          trackId: trackId,
-          lastModified: new Date().toISOString(),
-          metadata: {
-            modified: new Date().toISOString(),
-            noteCount: currentNotes.length
-          },
-          settings: {
-            channel: 0,
-            octave: 0,
-            transpose: 0,
-            velocity: 100
-          }
-        }
-        onMidiDataUpdate(updateData)
-      }
-    }, 0)
-  }, [trackId, onNoteRemove, persistence]) // 🔧 修正: state.isInitializedを依存配列から削除
 
   // ノート編集関数
   const editNote = useCallback((noteId, changes) => {
@@ -2812,7 +2812,7 @@ const EnhancedMidiEditor = ({
         nextPhraseIndex={ghostText.nextPhraseIndex}     // 🔴 [NEW] Issue #146: Next phrase note index
         approvalHistory={ghostText.approvalHistory}     // 🔴 [NEW] Issue #146: Approval history
         onAcceptPrediction={acceptGhostPrediction}
-        onAcceptAllPredictions={acceptAllGhostPredictions}
+        onAcceptNextPrediction={acceptNextGhostNote}
         
         // ライブ録音関連
         liveRecordingNotes={liveRecordingNotes}

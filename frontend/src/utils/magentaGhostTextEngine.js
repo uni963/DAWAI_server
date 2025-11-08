@@ -38,6 +38,10 @@ class MagentaGhostTextEngine {
     this.mixedModeRatio = 0.5 // 混合モードでのフレーズ予測の比率（0.0-1.0）
     this.barBasedSwitchThreshold = 2 // 小節に応じて自動切り替えする閾値
 
+    // 🔴 NEW: フレーズセッション管理
+    this.currentPhraseSession = null // { id, notes, startTime, locked, approvedCount, totalCount }
+    this.phraseSessionHistory = []   // 完了したセッションの履歴（最大50件）
+
     // Magentaモデル設定（動的に設定）
     this.magentaConfig = {}
     this.mm = null // Magentaライブラリの参照
@@ -481,13 +485,64 @@ class MagentaGhostTextEngine {
     }
   }
 
+  // 🔴 NEW: フレーズセッション管理メソッド
+  unlockPhraseSession() {
+    if (this.currentPhraseSession) {
+      this.phraseSessionHistory.push({
+        ...this.currentPhraseSession,
+        completedAt: Date.now()
+      })
+
+      // 履歴は最大50件まで
+      if (this.phraseSessionHistory.length > 50) {
+        this.phraseSessionHistory = this.phraseSessionHistory.slice(-50)
+      }
+
+      this.currentPhraseSession = null
+      console.log('🎵 Phrase session unlocked')
+    }
+  }
+
+  generateNextPhrase() {
+    console.log('🎵 Generating next phrase...')
+
+    const barDuration = this.calculateBarDuration()
+    const phraseNotes = this.generateRuleBasedPhrase(barDuration)
+
+    this.currentPhraseSession = {
+      id: `phrase-session-${Date.now()}`,
+      notes: phraseNotes,
+      startTime: Date.now(),
+      locked: true,
+      approvedCount: 0,
+      totalCount: phraseNotes.length,
+      barDuration: barDuration,
+      createdAt: Date.now()
+    }
+
+    this.notifyListeners('phrasePrediction', {
+      phraseNotes: this.currentPhraseSession.notes,
+      sessionId: this.currentPhraseSession.id,
+      locked: true
+    })
+
+    console.log('🎵 New phrase session created:', this.currentPhraseSession.id)
+  }
+
   // MIDI入力の処理
   processMidiInput(note) {
     console.log('🎵 processMidiInput called:', {
       isInitialized: this.isInitialized,
       isActive: this.isActive,
+      phraseLocked: this.currentPhraseSession?.locked || false,
       noteData: note
     })
+
+    // 🔴 NEW: フレーズロック中は予測をスキップ
+    if (this.currentPhraseSession && this.currentPhraseSession.locked) {
+      console.log('🎵 Phrase session locked, skipping new prediction')
+      return
+    }
 
     if (!this.isInitialized) {
       console.warn('⚠️ Ghost Text機能が非初期化:', { isInitialized: this.isInitialized })
@@ -523,7 +578,8 @@ class MagentaGhostTextEngine {
     this.debouncedPredict()
 
     // 🔧 Phase 2修正: 予測モードに応じた統合予測
-    if (this.phrasePredictionEnabled) {
+    // 🔴 NEW: フレーズロック中でない場合のみ、通常の予測モードを実行
+    if (this.phrasePredictionEnabled && (!this.currentPhraseSession || !this.currentPhraseSession.locked)) {
       console.log('🎵 [Phase 2] 予測モード:', this.predictionMode)
       this.predictWithMode().then(phraseNotes => {
         if (phraseNotes && phraseNotes.length > 0) {
@@ -538,6 +594,10 @@ class MagentaGhostTextEngine {
       }).catch(error => {
         console.error('🎵 フレーズ予測エラー:', error)
       })
+    } else if (this.phrasePredictionEnabled && !this.currentPhraseSession) {
+      // 🔴 NEW: 初回フレーズ生成（セッションが存在しない場合）
+      console.log('🎵 [Phase 2] 初回フレーズ生成をトリガー')
+      this.generateNextPhrase()
     }
   }
 

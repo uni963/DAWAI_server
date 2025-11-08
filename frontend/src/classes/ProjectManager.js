@@ -1025,6 +1025,75 @@ class ProjectManager {
     return this.genreContext
   }
 
+  // ジャンルコンテキスト設定
+  setGenreContext(context) {
+    this.genreContext = context
+    if (this.project) {
+      this.project.genreContext = context
+    }
+    console.log('✅ ジャンルコンテキスト設定:', context?.genre?.name?.ja || context?.genre?.name)
+  }
+
+  // 新規プロジェクト作成
+  newProject(name = 'Untitled Project') {
+    console.log('🚀 新規プロジェクト作成開始:', name)
+    
+    // デフォルトプロジェクトを作成
+    const project = this.createDefaultProject()
+    
+    // プロジェクト名を設定
+    project.name = name
+    project.metadata = project.metadata || {}
+    project.metadata.modifiedAt = new Date().toISOString()
+    
+    // プロジェクト状態を更新
+    this.project = project
+    
+    // プロジェクトを保存
+    this.saveProject()
+    
+    console.log('✅ 新規プロジェクト作成完了:', name)
+    return project
+  }
+
+  // プロジェクト名設定
+  setProjectName(name) {
+    if (!this.project) {
+      throw new Error('No current project')
+    }
+    this.project.name = name
+    if (this.project.metadata) {
+      this.project.metadata.modifiedAt = new Date().toISOString()
+    }
+    console.log(`✅ プロジェクト名設定: ${name}`)
+  }
+
+  // テンポ設定
+  setTempo(tempo) {
+    if (!this.project) {
+      throw new Error('No current project')
+    }
+    this.project.tempo = tempo
+    if (this.project.metadata) {
+      this.project.metadata.modifiedAt = new Date().toISOString()
+    }
+    console.log(`✅ テンポ設定: ${tempo} BPM`)
+  }
+
+  // 拍子設定
+  setTimeSignature(timeSignature) {
+    if (!this.project) {
+      throw new Error('No current project')
+    }
+    // 文字列（"4/4"）をオブジェクト形式に変換
+    const [numerator, denominator] = timeSignature.split('/').map(Number)
+    this.project.timeSignature = { numerator, denominator }
+    if (this.project.metadata) {
+      this.project.metadata.modifiedAt = new Date().toISOString()
+    }
+    console.log(`✅ 拍子設定: ${timeSignature}`)
+  }
+
   // Demo Songメタデータを取得
   getDemoSongMetadata() {
     return this.demoSongMetadata
@@ -1092,6 +1161,28 @@ class ProjectManager {
     } catch (error) {
       console.error('Failed to send project context to AI:', error)
     }
+  }
+
+  /**
+   * スケール制約を設定
+   * @param {Object} constraints - スケール制約オブジェクト
+   */
+  setScaleConstraints(constraints) {
+    if (!this.currentProject) {
+      console.warn('⚠️ No current project for scale constraints')
+      return
+    }
+    this.currentProject.scaleConstraints = constraints
+    this.currentProject.modifiedAt = new Date().toISOString()
+    console.log('✅ スケール制約設定:', constraints)
+  }
+
+  /**
+   * 現在のプロジェクトを取得
+   * @returns {Object} 現在のプロジェクト
+   */
+  getCurrentProject() {
+    return this.currentProject
   }
 }
 

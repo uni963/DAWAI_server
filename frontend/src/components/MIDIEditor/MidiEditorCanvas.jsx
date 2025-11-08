@@ -44,6 +44,7 @@ const MidiEditorCanvas = ({
   // Ghost Text関連
   onAcceptPrediction,
   onAcceptAllPredictions,
+  onAcceptNextPrediction, // 🔴 [NEW] Issue #146: 一音ずつ承認
   
   // ライブ録音関連
   liveRecordingNotes = new Map(),
@@ -1404,15 +1405,16 @@ const MidiEditorCanvas = ({
           console.log('🎹 Shift+Tab: 前の予測選択', newIndex)
         }
       } else {
-        // Tab: 全予測を受け入れる（フレーズ予測優先）
-        console.log('🎹 Tab: 予測採用開始', {
+        // Tab: 一音ずつ予測を受け入れる（Issue #146対応）
+        console.log('🎹 Tab: 一音ずつ予測採用開始', {
           hasPhrasePredictions,
           hasGhostPredictions
         })
 
-        if (onAcceptAllPredictions) {
-          onAcceptAllPredictions()
-          console.log('✅ Tab: onAcceptAllPredictions実行完了')
+        if (onAcceptNextPrediction) {
+          // 🔴 修正: 一音ずつ承認に変更
+          onAcceptNextPrediction()
+          console.log('✅ Tab: onAcceptNextPrediction実行完了（一音ずつ承認）')
         } else if (onAcceptPrediction) {
           // フォールバック: 単一予測を受け入れる
           onAcceptPrediction(state.selectedPredictionIndex)
@@ -1421,7 +1423,7 @@ const MidiEditorCanvas = ({
         state.setSelectedPredictionIndex(0) // 選択をリセット
       }
     }
-  }, [onAcceptAllPredictions, onAcceptPrediction, ghostPredictions, phrasePredictions, state.selectedPredictionIndex, state.setSelectedPredictionIndex])
+  }, [onAcceptNextPrediction, onAcceptPrediction, ghostPredictions, phrasePredictions, state.selectedPredictionIndex, state.setSelectedPredictionIndex])
 
   return (
     <div

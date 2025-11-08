@@ -82,8 +82,14 @@ const GenreSelector = ({
 
       console.log(`🎵 ジャンル選択: ${genre.name.ja}`);
     } catch (err) {
-      console.error('❌ ジャンル選択エラー:', err);
-      setError('ジャンル選択に失敗しました');
+      console.error('❌ ジャンル選択エラー:', {
+        message: err.message,
+        stack: err.stack,
+        name: err.name,
+        genre: genre?.id,
+        fullError: err
+      });
+      setError(`ジャンル選択に失敗しました: ${err.message || 'Unknown error'}`);
     }
   };
 
@@ -99,8 +105,15 @@ const GenreSelector = ({
 
       console.log(`✅ Demo Song読み込み完了: ${demoSong.metadata.title.ja}`);
     } catch (err) {
-      console.error('❌ Demo Song読み込みエラー:', err);
-      setError('Demo Songの読み込みに失敗しました');
+      console.error('❌ Demo Song読み込みエラー詳細:', {
+        message: err.message,
+        stack: err.stack,
+        name: err.name,
+        demoSongId: demoSong?.id,
+        demoSongTitle: demoSong?.metadata?.title?.ja,
+        fullError: err
+      });
+      setError(`Demo Songの読み込みに失敗しました: ${err.message || 'Unknown error'}`);
     }
   };
 

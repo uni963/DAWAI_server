@@ -57,6 +57,10 @@ const useGhostText = (trackId, appSettings) => {
   const [approvalHistory, setApprovalHistory] = useState([]) // Track approved notes (max 50)
   const [lastApprovalSource, setLastApprovalSource] = useState(null) // Track if from 'phrase' or 'ghost'
 
+  // 🔴 NEW: フレーズロック状態管理
+  const [phraseLocked, setPhraseLocked] = useState(false)
+  const [phraseSessionId, setPhraseSessionId] = useState(null)
+
   // 🔧 Phase 2修正: エンジン初期化とイベントリスナーの設定（一度だけ実行）
   useEffect(() => {
     // 既に初期化済み、または初期化中の場合はスキップ
@@ -106,20 +110,27 @@ const useGhostText = (trackId, appSettings) => {
       }
       // 🔧 Problem 3修正: フレーズ予測イベントリスナー
       if (eventType === 'phrasePrediction') {
-        console.log('🎵 useGhostText: Received phrasePrediction event:', data.phraseNotes?.length || 0)
+        console.log('🎵 useGhostText: Received phrasePrediction event:', data.phraseNotes?.length || 0, 'locked:', data.locked, 'sessionId:', data.sessionId)
         if (Array.isArray(data.phraseNotes)) {
           setPhraseNotes(data.phraseNotes)
           // 🔴 [NEW] Reset phrase index when new phrase predictions are generated
           if (data.phraseNotes.length > 0) {
             setNextPhraseIndex(0)
-            console.log('🎯 Phrase predictions reset: nextPhraseIndex → 0, count:', data.phraseNotes.length)
+            // 🔴 NEW: フレーズロック状態を設定
+            setPhraseLocked(data.locked !== undefined ? data.locked : true)
+            setPhraseSessionId(data.sessionId || `session-${Date.now()}`)
+            console.log('🎯 Phrase predictions reset: nextPhraseIndex → 0, count:', data.phraseNotes.length, 'locked:', data.locked, 'sessionId:', data.sessionId)
           } else {
             setNextPhraseIndex(0)
+            setPhraseLocked(false)
+            setPhraseSessionId(null)
           }
         } else {
           console.warn('Ghost Text: phraseNotes is not an array:', data.phraseNotes)
           setPhraseNotes([])
           setNextPhraseIndex(0)
+          setPhraseLocked(false)
+          setPhraseSessionId(null)
         }
       }
     }
@@ -618,13 +629,22 @@ const useGhostText = (trackId, appSettings) => {
     console.log('🎯 acceptNextPhraseNote: Processing', {
       nextPhraseIndex,
       phraseNotesCount: phraseNotes.length,
-      hasOnNoteAdd: !!onNoteAdd
+      phraseLocked,
+      phraseSessionId
     })
+
+    // 🔴 NEW: フレーズロック中のみ承認を許可
+    if (!phraseLocked || !phraseSessionId) {
+      console.warn('⚠️ No locked phrase session available')
+      return { success: false, message: 'No locked phrase session' }
+    }
 
     // Check if there are predictions available
     if (phraseNotes.length === 0 || nextPhraseIndex >= phraseNotes.length) {
-      console.warn('⚠️ acceptNextPhraseNote: No phrase predictions available or index out of range')
-      return { success: false, message: 'No phrase predictions available' }
+      console.warn('⚠️ acceptNextPhraseNote: All notes in phrase approved, unlock for new phrase')
+      setPhraseLocked(false)
+      setPhraseSessionId(null)
+      return { success: false, message: 'Phrase completed' }
     }
 
     const prediction = phraseNotes[nextPhraseIndex]
@@ -640,15 +660,16 @@ const useGhostText = (trackId, appSettings) => {
       return { success: true, skipped: true, message: 'Rest skipped' }
     }
 
-    // Add the note
+    // Add the note (🔴 CRITICAL: skipPrediction=trueで予測生成をスキップ)
     if (onNoteAdd) {
       onNoteAdd(
         prediction.pitch,
         noteTime,
         prediction.duration || 0.25,
-        prediction.velocity || 0.8
+        prediction.velocity || 0.8,
+        { skipPrediction: true } // 🔴 NEW: 予測スキップフラグ
       )
-      console.log(`✅ acceptNextPhraseNote: [${nextPhraseIndex}] Note added`, {
+      console.log(`✅ acceptNextPhraseNote: [${nextPhraseIndex}] Note added with skipPrediction=true`, {
         pitch: prediction.pitch,
         time: noteTime
       })
@@ -658,6 +679,7 @@ const useGhostText = (trackId, appSettings) => {
     setApprovalHistory(prev => {
       const newHistory = [...prev, {
         index: nextPhraseIndex,
+        sessionId: phraseSessionId,
         noteId: `phrase-${nextPhraseIndex}-${Date.now()}`,
         pitch: prediction.pitch,
         time: noteTime,
@@ -673,11 +695,27 @@ const useGhostText = (trackId, appSettings) => {
     setNextPhraseIndex(prev => {
       const newIndex = prev + 1
       console.log(`🎯 acceptNextPhraseNote: nextPhraseIndex advanced ${prev} → ${newIndex}`)
+
+      // 🔴 NEW: フレーズ完了チェック
+      if (newIndex >= phraseNotes.length) {
+        console.log('✅ Phrase completed, unlocking for next phrase')
+        setPhraseLocked(false)
+        setPhraseSessionId(null)
+
+        // エンジンに通知して新しいフレーズ生成
+        if (window.magentaGhostTextEngine) {
+          window.magentaGhostTextEngine.unlockPhraseSession()
+          setTimeout(() => {
+            window.magentaGhostTextEngine.generateNextPhrase()
+          }, 100) // 少し遅延させて状態の整合性を保つ
+        }
+      }
+
       return newIndex
     })
 
     return { success: true, message: 'Phrase note approved' }
-  }, [phraseNotes, nextPhraseIndex])
+  }, [phraseNotes, nextPhraseIndex, phraseLocked, phraseSessionId])
 
   // 🔴 [NEW] Undo last approval (Shift+Tab functionality) (Issue #146)
   const undoLastGhostApproval = useCallback((notes, onNoteRemove) => {
@@ -783,7 +821,11 @@ const useGhostText = (trackId, appSettings) => {
     nextGhostIndex,             // 🔴 [NEW] Index of next ghost note to approve
     nextPhraseIndex,            // 🔴 [NEW] Index of next phrase note to approve
     approvalHistory,            // 🔴 [NEW] Approval history for undo
-    lastApprovalSource          // 🔴 [NEW] Track source of last approval
+    lastApprovalSource,         // 🔴 [NEW] Track source of last approval
+
+    // Phrase session states
+    phraseLocked,               // 🔴 NEW: フレーズロック状態
+    phraseSessionId             // 🔴 NEW: フレーズセッションID
   }
 }
 

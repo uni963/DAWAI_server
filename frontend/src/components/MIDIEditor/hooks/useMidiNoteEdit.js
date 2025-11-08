@@ -16,9 +16,12 @@ export function useMidiNoteEdit({
   playbackStartTimeRef,
 }) {
   // ノート追加関数
-  const addNote = useCallback(async (pitch, time, duration = 0.25, velocity = 0.8) => {
+  const addNote = useCallback(async (pitch, time, duration = 0.25, velocity = 0.8, options = {}) => {
     if (!trackId || !state.isInitialized) return;
-    
+
+    // 🔴 NEW: skipPredictionオプションの取得
+    const { skipPrediction = false } = options;
+
     const newNote = {
       id: Date.now() + Math.random(),
       pitch,
@@ -27,37 +30,44 @@ export function useMidiNoteEdit({
       velocity,
       trackId
     };
-    
+
+    console.log('🎵 useMidiNoteEdit: Adding note', {
+      pitch,
+      time,
+      skipPrediction,
+      noteId: newNote.id
+    });
+
     state.setNotes(prev => {
       const updatedNotes = [...prev, newNote];
-      
+
       // 履歴に保存（同期的に実行）
       persistence.addToHistory(updatedNotes, `Add note ${newNote.id}`);
-      
+
       return updatedNotes;
     });
-    
+
     // 音声再生（即座に再生）
     if (state.audioEnabled && audio) {
       const result = await audio.playNote(pitch, Math.min(duration, 2), velocity);
     }
-    
+
     // 再生中の場合、リアルタイムでスケジュール
     if (state.isPlaying && isPlayingRef.current) {
       const currentTime = state.currentTime;
       const noteStartTime = newNote.time;
-      
+
       // ノートが現在の再生位置より後にある場合、スケジュール
       if (noteStartTime > currentTime) {
         const playbackStartTime = playbackStartTimeRef.current;
         const scheduledNoteStartTime = playbackStartTime + noteStartTime;
         const scheduledNoteEndTime = scheduledNoteStartTime + newNote.duration;
-        
+
         // ノート開始をスケジュール
         const startDelay = Math.max(0, (scheduledNoteStartTime - (audio ? audio.getCurrentTime() : 0)) * 1000);
         const startTimeout = setTimeout(async () => {
           if (!isPlayingRef.current) return;
-          
+
           const result = audio ? await audio.playScheduledNote(newNote.pitch, scheduledNoteStartTime, newNote.duration, newNote.velocity) : null;
           if (result) {
             state.setPlaybackNotes(prev => new Set([...prev, newNote.id]));
@@ -69,12 +79,12 @@ export function useMidiNoteEdit({
             });
           }
         }, startDelay);
-        
+
         // ノート終了をスケジュール
         const endDelay = Math.max(0, (scheduledNoteEndTime - (audio ? audio.getCurrentTime() : 0)) * 1000);
         const endTimeout = setTimeout(() => {
           if (!isPlayingRef.current) return;
-          
+
           state.setPlaybackNotes(prev => {
             const newSet = new Set(prev);
             newSet.delete(newNote.id);
@@ -82,17 +92,20 @@ export function useMidiNoteEdit({
           });
           activeAudioNodesRef.current.delete(newNote.id);
         }, endDelay);
-        
+
         // スケジュール情報を保存
         scheduledNotesRef.current.set(newNote.id, { startTimeout, endTimeout });
       }
     }
-    
+
     state.setLastInputTime(Date.now());
-    
-    // Ghost Text予測の処理
-    if (ghostText && ghostText.processMidiInput) {
+
+    // 🔴 NEW: skipPrediction=trueの場合は予測生成をスキップ
+    if (!skipPrediction && ghostText && ghostText.processMidiInput) {
       ghostText.processMidiInput(newNote);
+      console.log('🎵 useMidiNoteEdit: Ghost Text prediction triggered');
+    } else if (skipPrediction) {
+      console.log('🎵 useMidiNoteEdit: Ghost Text prediction skipped (skipPrediction=true)');
     }
     
     // 親コンポーネントに即座に通知
