@@ -32,6 +32,8 @@ const useMidiEditorState = (trackId = null) => {
   const [playbackStartTime, setPlaybackStartTime] = useState(0)
   const [playbackDuration, setPlaybackDuration] = useState(64) // 秒（TOTAL_DURATIONの代わりに直接指定）
   const [loopEnabled, setLoopEnabled] = useState(false)
+  const [loopStart, setLoopStart] = useState(0) // ループ開始位置（秒）
+  const [loopEnd, setLoopEnd] = useState(4) // ループ終了位置（秒）
   const [metronomeEnabled, setMetronomeEnabled] = useState(false)
   const [playbackNotes, setPlaybackNotes] = useState(new Set()) // 再生中のノート
   
@@ -156,6 +158,10 @@ const useMidiEditorState = (trackId = null) => {
     setPlaybackDuration,
     loopEnabled,
     setLoopEnabled,
+    loopStart,
+    setLoopStart,
+    loopEnd,
+    setLoopEnd,
     metronomeEnabled,
     setMetronomeEnabled,
     playbackNotes,

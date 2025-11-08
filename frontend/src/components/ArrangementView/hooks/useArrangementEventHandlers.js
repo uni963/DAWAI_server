@@ -84,8 +84,13 @@ export const useArrangementEventHandlers = ({
       setSelectedTracks(newSelection)
       setLastSelectedTrack(trackId)
     } else {
-      // 単一選択
-      if (!selectedTracks?.has(trackId)) {
+      // 単一選択（トグル機能付き）
+      if (selectedTracks?.has(trackId) && selectedTracks.size === 1) {
+        // すでに選択中のトラックを再クリック → 選択解除
+        setSelectedTracks(new Set())
+        setLastSelectedTrack(null)
+      } else {
+        // 新しいトラックをクリック → 単一選択
         setSelectedTracks(new Set([trackId]))
         setLastSelectedTrack(trackId)
       }
@@ -248,9 +253,20 @@ export const useArrangementEventHandlers = ({
     setSelectedTracks(new Set([trackId]))
     setLastSelectedTrack(trackId)
 
-    // トラックの詳細を開く（将来的な機能）
+    // MIDIエディターを開く
     console.log('🔍 Opening track details:', track.name)
-  }, [tracks, setSelectedTracks, setLastSelectedTrack])
+
+    // タブを開く処理
+    if (onTabChange) {
+      // ドラムトラックの場合は専用のタブを開く
+      if (track.subtype === 'drums') {
+        onTabChange(`drum-${track.id}`)
+      } else {
+        // その他のトラック（Piano, Bass, Synthesizer等）はMIDIエディターを開く
+        onTabChange(`tab-${track.id}`)
+      }
+    }
+  }, [tracks, setSelectedTracks, setLastSelectedTrack, onTabChange])
 
   // 選択されたトラックを開く
   const handleOpenSelectedTracks = useCallback(() => {
@@ -269,7 +285,7 @@ export const useArrangementEventHandlers = ({
         if (track.subtype === 'drums') {
           onTabChange(`drum-${track.id}`)
         } else {
-          onTabChange(`midi-${track.id}`)
+          onTabChange(`tab-${track.id}`)
         }
       }
     }

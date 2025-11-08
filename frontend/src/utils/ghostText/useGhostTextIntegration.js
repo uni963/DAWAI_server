@@ -13,7 +13,7 @@ export default function useGhostTextIntegration(midiEditor, options = {}) {
   });
   const [performanceMetrics, setPerformanceMetrics] = useState({});
   const [error, setError] = useState(null);
-  
+
   const systemRef = useRef(null);
   const midiEditorRef = useRef(midiEditor);
 
@@ -47,6 +47,7 @@ export default function useGhostTextIntegration(midiEditor, options = {}) {
               }
               break;
             case 'enabled':
+              console.log('🔧 Ghost Text: GhostTextSystem enabled event received', data);
               setIsEnabled(data.enabled);
               break;
             case 'prediction':
@@ -71,11 +72,14 @@ export default function useGhostTextIntegration(midiEditor, options = {}) {
           systemRef.current = system;
           setGhostTextSystem(system);
           setIsInitialized(true);
-          setIsEnabled(system.isEnabled());
-          
+          const currentEnabled = system.isEnabled();
+          console.log('🔧 Ghost Text: System initialized, enabled:', currentEnabled);
+          setIsEnabled(currentEnabled);
+
           // 初期設定
           if (options.autoEnable !== false) {
             system.enable();
+            setIsEnabled(true);
           }
         }
       } catch (err) {
@@ -151,26 +155,52 @@ export default function useGhostTextIntegration(midiEditor, options = {}) {
 
   // システム制御
   const enableGhostText = useCallback(() => {
+    console.log('🔧 Ghost Text: enableGhostText called');
     if (ghostTextSystem) {
-      ghostTextSystem.enable();
+      // 🔧 修正: イベントリスナー経由でのみstate更新（二重更新を防止）
+      ghostTextSystem.enable(); // → イベント 'enabled' { enabled: true } → setIsEnabled(true)
+
+      // 🔧 修正: 状態を即座に同期して確実に反映
+      const newState = ghostTextSystem.isEnabled();
+      console.log('🔧 Ghost Text: After enable, new state:', newState);
+      setIsEnabled(newState);
     }
   }, [ghostTextSystem]);
 
   const disableGhostText = useCallback(() => {
+    console.log('🔧 Ghost Text: disableGhostText called');
     if (ghostTextSystem) {
-      ghostTextSystem.disable();
+      // 🔧 修正: イベントリスナー経由でのみstate更新（二重更新を防止）
+      ghostTextSystem.disable(); // → イベント 'enabled' { enabled: false } → setIsEnabled(false)
+
+      // 🔧 修正: 状態を即座に同期して確実に反映
+      const newState = ghostTextSystem.isEnabled();
+      console.log('🔧 Ghost Text: After disable, new state:', newState);
+      setIsEnabled(newState);
     }
   }, [ghostTextSystem]);
 
   const toggleGhostText = useCallback(() => {
+    console.log('🔧 Ghost Text: toggleGhostText called');
     if (ghostTextSystem) {
-      if (isEnabled) {
-        ghostTextSystem.disable();
+      // 🔧 修正完了: GhostTextSystemに委譲し、イベントリスナー経由でのみstate更新
+      const currentState = ghostTextSystem.isEnabled();
+      console.log('🔧 Ghost Text: Current state:', currentState);
+
+      if (currentState) {
+        console.log('🔧 Ghost Text: Disabling...');
+        ghostTextSystem.disable(); // → イベント 'enabled' { enabled: false } → setIsEnabled(false)
       } else {
-        ghostTextSystem.enable();
+        console.log('🔧 Ghost Text: Enabling...');
+        ghostTextSystem.enable(); // → イベント 'enabled' { enabled: true } → setIsEnabled(true)
       }
+
+      // 🔧 修正: 状態を即座に同期して確実に反映（イベントリスナーが遅延する場合の対策）
+      const newState = ghostTextSystem.isEnabled();
+      console.log('🔧 Ghost Text: After toggle, new state:', newState);
+      setIsEnabled(newState);
     }
-  }, [ghostTextSystem, isEnabled]);
+  }, [ghostTextSystem]);
 
   // 設定の更新
   const updateSettings = useCallback((newSettings) => {
@@ -206,28 +236,28 @@ export default function useGhostTextIntegration(midiEditor, options = {}) {
     status,
     performanceMetrics,
     error,
-    
+
     // MIDIデータ更新
     handleMidiDataUpdate,
-    
+
     // ゴーストノート操作
     acceptGhostNote,
     acceptAllGhostNotes,
     showGhostNotes,
     hideGhostNotes,
-    
+
     // システム制御
     enableGhostText,
     disableGhostText,
     toggleGhostText,
-    
+
     // 設定とメトリクス
     updateSettings,
     resetMetrics,
     setGhostNoteOpacity,
     setGhostNoteColor,
-    
+
     // システムインスタンス（高度な操作用）
     ghostTextSystem
   };
-} 
+}

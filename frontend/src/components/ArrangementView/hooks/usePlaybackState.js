@@ -117,8 +117,11 @@ export const usePlaybackState = (projectManager, tracks) => {
   // 再生速度変更
   const handlePlaybackRateChange = useCallback((rate, audioState) => {
     setPlaybackRate(rate)
-    if (audioState.audioEngineRef.current) {
-      audioState.audioEngineRef.current.setPlaybackRate(rate)
+    if (audioState.unifiedAudioSystem && audioState.unifiedAudioSystem.setPlaybackRate) {
+      console.log('🎵 [PlaybackState] Setting playback rate:', rate)
+      audioState.unifiedAudioSystem.setPlaybackRate(rate)
+    } else {
+      console.warn('⚠️ [PlaybackState] Unified Audio System not available for playback rate change')
     }
   }, [])
 

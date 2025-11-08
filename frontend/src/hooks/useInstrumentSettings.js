@@ -90,23 +90,31 @@ const useInstrumentSettings = (trackId) => {
   const loadSettings = useCallback((trackId) => {
     const key = `instrument-settings-${trackId}`
     const saved = localStorage.getItem(key)
-    
+
     if (saved) {
       try {
         const data = JSON.parse(saved)
+
+        // 音楽理論設定が保存されている場合はログ出力
+        if (data.musicTheorySettings) {
+          console.log(`🎼 トラック ${trackId} の音楽理論設定を読み込み:`, data.musicTheorySettings)
+        }
+
         return {
           instrument: data.instrument || 'piano',
-          settings: data.settings || {}
+          settings: data.settings || {},
+          musicTheorySettings: data.musicTheorySettings || null
         }
       } catch (error) {
         console.error('Failed to parse instrument settings:', error)
       }
     }
-    
+
     // デフォルト設定を返す
     return {
       instrument: 'piano',
-      settings: getDefaultSettings('piano')
+      settings: getDefaultSettings('piano'),
+      musicTheorySettings: null
     }
   }, [getDefaultSettings])
 
@@ -178,8 +186,10 @@ const useInstrumentSettings = (trackId) => {
 
   // 設定パネルを開く
   const openSettingsPanel = useCallback(() => {
+    console.log('🔧 Debug: openSettingsPanel called', { trackId, showSettingsPanel })
     setShowSettingsPanel(true)
-  }, [])
+    console.log('🔧 Debug: setShowSettingsPanel(true) called')
+  }, [trackId, showSettingsPanel])
 
   // 設定パネルを閉じる
   const closeSettingsPanel = useCallback(() => {

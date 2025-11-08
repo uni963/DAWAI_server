@@ -31,7 +31,6 @@ class EventHandlersManager {
 
     // モーダル状態管理
     this.setShowGenreSelector = dependencies.setShowGenreSelector
-    this.setShowDemoSongBrowser = dependencies.setShowDemoSongBrowser
 
     // その他の状態
     this.setSmartSuggestionsEnabled = dependencies.setSmartSuggestionsEnabled
@@ -180,6 +179,33 @@ class EventHandlersManager {
         }
       }
 
+      // 🚀 FIX: トラック追加時にタブを即座に表示するため、デバウンスをバイパスして即座に状態を更新
+      console.log('🚀 [ADD TRACK FIX] Immediately updating ALL states to show new tab')
+
+      // 1. タブとトラックの状態を即座に更新
+      const newTabs = this.projectManager.getTabs()
+      const newTracks = this.projectManager.getTracks()
+      console.log('🚀 [ADD TRACK FIX] New tabs count:', newTabs.length, 'New tracks count:', newTracks.length)
+
+      this.setTabs(newTabs)
+      this.setTracks(newTracks)
+
+      // 2. keepInArrangementがfalseの場合のみ新しいタブをアクティブにする
+      if (!keepInArrangement) {
+        const newTabId = `tab-${newTrack.id}`
+        console.log('🚀 [ADD TRACK FIX] Switching to new tab immediately:', newTabId)
+        this.setActiveTab(newTabId)
+
+        // 3. プロジェクト状態も即座に更新（デバウンスをバイパス）
+        const currentProject = this.projectManager.getProject()
+        this.setProject(currentProject)
+      }
+
+      // 4. 強制再レンダリングで確実にUI更新
+      console.log('🚀 [ADD TRACK FIX] Forcing rerender to ensure UI update')
+      this.setForceRerender(prev => prev + 1)
+
+      // 5. プロジェクト全体の状態は後からデバウンス処理で再度更新（念のため）
       this.updateProjectState()
       return newTrack
     }
@@ -348,8 +374,6 @@ class EventHandlersManager {
       } else {
         console.error('❌ No first track ID found for tab switching')
       }
-
-      this.setShowDemoSongBrowser(false)
 
       // 🔧 DEMO SONG FIX: updateProjectState後にタブ切り替えを再度実行
       // updateProjectState()のデバウンス処理の後にタブ切り替えを確実に実行
@@ -560,17 +584,41 @@ class EventHandlersManager {
 
   /**
    * キーボードイベントハンドラー
+   * 🔧 FIX: Bass Track再生ライン問題修正
+   * - MIDIエディタのタブがアクティブな場合は window.midiEditorPlayPause[trackId] を呼び出す
+   * - Arrangement Viewの場合は統一音声システムの再生制御を呼び出す（将来実装）
    */
   handleKeyDown(event) {
     // スペースキーでの再生/停止切り替え
     if (event.code === 'Space' && !event.target.matches('input, textarea, [contenteditable]')) {
       event.preventDefault()
 
-      if (window.unifiedAudioSystem && window.unifiedAudioSystem.isInitialized) {
-        try {
-          window.unifiedAudioSystem.togglePlayback()
-        } catch (error) {
-          console.warn('⚠️ Failed to toggle playback:', error)
+      // アクティブタブを取得してMIDIエディタかどうか判定
+      const activeTab = this.projectManager?.getActiveTab()
+      console.log('🎹 [KeyDown] Space key pressed, activeTab:', activeTab?.id, activeTab?.trackId)
+
+      if (activeTab && activeTab.trackId && activeTab.id !== 'arrangement') {
+        // MIDIエディタのタブがアクティブな場合
+        console.log('🎹 [KeyDown] MIDI Editor tab is active, trying window.midiEditorPlayPause...')
+
+        if (window.midiEditorPlayPause && window.midiEditorPlayPause[activeTab.trackId]) {
+          try {
+            console.log('✅ [KeyDown] Calling window.midiEditorPlayPause for trackId:', activeTab.trackId)
+            window.midiEditorPlayPause[activeTab.trackId]()
+          } catch (error) {
+            console.error('❌ [KeyDown] Failed to call midiEditorPlayPause:', error)
+          }
+        } else {
+          console.warn('⚠️ [KeyDown] window.midiEditorPlayPause not found for trackId:', activeTab.trackId)
+          console.warn('⚠️ [KeyDown] Available trackIds:', window.midiEditorPlayPause ? Object.keys(window.midiEditorPlayPause) : 'undefined')
+        }
+      } else {
+        // Arrangement Viewがアクティブな場合（将来の実装用）
+        console.log('🎼 [KeyDown] Arrangement View is active')
+
+        if (window.unifiedAudioSystem && window.unifiedAudioSystem.isInitialized) {
+          // 将来的にArrangement View用のtogglePlayback()を実装予定
+          console.warn('⚠️ [KeyDown] Arrangement View playback control not yet implemented')
         }
       }
     }

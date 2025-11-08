@@ -4,6 +4,22 @@
 
 このディレクトリには、Phi-2モデルベースの新しいGhost Text MIDI予測システムが実装されています。既存のMagentaモデルやfallbackシステムとは別に動作し、高速な予測機能を提供します。
 
+## ⚠️ 重要：2つのGhost Textシステム
+
+現在、プロジェクトには2つの独立したGhost Textシステムが存在します：
+
+### 1. **Magentaベースシステム（現在使用中）** ✅
+- **場所**: `src/components/EnhancedMidiEditor.jsx`
+- **エンジン**: `src/utils/magentaGhostTextEngine.js`
+- **特徴**: 音楽理論統合、MusicTheorySystem連携
+- **ステータス**: PR #148で強化済み、実運用中
+
+### 2. **Phi-2ベースシステム（開発版・未使用）** 🚧
+- **場所**: `src/components/MIDIEditor/Phi2MidiEditor.jsx` ⭐ **リネーム済み**
+- **エンジン**: このディレクトリ内の各種ファイル
+- **特徴**: FastAPI統合、高速予測、要約ベース
+- **ステータス**: 実装完了済みだが未配置
+
 ## 実装完了状況
 
 ### ✅ 完了済みタスク
@@ -30,7 +46,7 @@
 - [x] **GhostTextSystem**: 統合システムクラス
 - [x] **useGhostTextIntegration**: Reactフック
 - [x] **InstrumentSettingsPanel統合**: AIモデル選択と要約管理
-- [x] **EnhancedMidiEditor統合**: 既存システムとの統合
+- [x] **Phi2MidiEditor統合**: Phi-2システムとの統合
 
 ## ファイル構成
 
@@ -93,7 +109,8 @@ python -m uvicorn ghost_text.service:app --reload --port 8000
 
 ### 2. フロントエンド統合
 ```javascript
-// EnhancedMidiEditor内で自動統合済み
+// Phi2MidiEditor内で自動統合済み（未使用）
+// 現在使用中: EnhancedMidiEditor.jsx（Magentaベース）
 // InstrumentSettingsPanelから制御可能
 ```
 

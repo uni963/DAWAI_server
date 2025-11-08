@@ -1,5 +1,6 @@
 import { Button } from '../ui/button.jsx'
 import { Slider } from '../ui/slider.jsx'
+import { Badge } from '../ui/badge.jsx'
 import { useState, useEffect } from 'react'
 import {
   Play,
@@ -10,14 +11,14 @@ import {
   ZapOff,
   Eye,
   EyeOff,
-  Target,
+  Repeat,
   Volume2,
   VolumeX,
-  Undo,
+  Undo2,
+  Redo2,
   Trash2,
   Sliders
 } from 'lucide-react'
-import InstrumentSelector from './InstrumentSelector.jsx'
 
 const MidiEditorToolbar = ({
   // 再生関連
@@ -25,44 +26,47 @@ const MidiEditorToolbar = ({
   onPlayPause,
   onStop,
   notesLength,
-  
+
   // 操作関連
   onUndo,
   canUndo,
+  onRedo,
+  canRedo,
   onShowDeleteConfirm,
-  
+
   // オーディオ関連
   audioEnabled,
   onToggleAudio,
-  
+
   // テンポ関連
   tempo,
   onTempoChange,
-  
+
   // ループ・メトロノーム関連
   loopEnabled,
   onToggleLoop,
   metronomeEnabled,
   onToggleMetronome,
-  
+
   // ズーム関連
   zoom,
   onZoomChange,
-  
+
   // Ghost Text関連
   ghostTextEnabled,
   onToggleGhostText,
   showGhostText,
   onToggleShowGhostText,
-  
+
+  // 承認待ちノート数
+  pendingNotesCount = 0,
+
   // 設定関連
   showSettings,
   onToggleSettings,
-  
-  // 音色関連
-  currentInstrument,
-  onInstrumentChange,
-  onOpenInstrumentSettings
+
+  // 音色設定関連
+  onOpenSoundSettings
 }) => {
   // BPM変更時のハイライト状態
   const [tempoHighlight, setTempoHighlight] = useState(false)
@@ -113,8 +117,25 @@ const MidiEditorToolbar = ({
         <Button
           variant="ghost"
           size="sm"
-          onClick={onPlayPause}
-          disabled={notesLength === 0}
+          onClick={(e) => {
+            // 🎸 [Bass Track Debug] MIDIエディタ再生ボタン押下ログ
+            console.log('🎸 [Bass Track Debug] ==================== MIDI EDITOR PLAY BUTTON PRESSED ====================')
+            console.log('🎸 [Bass Track Debug] MidiEditorToolbar play button pressed at:', new Date().toISOString())
+            console.log('🎸 [Bass Track Debug] Current isPlaying state:', isPlaying)
+            console.log('🎸 [Bass Track Debug] Will trigger:', isPlaying ? 'PAUSE' : 'PLAY')
+            console.log('🎸 [Bass Track Debug] Notes length:', notesLength)
+            console.log('🎸 [Bass Track Debug] Current tempo:', tempo)
+            console.log('🎸 [Bass Track Debug] Audio enabled:', audioEnabled)
+            console.log('🔧 [Event Debug] Event object received:', e ? 'YES' : 'NO')
+            console.log('🔧 [Event Debug] Event type:', e?.type || 'undefined')
+            console.log('🔧 [Event Debug] Event target:', e?.target?.tagName || 'undefined')
+            console.log('🎸 [Bass Track Debug] Calling onPlayPause with event...')
+            console.log('🎸 [Bass Track Debug] ========================================================================')
+
+            onPlayPause(e)
+          }}
+          disabled={false}
+          title={notesLength === 0 ? "空トラックでリアルタイム録音" : "再生"}
           className="hover:bg-gray-700 focus:bg-gray-700 h-10 w-10 p-0"
         >
           {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
@@ -133,10 +154,20 @@ const MidiEditorToolbar = ({
           size="sm"
           onClick={onUndo}
           disabled={!canUndo}
-          title="巻き戻し (Ctrl+Z)"
+          title="元に戻す (Ctrl+Z)"
           className="h-10 w-10 p-0"
         >
-          <Undo className="h-5 w-5" />
+          <Undo2 className="h-5 w-5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onRedo}
+          disabled={!canRedo}
+          title="やり直す (Ctrl+Y)"
+          className="h-10 w-10 p-0"
+        >
+          <Redo2 className="h-5 w-5" />
         </Button>
         <Button
           variant="ghost"
@@ -157,20 +188,24 @@ const MidiEditorToolbar = ({
         >
           {audioEnabled ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
         </Button>
-        
-        {/* 音色選択 */}
-        <InstrumentSelector
-          currentInstrument={currentInstrument}
-          onInstrumentChange={onInstrumentChange}
-        />
-        
-        {/* 音色設定ボタン */}
+
         <Button
           variant="ghost"
           size="sm"
-          onClick={onOpenInstrumentSettings}
-          className="text-blue-400 hover:text-blue-300 h-10 w-10 p-0"
+          onClick={(e) => {
+            console.log('🔧 Debug MidiEditorToolbar: Sound settings button clicked')
+            console.log('🔧 Debug MidiEditorToolbar: onOpenSoundSettings type:', typeof onOpenSoundSettings)
+            console.log('🔧 Debug MidiEditorToolbar: onOpenSoundSettings:', onOpenSoundSettings)
+            if (onOpenSoundSettings) {
+              console.log('🔧 Debug MidiEditorToolbar: Calling onOpenSoundSettings...')
+              onOpenSoundSettings()
+              console.log('🔧 Debug MidiEditorToolbar: onOpenSoundSettings called successfully')
+            } else {
+              console.error('🔧 Debug MidiEditorToolbar: onOpenSoundSettings is not available!')
+            }
+          }}
           title="音色設定"
+          className="text-blue-400 hover:text-blue-300 h-10 w-10 p-0"
         >
           <Sliders className="h-5 w-5" />
         </Button>
@@ -273,9 +308,10 @@ const MidiEditorToolbar = ({
             variant="ghost"
             size="sm"
             onClick={onToggleLoop}
-            className={`${loopEnabled ? 'text-green-400' : 'text-gray-400'} h-10 w-10 p-0`}
+            className={`${loopEnabled ? 'text-blue-400 bg-blue-900/30' : 'text-white hover:bg-gray-700'} h-10 w-10 p-0`}
+            title="ループ"
           >
-            <Target className="h-5 w-5" />
+            <Repeat className="h-5 w-5" />
           </Button>
           <Button
             variant="ghost"
@@ -301,12 +337,38 @@ const MidiEditorToolbar = ({
           <span className="text-xs text-gray-400 w-6">{zoom.toFixed(1)}x</span>
         </div>
 
+        {/* AI Pending Indicator */}
+        <div className="flex items-center space-x-1">
+          <span className="text-xs text-gray-400">AI Pending:</span>
+          <div className={`
+            px-2 py-1 text-sm rounded text-center font-mono min-w-[2.5rem]
+            ${pendingNotesCount > 0
+              ? 'bg-orange-900/40 border border-orange-500/50 text-orange-300 animate-pulse'
+              : 'bg-gray-800 border border-gray-600 text-gray-500'
+            }
+          `}>
+            {pendingNotesCount}
+          </div>
+        </div>
+
         {/* Ghost Text コントロール */}
         <div className="flex items-center space-x-1">
           <Button
             variant="ghost"
             size="sm"
-            onClick={onToggleGhostText}
+            onClick={() => {
+              console.log('⚡ Ghost Text: Toggle button clicked')
+              console.log('⚡ Ghost Text: Current enabled state:', ghostTextEnabled)
+              console.log('⚡ Ghost Text: onToggleGhostText type:', typeof onToggleGhostText)
+              if (onToggleGhostText) {
+                console.log('⚡ Ghost Text: Calling onToggleGhostText...')
+                onToggleGhostText()
+                console.log('⚡ Ghost Text: New enabled state will be:', !ghostTextEnabled)
+              } else {
+                console.warn('⚡ Ghost Text: onToggleGhostText is not defined!')
+              }
+            }}
+            title={`Ghost Text AI予測: ${ghostTextEnabled ? 'ON' : 'OFF'} (クリックで切り替え)`}
             className={`${ghostTextEnabled ? 'text-purple-400' : 'text-gray-400'} h-10 w-10 p-0`}
           >
             {ghostTextEnabled ? <Zap className="h-5 w-5" /> : <ZapOff className="h-5 w-5" />}
@@ -314,7 +376,19 @@ const MidiEditorToolbar = ({
           <Button
             variant="ghost"
             size="sm"
-            onClick={onToggleShowGhostText}
+            onClick={() => {
+              console.log('👁️ Ghost Text: Show toggle button clicked')
+              console.log('👁️ Ghost Text: Current show state:', showGhostText)
+              console.log('👁️ Ghost Text: onToggleShowGhostText type:', typeof onToggleShowGhostText)
+              if (onToggleShowGhostText) {
+                console.log('👁️ Ghost Text: Calling onToggleShowGhostText...')
+                onToggleShowGhostText()
+                console.log('👁️ Ghost Text: New show state will be:', !showGhostText)
+              } else {
+                console.warn('👁️ Ghost Text: onToggleShowGhostText is not defined!')
+              }
+            }}
+            title={`Ghost Text表示: ${showGhostText ? 'ON' : 'OFF'} (クリックで切り替え)`}
             className={`${showGhostText ? 'text-purple-400' : 'text-gray-400'} h-10 w-10 p-0`}
           >
             {showGhostText ? <Eye className="h-5 w-5" /> : <EyeOff className="h-5 w-5" />}

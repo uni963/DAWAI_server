@@ -9,6 +9,7 @@ const useGhostText = (trackId, appSettings) => {
   // Ghost Text関連状態
   const [ghostTextEnabled, setGhostTextEnabled] = useState(appSettings?.midiEditor?.ghostTextEnabled ?? true)
   const [ghostPredictions, setGhostPredictions] = useState([])
+  const [phraseNotes, setPhraseNotes] = useState([]) // 🔧 Problem 3修正: フレーズ予測ストレージ
   const [showGhostText, setShowGhostText] = useState(true)
   const [ghostTextSettings, setGhostTextSettings] = useState({
     predictionThreshold: appSettings?.midiEditor?.predictionThreshold ?? 0.7,
@@ -34,6 +35,9 @@ const useGhostText = (trackId, appSettings) => {
   
   // モデル関連状態
   const [currentModel, setCurrentModel] = useState(appSettings?.midiEditor?.currentModel ?? 'musicRnn')
+  // 🔧 Phase 2修正: 初期化フラグを追加して重複初期化を防止
+  const [isInitialized, setIsInitialized] = useState(false)
+  const [isInitializing, setIsInitializing] = useState(false)
   // 重複ログを防ぐため、初期化時のみログ出力
   const isInitializedRef = useRef(false)
   if (!isInitializedRef.current) {
@@ -46,71 +50,161 @@ const useGhostText = (trackId, appSettings) => {
     melodyRnn: 'ready',
     fallback: 'ready'
   })
-  
-  // Ghost Text Engineの初期化（重複初期化を防ぐ）
+
+  // 🔴 [NEW] One-by-one approval tracking (Issue #146)
+  const [nextGhostIndex, setNextGhostIndex] = useState(0)  // Index of next ghost note to approve
+  const [nextPhraseIndex, setNextPhraseIndex] = useState(0)  // Index of next phrase note to approve
+  const [approvalHistory, setApprovalHistory] = useState([]) // Track approved notes (max 50)
+  const [lastApprovalSource, setLastApprovalSource] = useState(null) // Track if from 'phrase' or 'ghost'
+
+  // 🔧 Phase 2修正: エンジン初期化とイベントリスナーの設定（一度だけ実行）
   useEffect(() => {
+    // 既に初期化済み、または初期化中の場合はスキップ
+    if (isInitializing || isInitialized) {
+      console.log('🎵 useGhostText: Initialization skipped (isInitializing:', isInitializing, 'isInitialized:', isInitialized, ')')
+      return
+    }
+
+    console.log('⏱️ [PERF] Ghost Text Engine 初期化開始')
+    const initStartTime = performance.now()
+    setIsInitializing(true)
+
     if (!window.magentaGhostTextEngine) {
       window.magentaGhostTextEngine = new magentaGhostTextEngine()
     }
-    
+
     const engine = window.magentaGhostTextEngine
-    
-    // 設定を更新
-    console.log('🎵 useGhostText: Updating engine settings with currentModel:', currentModel)
-    engine.updateSettings({
-      ...ghostTextSettings,
-      currentModel: currentModel
-    })
-    
+
     // モデルタイプを明示的に設定
     engine.modelType = currentModel
     console.log('🎵 useGhostText: Set engine.modelType to:', currentModel)
-    
-    // 初期化
-    engine.initialize().then(() => {
-      setGhostTextStatus({
-        isInitialized: true,
-        isActive: engine.isActive,
-        modelType: engine.modelType
-      })
-    })
-    
+
     // イベントリスナーの設定
     const handleStatusChange = (eventType, data) => {
       if (eventType === 'status') {
         setGhostTextStatus(data)
       }
     }
-    
+
     const handlePrediction = (eventType, data) => {
       if (eventType === 'prediction') {
         // data.predictionsが配列であることを確認
         if (Array.isArray(data.predictions)) {
           setGhostPredictions(data.predictions)
+          // 🔴 [NEW] Reset index when new predictions are generated
+          if (data.predictions.length > 0) {
+            setNextGhostIndex(0)
+            console.log('🎯 Ghost predictions reset: nextGhostIndex → 0, count:', data.predictions.length)
+          } else {
+            setNextGhostIndex(0)
+          }
         } else {
           console.warn('Ghost Text: predictions is not an array:', data.predictions)
           setGhostPredictions([])
+          setNextGhostIndex(0)
+        }
+      }
+      // 🔧 Problem 3修正: フレーズ予測イベントリスナー
+      if (eventType === 'phrasePrediction') {
+        console.log('🎵 useGhostText: Received phrasePrediction event:', data.phraseNotes?.length || 0)
+        if (Array.isArray(data.phraseNotes)) {
+          setPhraseNotes(data.phraseNotes)
+          // 🔴 [NEW] Reset phrase index when new phrase predictions are generated
+          if (data.phraseNotes.length > 0) {
+            setNextPhraseIndex(0)
+            console.log('🎯 Phrase predictions reset: nextPhraseIndex → 0, count:', data.phraseNotes.length)
+          } else {
+            setNextPhraseIndex(0)
+          }
+        } else {
+          console.warn('Ghost Text: phraseNotes is not an array:', data.phraseNotes)
+          setPhraseNotes([])
+          setNextPhraseIndex(0)
         }
       }
     }
-    
+
     const handlePerformanceUpdate = (eventType, data) => {
       if (eventType === 'metrics') {
         setPerformanceMetrics(data)
       }
     }
-    
+
     engine.addListener(handleStatusChange)
     engine.addListener(handlePrediction)
     engine.addListener(handlePerformanceUpdate)
-    
+
+    // 初期化
+    engine.initialize().then((success) => {
+      const initEndTime = performance.now()
+      const initDuration = ((initEndTime - initStartTime) / 1000).toFixed(2)
+      console.log(`⏱️ [PERF] Ghost Text Engine 初期化完了: ${initDuration}秒`)
+      console.log('✅ 初期化結果:', { success, isInitialized: engine.isInitialized })
+
+      setGhostTextStatus({
+        isInitialized: true,
+        isActive: engine.isActive,
+        modelType: engine.modelType
+      })
+      setIsInitialized(true)
+      setIsInitializing(false)
+
+      // ghostTextEnabledの初期値を初期化完了後に確実に反映
+      console.log('🎵 Ghost Text有効化チェック:', {
+        ghostTextEnabledSetting: appSettings?.midiEditor?.ghostTextEnabled,
+        engineIsActive: engine.isActive
+      })
+
+      if (appSettings?.midiEditor?.ghostTextEnabled !== undefined) {
+        const shouldBeActive = appSettings.midiEditor.ghostTextEnabled
+        console.log('🎵 Ghost Text設定値に基づいて状態を設定:', shouldBeActive)
+        engine.setActive(shouldBeActive)
+
+        // 状態を確実に同期
+        const finalStatus = engine.getStatus()
+        console.log('🎵 最終状態:', finalStatus)
+        setGhostTextStatus(finalStatus)
+
+        if (shouldBeActive) {
+          console.log('🤖 Ghost Text機能を有効化完了')
+        } else {
+          console.log('🔒 Ghost Text機能を無効化状態で維持')
+        }
+      } else {
+        console.log('⚠️ Ghost Text設定が未定義のため、デフォルト状態を維持')
+      }
+    }).catch(error => {
+      console.error('❌ Ghost Text Engine 初期化エラー:', error)
+      console.error('❌ Error stack:', error.stack)
+      setIsInitializing(false)
+    })
+
     // クリーンアップ
     return () => {
       engine.removeListener(handleStatusChange)
       engine.removeListener(handlePrediction)
       engine.removeListener(handlePerformanceUpdate)
     }
-  }, [currentModel, ghostTextSettings])
+  }, []) // 🔧 Phase 2修正: 依存配列を空にして一度だけ実行
+
+  // 🔧 Phase 2修正: 設定更新用の別useEffect（初期化なし）
+  useEffect(() => {
+    if (!isInitialized || !window.magentaGhostTextEngine) {
+      return
+    }
+
+    const engine = window.magentaGhostTextEngine
+
+    // 設定のみを更新（初期化は行わない）
+    console.log('🎵 useGhostText: Updating engine settings (no initialization):', {
+      currentModel,
+      ghostTextSettings
+    })
+    engine.updateSettings({
+      ...ghostTextSettings,
+      currentModel: currentModel
+    })
+  }, [currentModel, ghostTextSettings, isInitialized])
 
   // ghostTextEnabledの変更を監視してアクティブ状態を更新
   useEffect(() => {
@@ -119,13 +213,13 @@ const useGhostText = (trackId, appSettings) => {
     }
   }, [ghostTextEnabled, ghostTextStatus.isInitialized])
 
-  // appSettingsの変更を監視して設定を更新
+  // 🔧 Phase 2修正: appSettingsの変更を監視して設定を更新（初期化なし）
   useEffect(() => {
-    console.log('🔍 [DEBUG useGhostText] useEffect実行 - appSettings.midiEditor:', appSettings?.midiEditor)
-    if (!appSettings?.midiEditor) {
-      console.log('🔍 [DEBUG useGhostText] appSettings.midiEditorがないためreturn')
+    if (!isInitialized || !appSettings?.midiEditor) {
       return
     }
+
+    console.log('🔍 [DEBUG useGhostText] useEffect実行 - appSettings.midiEditor:', appSettings?.midiEditor)
 
     const midiEditorSettings = appSettings.midiEditor
     console.log('🔍 [DEBUG useGhostText] midiEditorSettings:', midiEditorSettings)
@@ -165,7 +259,7 @@ const useGhostText = (trackId, appSettings) => {
       }
     }
 
-    // モデルの更新（changeModelが定義された後に実行）
+    // モデルの更新（初期化なし、モデル切り替えのみ）
     if (midiEditorSettings.currentModel &&
         midiEditorSettings.currentModel !== currentModel) {
       console.log('🔍 [DEBUG useGhostText] currentModel更新開始:', midiEditorSettings.currentModel, '現在:', currentModel)
@@ -223,19 +317,43 @@ const useGhostText = (trackId, appSettings) => {
 
       updateModel()
     }
-  }, [appSettings?.midiEditor, ghostTextEnabled, currentModel])
+  }, [appSettings?.midiEditor, currentModel, isInitialized]) // 🔧 Phase 2修正: isInitializedを追加
 
-  // Ghost Text有効化/無効化の切り替え
+  // 🔧 修正: Ghost Text有効化/無効化の切り替え
+  // 問題: 依存配列にghostTextEnabledが含まれていたため、古いクロージャー値を参照していた
+  // 解決: 依存配列から削除し、setGhostTextEnabledの関数形式のみを使用
   const toggleGhostText = useCallback(() => {
-    if (window.magentaGhostTextEngine) {
-      window.magentaGhostTextEngine.setActive(!ghostTextEnabled)
-    }
-    setGhostTextEnabled(prev => !prev)
-  }, [ghostTextEnabled, trackId])
+    console.log('🎵 toggleGhostText: Function called')
+
+    setGhostTextEnabled(prev => {
+      const newValue = !prev
+      console.log('🎵 toggleGhostText: State updating from', prev, 'to', newValue)
+
+      // エンジンの状態を更新
+      if (window.magentaGhostTextEngine) {
+        console.log('🎵 toggleGhostText: Calling magentaGhostTextEngine.setActive with:', newValue)
+        window.magentaGhostTextEngine.setActive(newValue)
+
+        // 🔧 修正: 状態を即座に同期して確実に反映
+        const currentStatus = window.magentaGhostTextEngine.getStatus()
+        console.log('🎵 toggleGhostText: Engine status after setActive:', currentStatus)
+        setGhostTextStatus(currentStatus)
+      } else {
+        console.warn('🎵 toggleGhostText: magentaGhostTextEngine is not available!')
+      }
+
+      return newValue
+    })
+  }, []) // 🔧 修正: 依存配列からghostTextEnabledとtrackIdを削除
 
   // Ghost Text表示の切り替え
   const toggleShowGhostText = useCallback(() => {
-    setShowGhostText(prev => !prev)
+    console.log('👁️ toggleShowGhostText: Function called')
+    console.log('👁️ toggleShowGhostText: Current showGhostText:', showGhostText)
+    setShowGhostText(prev => {
+      console.log('👁️ toggleShowGhostText: State updating from', prev, 'to', !prev)
+      return !prev
+    })
   }, [])
 
   // Ghost Text設定の更新
@@ -357,6 +475,261 @@ const useGhostText = (trackId, appSettings) => {
     }
   }, [ghostPredictions, trackId])
 
+  // 🔴 Problem 1修正: フレーズ予測専用採用関数
+  const acceptAllPhrasePredictions = useCallback((notes = [], onNoteAdd) => {
+    console.log('🎵 acceptAllPhrasePredictions: 実行開始', {
+      phraseNotesCount: phraseNotes.length,
+      currentNotesCount: notes.length,
+      onNoteAddExists: !!onNoteAdd
+    })
+
+    if (phraseNotes.length === 0) {
+      console.warn('⚠️ acceptAllPhrasePredictions: フレーズ予測が存在しません')
+      return
+    }
+
+    if (!onNoteAdd) {
+      console.error('❌ acceptAllPhrasePredictions: onNoteAdd関数が提供されていません')
+      return
+    }
+
+    // 基準時間（最後のノートの終了時刻）
+    const baseTime = notes.length > 0
+      ? Math.max(...notes.map(n => n.time + n.duration))
+      : 0
+
+    console.log('🎵 acceptAllPhrasePredictions: 基準時間=', baseTime)
+
+    // 全フレーズ予測を適用
+    let addedCount = 0
+    phraseNotes.forEach((prediction, index) => {
+      try {
+        // 予測のtiming情報を使用して正確な時間を計算
+        const noteTime = baseTime + (prediction.timing || 0)
+
+        // 休符の場合はスキップ（音を出さない）
+        if (prediction.isRest) {
+          console.log(`🎵 acceptAllPhrasePredictions: [${index}] 休符のためスキップ`)
+          return
+        }
+
+        // ノート追加
+        onNoteAdd(
+          prediction.pitch,
+          noteTime,
+          prediction.duration || 0.25,
+          prediction.velocity || 0.8
+        )
+
+        addedCount++
+        console.log(`✅ acceptAllPhrasePredictions: [${index}] ノート追加成功`, {
+          pitch: prediction.pitch,
+          time: noteTime,
+          duration: prediction.duration,
+          velocity: prediction.velocity
+        })
+      } catch (error) {
+        console.error(`❌ acceptAllPhrasePredictions: [${index}] ノート追加エラー:`, error)
+      }
+    })
+
+    console.log(`🎵 acceptAllPhrasePredictions: 完了 (${addedCount}/${phraseNotes.length}ノート追加)`)
+
+    // フレーズ予測をクリア
+    setPhraseNotes([])
+
+    // エンジン側のフレーズ予測もクリア
+    if (window.magentaGhostTextEngine) {
+      window.magentaGhostTextEngine.clearPhrasePrediction()
+    }
+
+    console.log('🎵 acceptAllPhrasePredictions: フレーズ予測クリア完了')
+  }, [phraseNotes])
+
+  // 🔴 [NEW] Accept next single ghost note with one-by-one tracking (Issue #146)
+  const acceptNextGhostNote = useCallback((notes = [], onNoteAdd) => {
+    console.log('🎯 acceptNextGhostNote: Processing', {
+      nextGhostIndex,
+      ghostPredictionsCount: ghostPredictions.length,
+      hasOnNoteAdd: !!onNoteAdd
+    })
+
+    // Check if there are predictions available
+    if (ghostPredictions.length === 0 || nextGhostIndex >= ghostPredictions.length) {
+      console.warn('⚠️ acceptNextGhostNote: No predictions available or index out of range')
+      return { success: false, message: 'No predictions available' }
+    }
+
+    const prediction = ghostPredictions[nextGhostIndex]
+    const baseTime = notes.length > 0
+      ? Math.max(...notes.map(n => n.time + n.duration))
+      : 0
+    const noteTime = baseTime + (prediction.timing || 0)
+
+    // Skip rests (no sound, but advance index)
+    if (prediction.isRest) {
+      console.log(`🎯 acceptNextGhostNote: [${nextGhostIndex}] Skipping rest`)
+      setNextGhostIndex(prev => prev + 1)
+      return { success: true, skipped: true, message: 'Rest skipped' }
+    }
+
+    // Add the note
+    if (onNoteAdd) {
+      onNoteAdd(
+        prediction.pitch,
+        noteTime,
+        prediction.duration,
+        prediction.velocity
+      )
+      console.log(`✅ acceptNextGhostNote: [${nextGhostIndex}] Note added`, {
+        pitch: prediction.pitch,
+        time: noteTime
+      })
+    }
+
+    // Track in approval history (max 50)
+    setApprovalHistory(prev => {
+      const newHistory = [...prev, {
+        index: nextGhostIndex,
+        noteId: `ghost-${nextGhostIndex}-${Date.now()}`,
+        pitch: prediction.pitch,
+        time: noteTime,
+        duration: prediction.duration,
+        source: 'ghost'
+      }]
+      // Keep only last 50 items
+      return newHistory.slice(-50)
+    })
+
+    setLastApprovalSource('ghost')
+
+    // Advance to next index
+    setNextGhostIndex(prev => {
+      const newIndex = prev + 1
+      console.log(`🎯 acceptNextGhostNote: nextGhostIndex advanced ${prev} → ${newIndex}`)
+      return newIndex
+    })
+
+    return { success: true, message: 'Note approved' }
+  }, [ghostPredictions, nextGhostIndex])
+
+  // 🔴 [NEW] Accept next single phrase note with tracking (Issue #146)
+  const acceptNextPhraseNote = useCallback((notes = [], onNoteAdd) => {
+    console.log('🎯 acceptNextPhraseNote: Processing', {
+      nextPhraseIndex,
+      phraseNotesCount: phraseNotes.length,
+      hasOnNoteAdd: !!onNoteAdd
+    })
+
+    // Check if there are predictions available
+    if (phraseNotes.length === 0 || nextPhraseIndex >= phraseNotes.length) {
+      console.warn('⚠️ acceptNextPhraseNote: No phrase predictions available or index out of range')
+      return { success: false, message: 'No phrase predictions available' }
+    }
+
+    const prediction = phraseNotes[nextPhraseIndex]
+    const baseTime = notes.length > 0
+      ? Math.max(...notes.map(n => n.time + n.duration))
+      : 0
+    const noteTime = baseTime + (prediction.timing || 0)
+
+    // Skip rests
+    if (prediction.isRest) {
+      console.log(`🎯 acceptNextPhraseNote: [${nextPhraseIndex}] Skipping rest`)
+      setNextPhraseIndex(prev => prev + 1)
+      return { success: true, skipped: true, message: 'Rest skipped' }
+    }
+
+    // Add the note
+    if (onNoteAdd) {
+      onNoteAdd(
+        prediction.pitch,
+        noteTime,
+        prediction.duration || 0.25,
+        prediction.velocity || 0.8
+      )
+      console.log(`✅ acceptNextPhraseNote: [${nextPhraseIndex}] Note added`, {
+        pitch: prediction.pitch,
+        time: noteTime
+      })
+    }
+
+    // Track in approval history
+    setApprovalHistory(prev => {
+      const newHistory = [...prev, {
+        index: nextPhraseIndex,
+        noteId: `phrase-${nextPhraseIndex}-${Date.now()}`,
+        pitch: prediction.pitch,
+        time: noteTime,
+        duration: prediction.duration || 0.25,
+        source: 'phrase'
+      }]
+      return newHistory.slice(-50)
+    })
+
+    setLastApprovalSource('phrase')
+
+    // Advance to next index
+    setNextPhraseIndex(prev => {
+      const newIndex = prev + 1
+      console.log(`🎯 acceptNextPhraseNote: nextPhraseIndex advanced ${prev} → ${newIndex}`)
+      return newIndex
+    })
+
+    return { success: true, message: 'Phrase note approved' }
+  }, [phraseNotes, nextPhraseIndex])
+
+  // 🔴 [NEW] Undo last approval (Shift+Tab functionality) (Issue #146)
+  const undoLastGhostApproval = useCallback((notes, onNoteRemove) => {
+    console.log('↩️ undoLastGhostApproval: Processing', {
+      historyLength: approvalHistory.length,
+      lastSource: lastApprovalSource
+    })
+
+    if (approvalHistory.length === 0) {
+      console.warn('⚠️ undoLastGhostApproval: No approval history')
+      return { success: false, message: 'No approval history' }
+    }
+
+    const lastApproval = approvalHistory[approvalHistory.length - 1]
+    console.log('↩️ undoLastGhostApproval: Undoing', lastApproval)
+
+    // Call onNoteRemove to remove the last added note
+    if (onNoteRemove) {
+      // Find note by pitch and approximate time (since we don't store exact noteId)
+      const noteToRemove = notes.find(note =>
+        note.pitch === lastApproval.pitch &&
+        Math.abs(note.time - lastApproval.time) < 0.01 // 10ms tolerance
+      )
+
+      if (noteToRemove) {
+        onNoteRemove(noteToRemove.id)
+        console.log(`✅ undoLastGhostApproval: Note removed`, noteToRemove.id)
+      }
+    }
+
+    // Move index back
+    if (lastApprovalSource === 'phrase') {
+      setNextPhraseIndex(prev => Math.max(0, prev - 1))
+      console.log('↩️ undoLastGhostApproval: nextPhraseIndex decremented')
+    } else {
+      setNextGhostIndex(prev => Math.max(0, prev - 1))
+      console.log('↩️ undoLastGhostApproval: nextGhostIndex decremented')
+    }
+
+    // Remove from history
+    setApprovalHistory(prev => prev.slice(0, -1))
+
+    // Update last source
+    if (approvalHistory.length > 1) {
+      setLastApprovalSource(approvalHistory[approvalHistory.length - 2].source)
+    } else {
+      setLastApprovalSource(null)
+    }
+
+    return { success: true, message: 'Approval undone' }
+  }, [approvalHistory, lastApprovalSource])
+
   // Ghost Text予測のクリア
   const clearGhostPredictions = useCallback(() => {
     setGhostPredictions([])
@@ -383,23 +756,34 @@ const useGhostText = (trackId, appSettings) => {
     // 状態
     ghostTextEnabled,
     ghostPredictions,
+    phraseNotes, // 🔧 Problem 3修正: フレーズ予測をreturnに追加
     showGhostText,
     ghostTextSettings,
     ghostTextStatus,
     performanceMetrics,
     currentModel,
     modelStatus,
-    
+
     // アクション
     toggleGhostText,
     toggleShowGhostText,
     updateGhostTextSettings,
     acceptGhostPrediction,
     acceptAllGhostPredictions,
+    acceptAllPhrasePredictions, // 🔴 Problem 1修正: フレーズ予測専用関数を追加
+    acceptNextGhostNote,        // 🔴 [NEW] Issue #146: One-by-one approval
+    acceptNextPhraseNote,       // 🔴 [NEW] Issue #146: One-by-one approval for phrases
+    undoLastGhostApproval,      // 🔴 [NEW] Issue #146: Undo last approval
     clearGhostPredictions,
     processMidiInput,
     generateTestPrediction,
-    changeModel
+    changeModel,
+
+    // Tracking states (Issue #146)
+    nextGhostIndex,             // 🔴 [NEW] Index of next ghost note to approve
+    nextPhraseIndex,            // 🔴 [NEW] Index of next phrase note to approve
+    approvalHistory,            // 🔴 [NEW] Approval history for undo
+    lastApprovalSource          // 🔴 [NEW] Track source of last approval
   }
 }
 

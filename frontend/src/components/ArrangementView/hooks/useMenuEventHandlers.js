@@ -1,4 +1,4 @@
-import { useCallback, useState, useRef } from 'react'
+import { useCallback, useState, useRef, useEffect } from 'react'
 import drumTrackManager from '../../../utils/drumTrackManager.js'
 import { getTrackTypeById } from '../../../data/trackTypes.js'
 
@@ -31,7 +31,7 @@ export const useMenuEventHandlers = ({
   // 空のエリアのコンテキストメニュー
   const showEmptyAreaContextMenu = useCallback((event) => {
     event.preventDefault()
-    
+
     setMenuPosition({
       top: event.clientY,
       left: event.clientX
@@ -53,8 +53,18 @@ export const useMenuEventHandlers = ({
   }, [])
 
   // メニューを閉じる
+  // 🚀 FIX: イベント引数なしで即座に閉じる機能を追加
   const closeMenu = useCallback((event) => {
+    // イベントなしで呼ばれた場合は即座に閉じる
+    if (!event) {
+      console.log('🔧 [closeMenu] Force closing menu immediately')
+      setShowTrackMenu(false)
+      return
+    }
+
+    // イベントありの場合は従来の挙動（メニュー外側クリック判定）
     if (menuRef.current && !menuRef.current.contains(event.target)) {
+      console.log('🔧 [closeMenu] Closing menu (outside click)')
       setShowTrackMenu(false)
     }
   }, [])
@@ -91,19 +101,19 @@ export const useMenuEventHandlers = ({
     if (!selectedTracks || selectedTracks.size === 0) return
 
     const selectedTrackData = tracks.filter(track => selectedTracks.has(track.id))
-    
+
     // 最初の選択されたトラックを開く
     if (selectedTrackData.length > 0) {
       const track = selectedTrackData[0]
       console.log('🔍 Opening selected tracks:', selectedTrackData.length, 'track type:', track.subtype)
-      
+
       // タブを開く処理
       if (onTabChange) {
         // ドラムトラックの場合は専用のタブを開く
         if (track.subtype === 'drums') {
           onTabChange(`drum-${track.id}`)
         } else {
-          onTabChange(`midi-${track.id}`)
+          onTabChange(`tab-${track.id}`)
         }
       }
     }
@@ -114,7 +124,7 @@ export const useMenuEventHandlers = ({
     if (!selectedTracks || selectedTracks.size === 0) return
 
     const selectedTrackData = tracks.filter(track => selectedTracks.has(track.id))
-    
+
     // プロジェクトマネージャーから削除
     selectedTrackData.forEach(track => {
       // ドラムトラックの場合は、drumTrackManagerからも削除
@@ -127,7 +137,7 @@ export const useMenuEventHandlers = ({
           console.log('🥁 Drum track not found in manager, skipping deletion:', track.id)
         }
       }
-      
+
       projectManager?.removeTrack(track.id)
     })
 
@@ -148,7 +158,7 @@ export const useMenuEventHandlers = ({
     if (!selectedTracks || selectedTracks.size === 0) return
 
     const selectedTrackData = tracks.filter(track => selectedTracks.has(track.id))
-    
+
     // ドラムトラックの場合は、drumTrackManagerからデータを取得
     const enhancedTrackData = selectedTrackData.map(track => {
       if (track.subtype === 'drums' && drumTrackManager.hasDrumTrack(track.id)) {
@@ -160,7 +170,7 @@ export const useMenuEventHandlers = ({
       }
       return track
     })
-    
+
     setClipboard({
       type: 'tracks',
       data: enhancedTrackData
@@ -175,11 +185,11 @@ export const useMenuEventHandlers = ({
 
     const pastedTracks = clipboard.data.map(track => {
       const newId = `track_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-      
+
       // ドラムトラックの場合は、drumTrackManagerに新しいデータを作成
       if (track.subtype === 'drums' && track.drumData) {
         console.log('🥁 Pasting drum track with data:', newId)
-        
+
         // 新しいドラムトラックを作成
         const newDrumData = drumTrackManager.createDrumTrack(newId)
         if (newDrumData) {
@@ -187,7 +197,7 @@ export const useMenuEventHandlers = ({
           drumTrackManager.updateDrumTrack(newId, track.drumData)
           console.log('🥁 Drum track data copied to new track:', newId)
         }
-        
+
         return {
           ...track,
           id: newId,
@@ -196,7 +206,7 @@ export const useMenuEventHandlers = ({
           hasDrumData: true
         }
       }
-      
+
       return {
         ...track,
         id: newId,
@@ -235,17 +245,51 @@ export const useMenuEventHandlers = ({
   const handleInvertSelection = useCallback(() => {
     const allTrackIds = tracks.map(track => track.id)
     const newSelection = new Set()
-    
+
     allTrackIds.forEach(id => {
       if (!selectedTracks?.has(id)) {
         newSelection.add(id)
       }
     })
-    
+
     setSelectedTracks(newSelection)
     setLastSelectedTrack(newSelection.size > 0 ? Array.from(newSelection)[newSelection.size - 1] : null)
     setShowTrackMenu(false)
   }, [tracks, selectedTracks, setSelectedTracks, setLastSelectedTrack])
+
+  // メニュー外側クリックとESCキーでメニューを閉じるイベントリスナーを追加
+  useEffect(() => {
+    if (!showTrackMenu) return
+
+    // 外側クリックでメニューを閉じる
+    const handleClickOutside = (event) => {
+      // メニュートリガーボタンのクリックは無視（トグル動作のため）
+      if (event.target.closest('[data-track-menu-trigger]')) {
+        return
+      }
+
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setShowTrackMenu(false)
+      }
+    }
+
+    // ESCキーでメニューを閉じる
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setShowTrackMenu(false)
+      }
+    }
+
+    // イベントリスナーを登録
+    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleKeyDown)
+
+    // クリーンアップ
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [showTrackMenu])
 
   return {
     showTrackMenu,
@@ -264,4 +308,4 @@ export const useMenuEventHandlers = ({
     handleDeselectAll,
     handleInvertSelection
   }
-} 
+}

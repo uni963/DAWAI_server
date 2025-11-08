@@ -9,6 +9,8 @@ export const useArrangementAudio = (tracks, trackStates, currentTime, metronomeE
   const playbackTimerRef = useRef(null)
   // ドラムトラック専用の再生管理
   const drumTrackPlaybackRefs = useRef(new Map())
+  // 現在再生中のトラックリスト（ループ再開用）
+  const currentPlayingTracksRef = useRef([])
 
   // トラックプリロード状態管理
   const preloadedTracksRef = useRef(new Set())
@@ -79,7 +81,8 @@ export const useArrangementAudio = (tracks, trackStates, currentTime, metronomeE
             window.unifiedAudioSystem.addTrack(
               track.id,
               track.name,
-              track.type || (track.subtype === 'drums' ? 'drums' : 'piano'),
+              track.type || (track.subtype === 'drums' ? 'drums' :
+                                      track.subtype === 'bass' ? 'bass' : 'piano'),
               track.color,
               track
             );
@@ -420,6 +423,73 @@ export const useArrangementAudio = (tracks, trackStates, currentTime, metronomeE
     }
   }, [ensureAudioEngineReady, trackVolume, trackMuted, masterVolume]);
 
+  // Bass Track専用の再生開始関数
+  const startBassTrackPlayback = useCallback(async (track, startTime) => {
+    try {
+      console.log('🎸 [ArrangementAudio] Starting Bass track playback:', {
+        trackId: track.id,
+        trackName: track.name,
+        startTime,
+        hasMidiData: !!track.midiData,
+        notesCount: track.midiData?.notes?.length || 0
+      });
+
+      // Bass トラックの基本チェック
+      if (!track.midiData || !track.midiData.notes || track.midiData.notes.length === 0) {
+        console.warn('🎸 [ArrangementAudio] No MIDI notes found for Bass track:', track.id);
+        return false;
+      }
+
+      // 統合音声システムの準備確認
+      const engineReady = await ensureAudioEngineReady();
+      if (!engineReady) {
+        console.error('🎸 [ArrangementAudio] Failed to prepare unified audio system for Bass track:', track.id);
+        return false;
+      }
+
+      // Bass音声システムの確認
+      if (!window.unifiedAudioSystem.playBassTrackSequence) {
+        console.error('🎸 [ArrangementAudio] playBassTrackSequence not available in unified audio system');
+        return false;
+      }
+
+      // 音量計算
+      const trackVolumeValue = trackVolume[track.id] || track.volume || 75;
+      const normalizedVolume = (trackVolumeValue / 100) * (masterVolume / 100);
+
+      console.log('🎸 [ArrangementAudio] Playing Bass track with unified audio system:', {
+        startTime,
+        volume: normalizedVolume,
+        trackMuted: trackMuted[track.id] || track.muted || false,
+        notesCount: track.midiData.notes.length
+      });
+
+      // ミュートされていない場合のみ再生
+      if (!trackMuted[track.id] && !track.muted) {
+        const bassResult = await window.unifiedAudioSystem.playBassTrackSequence(
+          track.midiData.notes,
+          startTime,
+          normalizedVolume
+        );
+
+        if (bassResult) {
+          console.log('✅ [ArrangementAudio] Bass track playback started successfully:', track.id);
+          return true;
+        } else {
+          console.error('❌ [ArrangementAudio] Failed to start Bass track playback:', track.id);
+          return false;
+        }
+      } else {
+        console.log('🔇 [ArrangementAudio] Bass track is muted, skipping playback:', track.id);
+        return true; // ミュートは成功とみなす
+      }
+
+    } catch (error) {
+      console.error('❌ [ArrangementAudio] Error in Bass track playback:', error);
+      return false;
+    }
+  }, [ensureAudioEngineReady, trackVolume, trackMuted, masterVolume]);
+
   // グローバルテスト関数として公開
   useEffect(() => {
     window.arrangementViewPlayDrumSound = playDrumSound;
@@ -505,7 +575,7 @@ export const useArrangementAudio = (tracks, trackStates, currentTime, metronomeE
         }
       }
 
-              // ドラムトラック専用の再生ループを開始（高精度タイミング）
+              // ドラムトラック専用の再生ループを開始（高精度タイミング・再生速度対応）
         const startDrumPlaybackLoop = () => {
           if (playbackRef.playbackTimer) {
             clearInterval(playbackRef.playbackTimer)
@@ -518,22 +588,28 @@ export const useArrangementAudio = (tracks, trackStates, currentTime, metronomeE
             }
 
           try {
+            // 再生速度を取得（デフォルトは1.0）
+            const currentPlaybackRate = window.unifiedAudioSystem?.playbackRate || 1.0;
+
             const currentTime = Date.now() / 1000  // 秒単位
             const elapsedTime = currentTime - playbackRef.playbackStartTime
-            const newTime = Math.max(0, elapsedTime)
+            // 再生速度を適用した経過時間を計算
+            const newTime = Math.max(0, elapsedTime * currentPlaybackRate)
 
             // グリッドの列数を取得
             const gridColumns = playbackRef.grid[0]?.length || 16
-            const stepDuration = 60 / playbackRef.tempo / 4 // 16分音符の長さ
+            // 再生速度を適用したステップ長さを計算
+            const baseStepDuration = 60 / playbackRef.tempo / 4 // 16分音符の基本長さ
+            const stepDuration = baseStepDuration // Web Audio APIのplaybackRateで速度調整されるため、ここでは調整不要
             const patternDuration = stepDuration * gridColumns
 
-            // ループ処理
+            // ループ処理（再生速度を考慮）
             if (newTime >= patternDuration) {
               playbackRef.playbackStartTime = Date.now() / 1000
               playbackRef.lastStep = -1
             }
 
-            // 現在のステップを計算
+            // 現在のステップを計算（再生速度を考慮）
             const currentStep = Math.floor(newTime / stepDuration) % gridColumns
 
             // 新しいステップに到達した場合のみ音を再生
@@ -618,7 +694,7 @@ export const useArrangementAudio = (tracks, trackStates, currentTime, metronomeE
   }, [ensureAudioEngineReady, bpm, trackVolume, trackMuted])
 
   // 高FPS再生タイマー（requestAnimationFrame使用）
-  const startPlaybackTimer = useCallback((startTimeOverride = null, setCurrentTime, setPlaybackPosition, loopEnabled, loopEnd, loopStart, handleStop) => {
+  const startPlaybackTimer = useCallback((startTimeOverride = null, setCurrentTime, setPlaybackPosition, loopEnabled, loopEnd, loopStart, handleStop, onLoopRestart) => {
     stopPlaybackTimer()
     let startTime = performance.now()
     let initialTime = startTimeOverride !== null ? startTimeOverride : currentTime
@@ -647,16 +723,39 @@ export const useArrangementAudio = (tracks, trackStates, currentTime, metronomeE
       }
       lastFrameTime = currentFrameTime
 
-      const elapsed = (currentFrameTime - startTime) / 1000
+      // 再生速度を考慮した経過時間計算
+      const realElapsed = (currentFrameTime - startTime) / 1000
+      const playbackRate = window.unifiedAudioSystem?.playbackRate || 1.0
+      const elapsed = realElapsed * playbackRate
       const newTime = initialTime + elapsed
 
       // ループ機能のチェック
       if (loopEnabled && newTime >= loopEnd) {
+        console.log('🔄 [ArrangementAudio] Loop detected, restarting from:', loopStart);
+        console.log('🔄 [DEBUG] Current tracks count:', tracks.length);
+        console.log('🔄 [DEBUG] Active tracks:', tracks.filter(track => track.isActive).map(t => `${t.id}(${t.subtype})`));
+
         setCurrentTime(loopStart)
         setPlaybackPosition(loopStart * pixelsPerSecond)
         startTime = performance.now()
         initialTime = loopStart
         lastFrameTime = startTime
+
+        // アクティブなトラックを直接再スケジュール
+        const activeTracksToReschedule = tracks.filter(track => track.isActive)
+        console.log('🔄 [ArrangementAudio] Rescheduling', activeTracksToReschedule.length, 'active tracks');
+
+        // 即座に再スケジューリングを実行
+        scheduleTracksFromTime(loopStart, activeTracksToReschedule).then(() => {
+          console.log('🔄 [ArrangementAudio] Track rescheduling completed for loop restart');
+        }).catch(error => {
+          console.error('🔄 [ArrangementAudio] Error during track rescheduling:', error);
+        });
+
+        // 既存のコールバックも実行（互換性のため）
+        if (onLoopRestart) {
+          onLoopRestart(loopStart)
+        }
       } else if (newTime >= totalDuration / 1000) {
         handleStop()
         return
@@ -683,6 +782,102 @@ export const useArrangementAudio = (tracks, trackStates, currentTime, metronomeE
       console.log('🚀 [ArrangementAudio] High-FPS playback timer stopped');
     }
   }, [])
+
+  // 特定の時間からトラックをスケジュールする関数（ループ再開用）
+  const scheduleTracksFromTime = useCallback(async (startTime, tracksToSchedule) => {
+    console.log('🔄 [ArrangementAudio] Scheduling tracks from time:', startTime);
+    console.log('🔄 [DEBUG] Tracks to schedule:', tracksToSchedule?.length || 0);
+    console.log('🔄 [DEBUG] Track details:', tracksToSchedule?.map(t => `${t.id}(${t.subtype}) - active:${t.isActive} - notes:${t.midiData?.notes?.length || 0}`) || []);
+
+    // 既存のスケジュールされたタイマーをクリア
+    console.log('🔄 [DEBUG] Clearing', scheduledNotesRef.current.size, 'existing scheduled notes');
+    scheduledNotesRef.current.forEach(({ startTimeout }) => {
+      if (startTimeout) clearTimeout(startTimeout)
+    })
+    scheduledNotesRef.current.clear()
+
+    // 統一音声システムの全音を停止
+    if (window.unifiedAudioSystem) {
+      console.log('🔄 [DEBUG] Stopping all sounds in unified audio system');
+      window.unifiedAudioSystem.stopAllSounds()
+    }
+
+    // DiffSingerトラックの再スケジュール
+    const diffsingerTracks = tracksToSchedule.filter(track =>
+      track.subtype === 'diffsinger' || track.type === 'diffsinger'
+    )
+    for (const diffsingerTrack of diffsingerTracks) {
+      console.log('🎤 [ArrangementAudio] Rescheduling DiffSinger track:', diffsingerTrack.id);
+      await startDiffSingerTrackPlayback(diffsingerTrack, startTime)
+    }
+
+    // Bass Trackの再スケジュール
+    const bassTracks = tracksToSchedule.filter(track => track.subtype === 'bass')
+    for (const bassTrack of bassTracks) {
+      console.log('🎸 [ArrangementAudio] Rescheduling Bass track:', bassTrack.id);
+      await startBassTrackPlayback(bassTrack, startTime)
+    }
+
+    // MIDIトラックの再スケジュール
+    const midiTracks = tracksToSchedule.filter(track =>
+      track.subtype !== 'drums' &&
+      track.subtype !== 'diffsinger' &&
+      track.type !== 'diffsinger' &&
+      track.subtype !== 'bass'
+    )
+
+    for (const midiTrack of midiTracks) {
+      console.log('🎵 [ArrangementAudio] Rescheduling MIDI track:', midiTrack.id);
+
+      const midiNotes = midiTrack.midiData?.notes || []
+      console.log('🎵 [DEBUG] MIDI notes found:', midiNotes.length);
+
+      if (midiNotes.length > 0) {
+        let scheduledCount = 0;
+        midiNotes.forEach((note, index) => {
+          const noteStartTime = note.time - startTime
+          console.log(`🎵 [DEBUG] Note ${index + 1}: time=${note.time}, startTime=${startTime}, noteStartTime=${noteStartTime}, pitch=${note.pitch}`);
+
+          if (noteStartTime >= 0) {
+            const currentPlaybackRate = window.unifiedAudioSystem?.playbackRate || 1.0
+            const adjustedStartTime = noteStartTime / currentPlaybackRate
+            console.log(`🎵 [DEBUG] Scheduling note ${index + 1} in ${adjustedStartTime * 1000}ms`);
+
+            const startTimeout = setTimeout(() => {
+              if (isPlayingRef.current) {
+                try {
+                  console.log(`🎵 [DEBUG] Playing note: pitch=${note.pitch}, duration=${note.duration}, velocity=${note.velocity}`);
+                  window.unifiedAudioSystem.scheduleNote(
+                    midiTrack.id,
+                    note.pitch,
+                    0,
+                    note.duration,
+                    note.velocity
+                  )
+
+                  const noteId = `${midiTrack.id}-${note.pitch}-${note.time}`
+                  scheduledNotesRef.current.set(noteId, { note })
+                } catch (error) {
+                  console.error('🎵 [ArrangementAudio] Error rescheduling MIDI note:', error)
+                }
+              }
+            }, adjustedStartTime * 1000)
+
+            scheduledNotesRef.current.set(`${midiTrack.id}-${note.pitch}-${note.time}`, {
+              note,
+              startTimeout
+            })
+            scheduledCount++;
+          } else {
+            console.log(`🎵 [DEBUG] Skipping note ${index + 1} (noteStartTime < 0)`);
+          }
+        })
+        console.log(`🎵 [DEBUG] Successfully scheduled ${scheduledCount} out of ${midiNotes.length} notes for track ${midiTrack.id}`);
+      }
+    }
+
+    console.log('✅ [ArrangementAudio] All tracks rescheduled from time:', startTime);
+  }, [startDiffSingerTrackPlayback, startBassTrackPlayback])
 
   // 再生コントロール
   const handlePlay = useCallback(async (setIsPlaying, setCurrentTime, setPlaybackPosition) => {
@@ -774,12 +969,23 @@ export const useArrangementAudio = (tracks, trackStates, currentTime, metronomeE
         await startDiffSingerTrackPlayback(diffsingerTrack, startTime)
       }
 
+      // Bass Trackの再生を開始
+      console.log('🎵 [ArrangementAudio] Starting Bass tracks...');
+      const bassTracks = tracksToPlay.filter(track =>
+        track.subtype === 'bass'
+      )
+      for (const bassTrack of bassTracks) {
+        console.log('🎸 [ArrangementAudio] Starting Bass track:', bassTrack.id);
+        await startBassTrackPlayback(bassTrack, startTime)
+      }
+
       // MIDIトラックの再生を開始
       console.log('🎵 [ArrangementAudio] Starting MIDI tracks...');
       const midiTracks = tracksToPlay.filter(track =>
         track.subtype !== 'drums' &&
         track.subtype !== 'diffsinger' &&
-        track.type !== 'diffsinger'
+        track.type !== 'diffsinger' &&
+        track.subtype !== 'bass'  // Bass Trackを除外
       )
 
       // EnhancedSoundFontEngineの状態を確認
@@ -805,7 +1011,8 @@ export const useArrangementAudio = (tracks, trackStates, currentTime, metronomeE
             window.unifiedAudioSystem.addTrack(
               midiTrack.id,
               midiTrack.name,
-              midiTrack.type || 'piano',
+              midiTrack.type || (midiTrack.subtype === 'drums' ? 'drums' :
+                                        midiTrack.subtype === 'bass' ? 'bass' : 'piano'),
               midiTrack.color,
               midiTrack
             );
@@ -845,17 +1052,26 @@ export const useArrangementAudio = (tracks, trackStates, currentTime, metronomeE
             notesCount: midiNotes.length
           });
 
-          // ノートをスケジュール
+          // ノートをスケジュール（再生速度を考慮）
           midiNotes.forEach((note, index) => {
             const noteStartTime = note.time - startTime;
             const noteEndTime = noteStartTime + note.duration;
 
             if (noteStartTime >= 0) {
+              // 再生速度を取得（デフォルトは1.0）
+              const currentPlaybackRate = window.unifiedAudioSystem?.playbackRate || 1.0;
+
+              // 再生速度を考慮したタイムアウト時間を計算
+              // 例: 2倍速の場合、1秒後のノートは0.5秒後に再生される
+              const adjustedStartTime = noteStartTime / currentPlaybackRate;
+
               console.log('🎵 [ArrangementAudio] Scheduling MIDI note:', {
                 trackId: midiTrack.id,
                 index,
                 pitch: note.pitch,
                 startTime: noteStartTime,
+                adjustedStartTime,
+                playbackRate: currentPlaybackRate,
                 duration: note.duration
               });
 
@@ -885,7 +1101,7 @@ export const useArrangementAudio = (tracks, trackStates, currentTime, metronomeE
                     console.error('🎵 [ArrangementAudio] Error playing MIDI note:', error);
                   }
                 }
-              }, noteStartTime * 1000);
+              }, adjustedStartTime * 1000);
 
               scheduledNotesRef.current.set(`${midiTrack.id}-${note.pitch}-${note.time}`, {
                 note,
@@ -913,10 +1129,14 @@ export const useArrangementAudio = (tracks, trackStates, currentTime, metronomeE
 
       console.log('🎵 [ArrangementAudio] All tracks started successfully');
 
+      // 再生中のトラックリストを保存（ループ再開用）
+      currentPlayingTracksRef.current = tracksToPlay;
+
     } else {
       console.log('🎵 [ArrangementAudio] No tracks to play');
+      currentPlayingTracksRef.current = [];
     }
-  }, [tracks, trackStates, currentTime, lastClickPosition, pixelsPerSecond, startDrumTrackPlayback, startDiffSingerTrackPlayback, ensureAudioEngineReady, trackVolume, trackMuted, masterVolume]);
+  }, [tracks, trackStates, currentTime, lastClickPosition, pixelsPerSecond, startDrumTrackPlayback, startDiffSingerTrackPlayback, startBassTrackPlayback, ensureAudioEngineReady, trackVolume, trackMuted, masterVolume]);
 
   const handlePause = useCallback((setIsPlaying) => {
     isPlayingRef.current = false
@@ -936,13 +1156,23 @@ export const useArrangementAudio = (tracks, trackStates, currentTime, metronomeE
       }
     })
 
+    // 🎸 Bass Trackの再生を停止
+    console.log('🎸 [ArrangementAudio] Stopping Bass Engine on pause...');
+    if (window.unifiedAudioSystem && window.unifiedAudioSystem.bassEngine) {
+      window.unifiedAudioSystem.bassEngine.stopAllNotes();
+      console.log('✅ [ArrangementAudio] Bass Engine stopped successfully');
+    }
+
     // スケジュールされたタイマーをクリア
     scheduledNotesRef.current.forEach(({ startTimeout }) => {
       clearTimeout(startTimeout)
     })
     scheduledNotesRef.current.clear()
 
-    // ModernAudioEngineが音声ノードを管理
+    // 統一音声システムの全音を停止
+    if (window.unifiedAudioSystem) {
+      window.unifiedAudioSystem.stopAllSounds();
+    }
 
     stopPlaybackTimer()
   }, [stopPlaybackTimer])
@@ -968,13 +1198,23 @@ export const useArrangementAudio = (tracks, trackStates, currentTime, metronomeE
     })
     drumTrackPlaybackRefs.current.clear()
 
+    // 🎸 Bass Trackの再生を停止
+    console.log('🎸 [ArrangementAudio] Stopping Bass Engine on stop...');
+    if (window.unifiedAudioSystem && window.unifiedAudioSystem.bassEngine) {
+      window.unifiedAudioSystem.bassEngine.stopAllNotes();
+      console.log('✅ [ArrangementAudio] Bass Engine stopped successfully');
+    }
+
     // スケジュールされたタイマーをクリア
     scheduledNotesRef.current.forEach(({ startTimeout }) => {
       clearTimeout(startTimeout)
     })
     scheduledNotesRef.current.clear()
 
-    // ModernAudioEngineが音声ノードを管理
+    // 統一音声システムの全音を停止
+    if (window.unifiedAudioSystem) {
+      window.unifiedAudioSystem.stopAllSounds();
+    }
 
     stopPlaybackTimer()
   }, [stopPlaybackTimer])
@@ -999,6 +1239,8 @@ export const useArrangementAudio = (tracks, trackStates, currentTime, metronomeE
     preloadAllTracks,
     clearPreloadCache,
     cleanupOldCache,
+    scheduleTracksFromTime,
+    currentPlayingTracksRef,
     // ✅ 修正: 初期化状態を公開（unifiedAudioSystemの状態を使用）
     isInitialized: () => window.unifiedAudioSystem?.isInitialized || false,
     getInitializationStatus: () => ({

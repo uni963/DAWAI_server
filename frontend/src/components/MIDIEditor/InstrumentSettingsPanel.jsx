@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { Slider } from '../ui/slider.jsx'
 import { Button } from '../ui/button.jsx'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select.jsx'
@@ -12,8 +13,9 @@ const InstrumentSettingsPanel = ({
   onClose,
   onSave,
   onReset,
+  trackId,
   // AI関連の新しいprops
-  aiModel = 'magenta',
+  aiModel = 'magenta',  // 🔧 デフォルト値: Magenta (従来) - Piano Track MIDIエディタービュー用
   onAiModelChange,
   ghostTextEnabled = false,
   onGhostTextToggle,
@@ -35,6 +37,63 @@ const InstrumentSettingsPanel = ({
   onMusicTheorySettingsChange
 }) => {
   console.log('🎛️ InstrumentSettingsPanel: aiModel =', aiModel, 'ghostTextEnabled =', ghostTextEnabled)
+
+  // 🔥 [CRITICAL FIX] aiModel値の正規化マッピング
+  // システムレベルの値（musicRnn）をUI選択肢の値（magenta）に変換
+  const normalizeAiModel = (model) => {
+    if (!model || model === '' || model === 'disabled' || model === '無効') {
+      return 'disabled'
+    }
+    // musicRnn（旧システム値）を magenta（UI選択肢値）にマッピング
+    if (model === 'musicRnn') {
+      return 'magenta'
+    }
+    // その他の値はそのまま（magenta, phi2など）
+    return model
+  }
+
+  const effectiveAiModel = normalizeAiModel(aiModel)
+  console.log('🔧 InstrumentSettingsPanel: effectiveAiModel =', effectiveAiModel, '(original:', aiModel, ')')
+
+  // localStorageから音楽理論設定を読み込む
+  const [localMusicTheorySettings, setLocalMusicTheorySettings] = useState(musicTheorySettings)
+
+  useEffect(() => {
+    console.log('🔄 InstrumentSettingsPanel useEffect実行:', { trackId, propsSettings: musicTheorySettings, aiModel, ghostTextEnabled })
+    console.log('🔧 [CRITICAL] aiModel props値を検証:', { aiModel, type: typeof aiModel, isEmpty: !aiModel || aiModel === '' })
+
+    // 🔥 FIX: Props完全優先 - Demo Song読み込み時など、外部からの設定変更を確実に反映
+    console.log(`🔧 propsの音楽理論設定を適用 (トラック ${trackId}):`, musicTheorySettings)
+    setLocalMusicTheorySettings(musicTheorySettings)
+
+    // 🔥 [CRITICAL FIX] AI設定はprops完全優先、localStorageは無視
+    // Demo Song読み込み時にpropsが最優先されるべき
+    console.log('🔥 [CRITICAL FIX] AI設定はprops優先、localStorage読み込みをスキップ')
+
+    // 🔥 [CRITICAL FIX] aiModel propsが変更された場合の強制再レンダリング
+    // Demo Song読み込み時に確実にAI設定UIを更新
+    if (aiModel && aiModel !== 'disabled' && aiModel !== '') {
+      console.log('🔥 [CRITICAL FIX] aiModel props変更を検出、強制再レンダリング:', aiModel)
+    }
+  }, [trackId, musicTheorySettings, aiModel, ghostTextEnabled])
+
+  // 🆕 FIX: propsのmusicTheorySettingsが変更された場合に強制的に同期
+  // Demo Song読み込み時など、外部からの設定変更を確実に反映
+  useEffect(() => {
+    if (musicTheorySettings &&
+        (musicTheorySettings.selectedGenre || musicTheorySettings.scaleConstraintEnabled)) {
+      console.log('🔥 [CRITICAL FIX] propsの音楽理論設定変更を検出、強制同期:', musicTheorySettings)
+      setLocalMusicTheorySettings(musicTheorySettings)
+    }
+  }, [
+    musicTheorySettings?.scaleConstraintEnabled,
+    musicTheorySettings?.selectedGenre,
+    musicTheorySettings?.selectedScales,
+    musicTheorySettings?.rootNote
+  ])
+
+  // 表示に使用する音楽理論設定（localStorageの設定を優先）
+  const effectiveMusicTheorySettings = localMusicTheorySettings
   const handleParameterChange = (parameter, value) => {
     onSettingsChange(parameter, value)
   }
@@ -62,7 +121,7 @@ const InstrumentSettingsPanel = ({
   }
 
   const handleScaleToggle = (scaleId, checked) => {
-    const currentScales = musicTheorySettings.selectedScales || []
+    const currentScales = effectiveMusicTheorySettings.selectedScales || []
     let newScales
 
     if (checked) {
@@ -76,10 +135,10 @@ const InstrumentSettingsPanel = ({
 
   // 推奨スケールかどうかを判定
   const isRecommendedScale = (scaleId) => {
-    if (!musicTheorySettings.selectedGenre || !MUSIC_GENRES[musicTheorySettings.selectedGenre]) {
+    if (!effectiveMusicTheorySettings.selectedGenre || !MUSIC_GENRES[effectiveMusicTheorySettings.selectedGenre]) {
       return false
     }
-    const genre = MUSIC_GENRES[musicTheorySettings.selectedGenre]
+    const genre = MUSIC_GENRES[effectiveMusicTheorySettings.selectedGenre]
     return genre.recommendedScales.includes(scaleId)
   }
 
@@ -197,8 +256,18 @@ const InstrumentSettingsPanel = ({
             <div className="parameter-group">
               <label className="block text-sm font-medium text-gray-300 mb-2">AIモデル</label>
               <select
-                value={aiModel}
-                onChange={(e) => onAiModelChange && onAiModelChange(e.target.value)}
+                value={effectiveAiModel}
+                onChange={(e) => {
+                  const newValue = e.target.value;
+                  console.log('🔥 [CRITICAL FIX] AIモデル選択変更:', { from: effectiveAiModel, to: newValue });
+
+                  // 即座にprops経由で親コンポーネントへ通知
+                  if (onAiModelChange) {
+                    onAiModelChange(newValue);
+                  }
+
+                  console.log('🔥 [CRITICAL FIX] AIモデル変更をonAiModelChangeで親に通知完了');
+                }}
                 className="w-full p-2 bg-gray-800 border border-gray-600 rounded text-white text-sm"
               >
                 <option value="disabled">無効</option>
@@ -207,8 +276,8 @@ const InstrumentSettingsPanel = ({
                   Phi-2 (高速) - 開発中
                 </option>
               </select>
-              
-              {aiModel === 'phi2' && (
+
+              {effectiveAiModel === 'phi2' && (
                 <div className="mt-2 p-2 bg-yellow-900 border border-yellow-700 rounded text-yellow-200 text-xs">
                   ⚠️ Phi-2モデルは現在開発中です。軽量予測が使用されます。
                 </div>
@@ -216,7 +285,7 @@ const InstrumentSettingsPanel = ({
             </div>
 
             {/* Ghost Text有効/無効 */}
-            {aiModel !== 'disabled' && (
+            {effectiveAiModel !== 'disabled' && (
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-gray-300">Ghost Text</span>
                 <label className="relative inline-flex items-center cursor-pointer">
@@ -232,7 +301,7 @@ const InstrumentSettingsPanel = ({
             )}
 
             {/* 要約管理（Phi-2の場合のみ表示） */}
-            {aiModel === 'phi2' && ghostTextEnabled && (
+            {effectiveAiModel === 'phi2' && ghostTextEnabled && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-gray-300">要約状態</span>
@@ -260,7 +329,7 @@ const InstrumentSettingsPanel = ({
             )}
 
             {/* 予測設定（Phi-2の場合のみ表示） */}
-            {aiModel === 'phi2' && ghostTextEnabled && (
+            {effectiveAiModel === 'phi2' && ghostTextEnabled && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-gray-300">自動予測</span>
@@ -310,12 +379,11 @@ const InstrumentSettingsPanel = ({
         </div>
 
         {/* 音楽理論設定 */}
-        {ghostTextEnabled && (
-          <div className="border-b border-gray-700 pb-4 mb-4">
-            <h4 className="text-md font-medium text-white mb-3 flex items-center gap-2">
-              <Music className="h-4 w-4" />
-              音楽理論設定
-            </h4>
+        <div className="border-b border-gray-700 pb-4 mb-4">
+          <h4 className="text-md font-medium text-white mb-3 flex items-center gap-2">
+            <Music className="h-4 w-4" />
+            音楽理論設定
+          </h4>
 
             <div className="space-y-3">
               {/* スケール制約有効/無効 */}
@@ -324,7 +392,7 @@ const InstrumentSettingsPanel = ({
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={musicTheorySettings.scaleConstraintEnabled}
+                    checked={effectiveMusicTheorySettings.scaleConstraintEnabled}
                     onChange={(e) => handleMusicTheorySettingChange('scaleConstraintEnabled', e.target.checked)}
                     className="sr-only peer"
                     data-testid="scale-constraint-toggle"
@@ -334,12 +402,12 @@ const InstrumentSettingsPanel = ({
               </div>
 
               {/* ジャンル選択 */}
-              {musicTheorySettings.scaleConstraintEnabled && (
+              {effectiveMusicTheorySettings.scaleConstraintEnabled && (
                 <div className="space-y-3" data-testid="music-theory-section">
                   <div className="parameter-group">
                     <label className="block text-sm font-medium text-gray-300 mb-2">ジャンル</label>
                     <Select
-                      value={musicTheorySettings.selectedGenre || ''}
+                      value={effectiveMusicTheorySettings.selectedGenre || ''}
                       onValueChange={handleGenreChange}
                       data-testid="genre-select"
                     >
@@ -357,12 +425,12 @@ const InstrumentSettingsPanel = ({
                   </div>
 
                   {/* スケール選択 */}
-                  {musicTheorySettings.selectedGenre && (
+                  {effectiveMusicTheorySettings.selectedGenre && (
                     <div className="space-y-2" data-testid="scales-section">
                       <label className="block text-sm font-medium text-gray-300">使用スケール</label>
                       <div className="space-y-2">
                         {Object.entries(SCALE_DEFINITIONS).map(([scaleId, scale]) => {
-                          const isChecked = (musicTheorySettings.selectedScales || []).includes(scaleId)
+                          const isChecked = (effectiveMusicTheorySettings.selectedScales || []).includes(scaleId)
                           const isRecommended = isRecommendedScale(scaleId)
 
                           return (
@@ -400,7 +468,7 @@ const InstrumentSettingsPanel = ({
                   <div className="parameter-group">
                     <label className="block text-sm font-medium text-gray-300 mb-2">ルート音</label>
                     <Select
-                      value={musicTheorySettings.rootNote || 'C'}
+                      value={effectiveMusicTheorySettings.rootNote || 'C'}
                       onValueChange={(value) => handleMusicTheorySettingChange('rootNote', value)}
                     >
                       <SelectTrigger className="w-full">
@@ -419,7 +487,6 @@ const InstrumentSettingsPanel = ({
               )}
             </div>
           </div>
-        )}
 
         {/* 基本パラメータ */}
         <div className="space-y-4">

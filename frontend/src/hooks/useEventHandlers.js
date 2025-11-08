@@ -94,13 +94,39 @@ export const useKeyboardHandler = () => {
         if (!isFormElement) {
           event.preventDefault()
 
-          // 統一された音声システムで再生/停止を切り替え
-          if (window.unifiedAudioSystem && window.unifiedAudioSystem.isInitialized) {
-            try {
-              window.unifiedAudioSystem.togglePlayback()
-              console.log('🎵 Space key: Toggle playback')
-            } catch (error) {
-              console.warn('⚠️ Failed to toggle playback:', error)
+          console.log('🎹 [useEventHandlers] Space key pressed')
+
+          // EventHandlersManagerがあればそちらに委譲
+          if (window.eventHandlersManager && typeof window.eventHandlersManager.handleKeyDown === 'function') {
+            console.log('✅ [useEventHandlers] Delegating to eventHandlersManager.handleKeyDown')
+            window.eventHandlersManager.handleKeyDown(event)
+          } else {
+            // フォールバック: 直接処理
+            // activeTab情報を取得
+            const activeTab = window.eventHandlersManager?.getActiveTab?.() ||
+                            (window.eventHandlersManager?.tabs?.find(t => t.id === window.eventHandlersManager?.activeTab))
+
+            console.log('🎹 [useEventHandlers] Active tab:', activeTab ? activeTab.id : 'none')
+
+            if (activeTab && activeTab.trackId && activeTab.id !== 'arrangement') {
+              // MIDIエディタのタブがアクティブな場合
+              console.log('🎹 [useEventHandlers] MIDI Editor tab is active, trying window.midiEditorPlayPause...')
+
+              if (window.midiEditorPlayPause && window.midiEditorPlayPause[activeTab.trackId]) {
+                try {
+                  console.log('✅ [useEventHandlers] Calling window.midiEditorPlayPause for trackId:', activeTab.trackId)
+                  window.midiEditorPlayPause[activeTab.trackId]()
+                } catch (error) {
+                  console.error('❌ [useEventHandlers] Failed to call midiEditorPlayPause:', error)
+                }
+              } else {
+                console.warn('⚠️ [useEventHandlers] window.midiEditorPlayPause not found for trackId:', activeTab.trackId)
+                console.warn('⚠️ [useEventHandlers] Available trackIds:', window.midiEditorPlayPause ? Object.keys(window.midiEditorPlayPause) : 'undefined')
+              }
+            } else {
+              // Arrangement Viewがアクティブな場合
+              console.log('🎼 [useEventHandlers] Arrangement View is active')
+              console.log('⚠️ [useEventHandlers] Arrangement playback not yet implemented')
             }
           }
         }

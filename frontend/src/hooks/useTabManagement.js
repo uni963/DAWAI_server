@@ -83,9 +83,6 @@ export const useTabManagement = (dependencies) => {
     }
   }, [tabs, tracks, globalTempo, eventHandlersManager])
 
-  // デバッグ: processMidiDataValidationの再作成回数を監視
-  console.log('🎼 HOOK processMidiDataValidation useCallback triggered - potential re-creation')
-
   /**
    * タブ切り替えハンドラー
    *
@@ -124,9 +121,6 @@ export const useTabManagement = (dependencies) => {
   }, [projectManager, setActiveTab, processMidiDataValidation])
   // ✅ 修正: tabs, tracks, globalTempoは不要な依存関係のため削除
   // ✅ 修正: processMidiDataValidationを依存配列に追加（TDZ回避のため関数定義を先に移動）
-
-  // デバッグ: handleTabChangeの再作成回数を監視
-  console.log('🔄 HOOK handleTabChange useCallback triggered - potential re-creation')
 
   /**
    * タブクローズハンドラー

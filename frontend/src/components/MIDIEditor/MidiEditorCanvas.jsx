@@ -26,7 +26,11 @@ const MidiEditorCanvas = ({
   // Ghost Text関連
   ghostPredictions = [],
   showGhostText = true,
-  
+  phrasePredictions = [], // 🎨 [Phase 3] フレーズ予測
+  nextGhostIndex = 0,     // 🔴 [NEW] Issue #146: Next ghost note to approve
+  nextPhraseIndex = 0,    // 🔴 [NEW] Issue #146: Next phrase note to approve
+  approvalHistory = [],   // 🔴 [NEW] Issue #146: Approval history
+
   // イベントハンドラー
   onMouseDown,
   onMouseMove,
@@ -561,7 +565,18 @@ const MidiEditorCanvas = ({
     // 再生ヘッド描画（改善版）
     const currentTime = state.currentTime || 0
     const playbackX = coordinateTransforms.timeToX(currentTime)
-    
+
+    // 🎨 [Bass Track Debug] playhead描画ログ
+    console.log('🎨 [Bass Track Debug] playhead drawing:', {
+      currentTime: currentTime,
+      playbackX: playbackX,
+      isPlaying: state.isPlaying,
+      canvasWidth: rect.width,
+      coordinateTransformsExists: !!coordinateTransforms?.timeToX,
+      withinDrawRange: playbackX >= -50 && playbackX <= rect.width + 50,
+      timestamp: Date.now()
+    });
+
     // 再生ヘッドは常に表示（再生中または停止時でも）
     // 描画範囲を広げて、より確実に表示
     if (playbackX >= -50 && playbackX <= rect.width + 50) {
@@ -897,41 +912,162 @@ const MidiEditorCanvas = ({
       ctx.setLineDash([])
     }
 
-    // Ghost Text予測描画
-    if (showGhostText && Array.isArray(ghostPredictions) && ghostPredictions.length > 0) {
+    // 🔧 修正: フレーズ予測の存在チェック（通常予測との重複を防ぐ）
+    const hasPhrasePredictions = Array.isArray(phrasePredictions) && phrasePredictions.length > 0
+
+    // Ghost Text予測描画 (Issue #146: 次に承認するノートをハイライト)
+    // 🔧 修正2: フレーズ予測が存在する場合は通常のGhost Text予測を描画しない
+    if (showGhostText && Array.isArray(ghostPredictions) && ghostPredictions.length > 0 && !hasPhrasePredictions) {
       ghostPredictions.forEach((prediction, index) => {
         // 予測の時間位置を計算（最後のノートの後ろに配置）
-        const lastNoteTime = state.notes.length > 0 
+        const lastNoteTime = state.notes.length > 0
           ? Math.max(...state.notes.map(n => n.time + n.duration))
           : 0
         const predictionTime = lastNoteTime + (prediction.timing || 0)
-        
+
         const x = coordinateTransforms.timeToX(predictionTime)
         const y = coordinateTransforms.pitchToY(prediction.pitch)
         const width = (prediction.duration || 0.25) * GRID_WIDTH * state.zoom
         const height = NOTE_HEIGHT
-        
-        // 通常の予測は半透明で表示
-        ctx.globalAlpha = 0.3
-        ctx.fillStyle = '#8b5cf6'
-        ctx.fillRect(x, y, width, height)
-        
-        // 予測番号を表示
-        ctx.globalAlpha = 0.9
-        ctx.fillStyle = '#ffffff'
-        ctx.font = '10px monospace'
-        ctx.textAlign = 'center'
-        ctx.fillText((index + 1).toString(), x + width/2, y + height/2 + 3)
-        
-        // 信頼度を表示
-        if (prediction.confidence) {
-          ctx.fillStyle = '#fbbf24'
-          ctx.font = '8px monospace'
-          ctx.fillText(`${Math.round(prediction.confidence * 100)}%`, x + width/2, y + height - 2)
+
+        // 🔴 [NEW] Check if this is the next note to be approved
+        const isNextNote = index === nextGhostIndex
+
+        if (isNextNote) {
+          // Next note: higher opacity, bright pink, glowing effect
+          ctx.save()
+          ctx.globalAlpha = 0.7
+          ctx.fillStyle = '#a78bfa' // Bright purple for next note
+          ctx.fillRect(x, y, width, height)
+
+          // Glowing border for next note
+          ctx.strokeStyle = '#c4b5fd'
+          ctx.lineWidth = 3
+          ctx.shadowColor = '#a78bfa'
+          ctx.shadowBlur = 8
+          ctx.shadowOffsetX = 0
+          ctx.shadowOffsetY = 0
+          ctx.strokeRect(x, y, width, height)
+          ctx.shadowColor = 'transparent'
+
+          // Label for next note
+          ctx.globalAlpha = 1
+          ctx.fillStyle = '#fbbf24' // Yellow label
+          ctx.font = 'bold 11px monospace'
+          ctx.textAlign = 'center'
+          ctx.fillText('⏎Tab', x + width/2, y + 10)
+
+          // Prediction number (bold)
+          ctx.fillStyle = '#ffffff'
+          ctx.font = 'bold 12px monospace'
+          ctx.fillText((index + 1).toString(), x + width/2, y + height - 5)
+          ctx.restore()
+        } else {
+          // Other notes: lower opacity, purple color
+          ctx.globalAlpha = 0.25
+          ctx.fillStyle = '#8b5cf6'
+          ctx.fillRect(x, y, width, height)
+
+          // 予測番号を表示（1-indexed）
+          ctx.globalAlpha = 0.6
+          ctx.fillStyle = '#ffffff'
+          ctx.font = '10px monospace'
+          ctx.textAlign = 'center'
+          ctx.fillText((index + 1).toString(), x + width/2, y + height/2 + 3)
+
+          // 信頼度を表示
+          if (prediction.confidence) {
+            ctx.globalAlpha = 0.5
+            ctx.fillStyle = '#fbbf24'
+            ctx.font = '8px monospace'
+            ctx.fillText(`${Math.round(prediction.confidence * 100)}%`, x + width/2, y + height - 2)
+          }
         }
       })
 
       ctx.globalAlpha = 1
+    }
+
+    // 🎨 [Phase 3] フレーズ予測描画 (Issue #146: 次に承認するノートをハイライト)
+    if (showGhostText && hasPhrasePredictions) {
+      console.log('🎨 [Phase 3] Drawing phrase predictions:', phrasePredictions.length)
+
+      phrasePredictions.forEach((prediction, index) => {
+        // 🔧 修正: 最後のノートの終端位置を基準に相対位置を計算
+        const lastNoteTime = state.notes.length > 0
+          ? Math.max(...state.notes.map(n => n.time + n.duration))
+          : 0
+
+        // 相対タイミングを最後のノート終端から加算
+        const predictionTime = lastNoteTime + (prediction.timing || 0)
+
+        const x = coordinateTransforms.timeToX(predictionTime)
+        const y = coordinateTransforms.pitchToY(prediction.pitch)
+        const width = (prediction.duration || 0.25) * GRID_WIDTH * state.zoom
+        const height = NOTE_HEIGHT
+
+        const isStrongBeat = prediction.isStrongBeat || false
+
+        // 🔴 [NEW] Check if this is the next phrase note to be approved
+        const isNextNote = index === nextPhraseIndex
+
+        // フレーズノートの描画（緑色）
+        ctx.save()
+
+        if (isNextNote) {
+          // Next phrase note: brighter green with glow
+          ctx.globalAlpha = 0.8
+          ctx.strokeStyle = '#10b981' // Brighter green
+          ctx.fillStyle = '#10b981'
+          ctx.lineWidth = 4
+
+          // Glowing effect
+          ctx.shadowColor = '#10b981'
+          ctx.shadowBlur = 12
+          ctx.shadowOffsetX = 0
+          ctx.shadowOffsetY = 0
+          ctx.strokeRect(x, y, width, height)
+          ctx.shadowColor = 'transparent'
+
+          ctx.globalAlpha = 0.5
+          ctx.fillRect(x, y, width, height)
+
+          // Label for next phrase note
+          ctx.globalAlpha = 1
+          ctx.fillStyle = '#fbbf24' // Yellow label
+          ctx.font = 'bold 11px monospace'
+          ctx.textAlign = 'center'
+          ctx.fillText('⏎Tab', x + width/2, y + 10)
+        } else {
+          // Other phrase notes: original styling
+          ctx.globalAlpha = 0.5
+          ctx.strokeStyle = '#4CAF50'
+          ctx.fillStyle = '#4CAF50'
+          ctx.lineWidth = isStrongBeat ? 3 : 2
+          ctx.strokeRect(x, y, width, height)
+
+          ctx.globalAlpha = 0.3
+          ctx.fillRect(x, y, width, height)
+
+          // インジケーター
+          ctx.globalAlpha = 0.5
+          if (isStrongBeat) {
+            // 強拍: 金色のインジケーター
+            ctx.fillStyle = '#FFD700'
+            ctx.font = 'bold 14px Arial'
+            ctx.fillText('●', x + 5, y + height - 5)
+          } else {
+            // 弱拍: 音符アイコン
+            ctx.fillStyle = '#FFFFFF'
+            ctx.font = '12px Arial'
+            ctx.fillText('♪', x + 5, y + height - 5)
+          }
+        }
+
+        ctx.restore()
+      })
+
+      console.log('🎨 [Phase 3] Phrase predictions drawn')
     }
 
 
@@ -979,6 +1115,44 @@ const MidiEditorCanvas = ({
     ctx.moveTo(0, HEADER_HEIGHT);
     ctx.lineTo(rect.width, HEADER_HEIGHT);
     ctx.stroke();
+
+    // ループ区間の視覚化
+    if (state.loopEnabled) {
+      const loopStartX = coordinateTransforms.timeToX(state.loopStart);
+      const loopEndX = coordinateTransforms.timeToX(state.loopEnd);
+
+      // ループ区間をハイライト表示
+      ctx.fillStyle = 'rgba(34, 197, 94, 0.15)'; // 緑色半透明
+      ctx.fillRect(loopStartX, 0, loopEndX - loopStartX, HEADER_HEIGHT);
+
+      // ループ開始マーカー
+      ctx.strokeStyle = '#22c55e'; // 緑色
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(loopStartX, 0);
+      ctx.lineTo(loopStartX, HEADER_HEIGHT);
+      ctx.stroke();
+
+      // ループ開始ラベル
+      ctx.fillStyle = '#22c55e';
+      ctx.font = 'bold 12px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText('L', loopStartX + 3, 12);
+
+      // ループ終了マーカー
+      ctx.strokeStyle = '#22c55e';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(loopEndX, 0);
+      ctx.lineTo(loopEndX, HEADER_HEIGHT);
+      ctx.stroke();
+
+      // ループ終了ラベル
+      ctx.fillStyle = '#22c55e';
+      ctx.font = 'bold 12px monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText('R', loopEndX - 3, 12);
+    }
 
     // 時間軸グリッド（BPM対応・タイムライン専用）
     ctx.strokeStyle = '#374151';
@@ -1126,7 +1300,7 @@ const MidiEditorCanvas = ({
       ctx.fillStyle = '#9ca3af';
       ctx.fillText(timeText, x + 5, 10);
     }
-  }, [coordinateTransforms, state.scrollX, state.zoom, state.notes, state.tempo, timelineCanvasRef, HEADER_HEIGHT, GRID_WIDTH, PIANO_WIDTH]);
+  }, [coordinateTransforms, state.scrollX, state.zoom, state.notes, state.tempo, state.loopEnabled, state.loopStart, state.loopEnd, timelineCanvasRef, HEADER_HEIGHT, GRID_WIDTH, PIANO_WIDTH]);
 
   // 静的要素の再描画
   useEffect(() => {
@@ -1136,7 +1310,7 @@ const MidiEditorCanvas = ({
   // タイムライン要素の再描画
   useEffect(() => {
     drawTimelineElements();
-  }, [drawTimelineElements, state.scrollX, state.zoom, state.tempo]);
+  }, [drawTimelineElements, state.scrollX, state.zoom, state.tempo, state.loopEnabled, state.loopStart, state.loopEnd]);
 
   // コンテナの幅を動的に調整（安定化版）
   useEffect(() => {
@@ -1206,26 +1380,48 @@ const MidiEditorCanvas = ({
 
   // キーボードイベントハンドラー
   const handleKeyDown = useCallback((e) => {
-    // Tabキーで予測を受け入れる
-    if (e.key === 'Tab' && ghostPredictions.length > 0) {
+    // 🟠 Problem 2修正: TABキーでフレーズ予測と通常予測の両方をチェック
+    const hasGhostPredictions = ghostPredictions.length > 0
+    const hasPhrasePredictions = Array.isArray(phrasePredictions) && phrasePredictions.length > 0
+
+    console.log('🎹 handleKeyDown: TAB check', {
+      key: e.key,
+      hasGhostPredictions,
+      hasPhrasePredictions,
+      ghostPredictionsCount: ghostPredictions.length,
+      phrasePredictionsCount: phrasePredictions?.length || 0
+    })
+
+    // Tabキーで予測を受け入れる（フレーズ予測または通常予測）
+    if (e.key === 'Tab' && (hasGhostPredictions || hasPhrasePredictions)) {
       try { e.preventDefault() } catch (error) { console.warn('preventDefault failed:', error); }
-      
+
       if (e.shiftKey) {
-        // Shift+Tab: 前の予測を選択
-        const newIndex = (state.selectedPredictionIndex - 1 + ghostPredictions.length) % ghostPredictions.length
-        state.setSelectedPredictionIndex(newIndex)
+        // Shift+Tab: 前の予測を選択（通常予測のみ対応）
+        if (hasGhostPredictions) {
+          const newIndex = (state.selectedPredictionIndex - 1 + ghostPredictions.length) % ghostPredictions.length
+          state.setSelectedPredictionIndex(newIndex)
+          console.log('🎹 Shift+Tab: 前の予測選択', newIndex)
+        }
       } else {
-        // Tab: 全予測を受け入れる
+        // Tab: 全予測を受け入れる（フレーズ予測優先）
+        console.log('🎹 Tab: 予測採用開始', {
+          hasPhrasePredictions,
+          hasGhostPredictions
+        })
+
         if (onAcceptAllPredictions) {
           onAcceptAllPredictions()
+          console.log('✅ Tab: onAcceptAllPredictions実行完了')
         } else if (onAcceptPrediction) {
           // フォールバック: 単一予測を受け入れる
           onAcceptPrediction(state.selectedPredictionIndex)
+          console.log('✅ Tab: onAcceptPrediction実行完了')
         }
         state.setSelectedPredictionIndex(0) // 選択をリセット
       }
     }
-  }, [onAcceptAllPredictions, onAcceptPrediction, ghostPredictions.length, state.selectedPredictionIndex, state.setSelectedPredictionIndex])
+  }, [onAcceptAllPredictions, onAcceptPrediction, ghostPredictions, phrasePredictions, state.selectedPredictionIndex, state.setSelectedPredictionIndex])
 
   return (
     <div

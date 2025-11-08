@@ -8,8 +8,7 @@ import {
   Music,
   Drum,
   Mic,
-  Headphones,
-  Zap
+  Headphones
 } from 'lucide-react'
 
 const TabBar = ({
@@ -277,10 +276,14 @@ const TabBar = ({
                 setActiveTab(tab.id)
 
                 // クリック後、ボタンに確実にフォーカスを設定（複数回試行）
-                e.currentTarget.focus()
-                setTimeout(() => {
+                if (e.currentTarget) {
                   e.currentTarget.focus()
-                  console.log('🔧 タブボタンフォーカス強制設定:', tab.id)
+                }
+                setTimeout(() => {
+                  if (e.currentTarget) {
+                    e.currentTarget.focus()
+                    console.log('🔧 タブボタンフォーカス強制設定:', tab.id)
+                  }
                 }, 10)
 
                 console.log('🔧 TAB CLICK END: ', tab.id)

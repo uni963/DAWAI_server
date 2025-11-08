@@ -273,76 +273,9 @@ const AIAssistantChatBox = ({
           window.aiAgentEngine.setModel(currentModel);
         }
 
-        // ストリーミングレスポンス用のメッセージを作成
-        const streamingMessage = {
-          id: Date.now() + Math.random(),
-          sender: "assistant",
-          text: "",
-          timestamp: new Date().toISOString(),
-          isStreaming: true,
-          hasPendingChanges: false
-        };
-        addMessageToCurrentSection(streamingMessage);
+        // ストリーミングAgent modeを実行（メッセージ追加はイベントリスナーで行う）
+        await window.aiAgentEngine.streamAgentAction(currentMessage, context);
 
-        // ストリーミングAgent modeを実行
-        const result = await window.aiAgentEngine.streamAgentAction(
-          currentMessage, 
-          context,
-          (chunk, fullResponse) => {
-            // ストリーミング中のテキストを更新
-            setChatSections(prev => prev.map(section => 
-              section.id === currentSectionId 
-                ? {
-                    ...section,
-                    messages: section.messages.map(msg => 
-                      msg.id === streamingMessage.id 
-                        ? { ...msg, text: fullResponse }
-                        : msg
-                    )
-                  }
-                : section
-            ));
-          }
-        );
-        
-        // ストリーミング完了後、最終的なメッセージを更新
-        let displayText = '🤖 Agent Mode: 操作が完了しました';
-        
-        if (result && typeof result === 'object') {
-          if (result.summary) {
-            displayText = `🤖 Agent Mode: ${String(result.summary)}`;
-          }
-          if (result.nextSteps) {
-            displayText += `\n\n${String(result.nextSteps)}`;
-          }
-          if (result.error) {
-            displayText += `\n\nエラー: ${String(result.error)}`;
-          }
-        } else if (typeof result === 'string') {
-          displayText = `🤖 Agent Mode: ${result}`;
-        } else {
-          displayText = `🤖 Agent Mode: ${String(result)}`;
-        }
-        
-        // 最終的なメッセージに更新
-        setChatSections(prev => prev.map(section => 
-          section.id === currentSectionId 
-            ? {
-                ...section,
-                messages: section.messages.map(msg => 
-                  msg.id === streamingMessage.id 
-                    ? { 
-                        ...msg, 
-                        text: displayText,
-                        isStreaming: false,
-                        agentActions: Array.isArray(result?.actions) ? result.actions : []
-                      }
-                    : msg
-                )
-              }
-            : section
-        ));
-        
       } catch (error) {
         console.error("AI Agent generation error:", error);
         const errorResponse = {
@@ -675,7 +608,7 @@ const AIAssistantChatBox = ({
           }
           break;
         case 'sensePhaseCompleted':
-          // Sense段階完了時の処理 - 既存のチャット履歴を保持し、Senseメッセージを一番上に配置
+          // Sense段階完了時の処理 - 既存のチャット履歴を保持し、Senseメッセージを最後に追加
           const senseResponse = {
             id: Date.now() + Math.random(),
             sender: 'assistant',
@@ -684,23 +617,9 @@ const AIAssistantChatBox = ({
             phase: 'sense',
             understood: data.understood
           };
-          
-          // 現在のセクションのメッセージを取得
-          const currentMessages = getCurrentSectionMessages();
-          
-          // 既存のチャット履歴を保持し、Senseメッセージを一番上に配置
-          setChatSections(prev => prev.map(section => 
-            section.id === currentSectionId 
-              ? {
-                  ...section,
-                  messages: [
-                    senseResponse, // Senseメッセージを一番上に
-                    ...currentMessages.filter(msg => !msg.isStreaming), // 既存のチャット履歴を保持
-                    ...currentMessages.filter(msg => msg.isStreaming) // 生成中メッセージを下に
-                  ]
-                }
-              : section
-          ));
+
+          // Senseメッセージを通常の順序で追加（既存の履歴を保持）
+          addMessageToCurrentSection(senseResponse);
           break;
         case 'planPhaseCompleted':
           // Plan段階完了時の処理 - リアルタイムストリーミングで表示し、完了後にチャットメッセージとして保存
@@ -723,44 +642,25 @@ const AIAssistantChatBox = ({
           setStreamingMessage(null);
           setStreamingPhase(null);
           break;
-        case 'actPhaseCompleted':
-          // Act段階完了時の処理 - リアルタイムストリーミングで表示し、完了後にチャットメッセージとして保存
-          setProcessingState({ isGenerating: false, isThinking: false, progress: 100 });
-          const actResponse = {
-            id: Date.now() + Math.random(),
-            sender: 'assistant',
-            text: data.response || data.summary || '操作が完了しました。',
-            timestamp: new Date().toISOString(),
-            phase: 'act',
-            hasPendingChanges: data.hasPendingChanges,
-            isStreaming: false
-          };
-          
-          // Actメッセージをチャットとして追加
-          addMessageToCurrentSection(actResponse);
-          
-          // ストリーミングメッセージをクリア（Act段階が完了したため）
-          setStreamingMessage(null);
-          setStreamingPhase(null);
-
-
-          // MIDIエディターの強制更新をトリガー
-          if (data.hasPendingChanges && window.midiEditorForceUpdate) {
-            window.midiEditorForceUpdate();
-          }
-          break;
         case 'agentStreamingCompleted':
+          // Agent全体の処理完了 - 最終メッセージを表示
           setProcessingState({ isGenerating: false, isThinking: false, progress: 100 });
 
           if (data && data.result) {
             // 承認セッションが開始されている場合は、hasPendingChangesを強制的にtrueにする
-            const hasPendingChanges = data.result.hasPendingChanges || 
+            const hasPendingChanges = data.result.hasPendingChanges ||
               (approvalSessionId && pendingChanges && (pendingChanges.tracks?.length > 0 || pendingChanges.notes?.length > 0));
-            
+
+            // メッセージテキストを構築（summaryとnextStepsを含む）
+            let messageText = data.result.summary || '操作が完了しました。';
+            if (data.result.nextSteps) {
+              messageText += `\n\n💡 次のステップ:\n${data.result.nextSteps}`;
+            }
+
             const aiResponse = {
               id: Date.now() + Math.random(),
               sender: 'assistant',
-              text: data.result.summary || 'AI生成が完了しました。',
+              text: messageText,
               timestamp: new Date().toISOString(),
               hasPendingChanges: hasPendingChanges
             };
@@ -905,14 +805,24 @@ const AIAssistantChatBox = ({
     };
   }, [chatSections, currentSectionId]);
 
+  // 折りたたみトグルハンドラー
+  const handleToggleCollapse = useCallback(() => {
+    setIsAIAssistantCollapsed(prev => !prev);
+  }, [setIsAIAssistantCollapsed]);
+
   // UI
   return (
-    <aside className={`bg-gray-900/80 backdrop-blur-md border-l border-gray-700/50 flex flex-col h-full transition-all duration-300 ${isAIAssistantCollapsed ? 'w-12' : ''}`} style={{ width: isAIAssistantCollapsed ? '48px' : `${aiPanelWidth}px` }}>
+    <aside
+      className={`bg-gray-900/80 backdrop-blur-md border-l border-gray-700/50 flex flex-col h-full transition-all duration-300 ease-in-out ${isAIAssistantCollapsed ? 'w-12' : ''}`}
+      style={{ width: isAIAssistantCollapsed ? '48px' : `${aiPanelWidth}px` }}
+      role="complementary"
+      aria-label="AIアシスタント"
+    >
       {/* リサイズハンドル */}
       {!isAIAssistantCollapsed && (
         <div className="absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-blue-500/50 transition-colors z-10 resize-handle" onMouseDown={handleMouseDown} />
       )}
-      
+
       {/* ヘッダー */}
       <ChatHeader
         isAIAssistantCollapsed={isAIAssistantCollapsed}
@@ -943,7 +853,7 @@ const AIAssistantChatBox = ({
         onSectionNameChange={(e) => setEditingSectionName(e.target.value)}
         onSectionNameKeyPress={handleSectionNameKeyPress}
       />
-      
+
       {/* チャットエリア */}
       {!isAIAssistantCollapsed && (
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -958,7 +868,7 @@ const AIAssistantChatBox = ({
             streamingMessage={streamingMessage}
             streamingPhase={streamingPhase}
           />
-          
+
           <ChatInput
             newMessage={newMessage}
             processingState={processingState}
@@ -969,13 +879,19 @@ const AIAssistantChatBox = ({
           />
         </div>
       )}
-      
-      {/* 折りたたみ時のアイコン表示 */}
+
+      {/* 折りたたみ時のアイコン表示（クリック可能） */}
       {isAIAssistantCollapsed && (
-        <div className="flex flex-col items-center justify-center h-full text-gray-400">
+        <button
+          className="flex flex-col items-center justify-center h-full text-gray-400 hover:text-white hover:bg-gray-800/50 transition-all duration-200 cursor-pointer w-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset"
+          onClick={handleToggleCollapse}
+          aria-label="AIアシスタントを展開"
+          aria-expanded="false"
+          title="クリックでAIアシスタントを展開"
+        >
           <Wand2 className="h-5 w-5 mb-1" />
           <span className="text-xs font-semibold [writing-mode:vertical-lr]">AI</span>
-        </div>
+        </button>
       )}
     </aside>
   );

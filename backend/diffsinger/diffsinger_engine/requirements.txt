@@ -1,0 +1,119 @@
+# ========================================
+# DiffSinger Engine - 完全な依存関係リスト
+# ========================================
+# DAWAIプロジェクト - DiffSinger歌声合成エンジン
+# Python 3.8+ 推奨 (3.10以下推奨、3.11はPyTorchとの互換性に注意)
+# ========================================
+
+# ===== コア深層学習フレームワーク =====
+torch>=1.12.0,<2.0.0
+torchaudio>=0.12.0,<0.13.0
+pytorch-lightning>=1.8.0,<2.0.0
+
+# ===== 数値計算・科学計算 =====
+numpy>=1.21.0,<1.24.0  # 1.24+はPyTorch<2.0と互換性問題あり
+scipy>=1.7.0,<1.11.0
+
+# ===== 音声処理 =====
+librosa>=0.9.0,<0.11.0
+soundfile>=0.12.0  # librosaのバックエンド（WAV読み書き）
+
+# ===== FastAPI Webサーバー =====
+fastapi>=0.100.0,<0.110.0
+uvicorn[standard]>=0.23.0,<0.25.0  # ASGI サーバー
+pydantic>=1.10.0,<2.0.0  # データバリデーション
+
+# ===== 設定管理 =====
+pyyaml>=5.4.0,<7.0.0
+hydra-core>=1.1.0,<1.4.0
+omegaconf>=2.1.0,<2.4.0
+
+# ===== 可視化・ロギング =====
+matplotlib>=3.5.0,<3.8.0
+tensorboard>=2.8.0,<3.0.0
+tqdm>=4.62.0,<5.0.0  # プログレスバー
+
+# ===== 音楽・MIDI処理 =====
+pretty_midi>=0.2.9,<0.3.0
+mido>=1.2.10,<2.0.0  # MIDI読み書き
+
+# ===== 中国語音韻処理（必須） =====
+pypinyin>=0.48.0,<0.51.0  # 中国語拼音変換
+jieba>=0.42.0,<0.43.0  # 中国語分詞（オプション）
+
+# ===== テンソル操作 =====
+einops>=0.6.0,<0.8.0  # 高度なテンソル操作
+
+# ===== 信号処理 =====
+pycwt>=0.3.0a22  # 連続ウェーブレット変換（CWT）
+pyworld>=0.3.0,<0.4.0  # 音声分析（オプション）
+praat-parselmouth>=0.4.0,<0.5.0  # Praat音声分析（オプション）
+
+# ===== 機械学習ユーティリティ =====
+scikit-learn>=1.0.0,<1.4.0
+pandas>=1.3.0,<2.2.0  # データ処理（オプション）
+
+# ===== その他ユーティリティ =====
+requests>=2.28.0,<3.0.0  # HTTP通信
+python-multipart>=0.0.6  # FastAPIファイルアップロード
+h5py>=3.7.0,<3.10.0  # HDF5ファイル処理（ParallelWaveGAN用）
+
+# ===== 開発・テスト（オプション） =====
+pytest>=7.0.0,<8.0.0
+pytest-asyncio>=0.21.0,<0.24.0
+black>=23.0.0,<24.0.0  # コードフォーマッター
+flake8>=6.0.0,<7.0.0  # Linter
+
+# ===== 型チェック（オプション） =====
+mypy>=1.0.0,<1.8.0
+types-PyYAML>=6.0.0
+types-requests>=2.31.0
+
+# ========================================
+# プラットフォーム固有の依存関係
+# ========================================
+
+# Windows環境
+# pywin32>=305  # Windows専用（必要に応じてアンコメント）
+
+# Linux環境でのオーディオバックエンド
+# python-sounddevice>=0.4.6  # リアルタイム音声I/O
+
+# ========================================
+# GPU サポート（必須ではないがCPU推論は遅い）
+# ========================================
+# CUDA 11.7の場合:
+# torch==1.13.1+cu117
+# torchaudio==0.13.1+cu117
+# --extra-index-url https://download.pytorch.org/whl/cu117
+
+# CUDA 11.8の場合:
+# torch==1.13.1+cu118
+# torchaudio==0.13.1+cu118
+# --extra-index-url https://download.pytorch.org/whl/cu118
+
+# CPU Only（GPUなし環境）:
+# torch==1.13.1+cpu
+# torchaudio==0.13.1+cpu
+# --extra-index-url https://download.pytorch.org/whl/cpu
+
+# ========================================
+# バージョン互換性ノート
+# ========================================
+# - Python 3.8-3.10 推奨（3.11はPyTorch<2.0との互換性問題あり）
+# - NumPy 1.24+はPyTorch 1.xと非互換（AttributeError: module 'numpy' has no attribute 'complex'）
+# - PyTorch 2.0+は大幅な変更があるため、1.12-1.13使用推奨
+# - pydantic 2.0+はFastAPI 0.100以前と非互換
+# - pytorch-lightning 2.0+は破壊的変更あり
+
+# ========================================
+# インストールコマンド例
+# ========================================
+# GPU環境（CUDA 11.7）:
+#   pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu117
+#
+# CPU環境:
+#   pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+#
+# 最小構成（推論のみ）:
+#   pip install torch torchaudio fastapi uvicorn pydantic numpy librosa pypinyin einops pyyaml

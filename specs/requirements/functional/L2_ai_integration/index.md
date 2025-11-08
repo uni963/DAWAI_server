@@ -1,8 +1,8 @@
 # AI統合機能要件 (L2)
 
 **Document ID**: FR-L2-AI-001
-**Version**: 2.0.0
-**Last Updated**: 2025-01-22
+**Version**: 2.0.1
+**Last Updated**: 2025-11-02
 **Parent**: [L1: 機能要件一覧](../L1_index.md)
 **Implementation Status**: ✅ Fully Implemented
 
@@ -331,10 +331,26 @@ const diffsingerSettings = {
 **実装ディレクトリ**:
 - バックエンド: `backend/ghost_text/`
 - フロントエンド: `frontend/src/components/GhostTextPanel.jsx`
+- コアフック: `frontend/src/hooks/useGhostText.js`
+- エンジン: `frontend/src/utils/magentaGhostTextEngine.js`
 
 歌詞・楽譜入力時のリアルタイムAI補完機能。ユーザーの入力パターンを学習し、適切な続きを予測提案します。
 
+**デフォルト設定（2025-11-02バグ修正後）**:
+- **デフォルトAIモデル**: `musicRnn` (Google Magentaの音楽生成モデル)
+- **設定場所**: `frontend/src/hooks/useGhostText.js:36`
+- **初期状態**: 有効（`ghostTextEnabled: true`）
+- **重要な修正**: 従来は `'magenta'` で初期化されていたが、Ghost Text有効化条件である `aiModel === 'phi2'` との不一致により動作しない問題があった。現在は `'musicRnn'` に修正され、デフォルトで正常に動作する。
+
+**開発方針変更（2025-11-03）**:
+- **Phi-2開発中止**: Phi-2バックエンドは現在稼働しておらず、開発を中止
+- **Magenta集中開発**: Google Magentaを主要な予測エンジンとして強化
+- **フレーズベース予測**: 1音ずつではなく、1小節分の起承転結のあるフレーズを生成
+- **複数候補・単一表示**: 複数候補を生成し、一度に1つのみ表示、↑↓で切り替え
+- **1音ずつ承認UI**: Spaceキーで次のノートを承認、Backspaceで取り消し
+
 **詳細ドキュメント**:
+- **[L3: Ghost Text機能強化要件仕様書](./L3_ghost_text_requirements.md)** - 🆕 最新の強化仕様（複数候補、フレーズベース予測）
 - **[L3: Ghost Text補完機能 - ユーザーガイド](./L3_ghost_text_user_guide.md)** - 初心者向けの詳しい使い方ガイド
 - **[L3: Ghost Textジャンル・スケール対応機能要件](./L3_ghost_text_enhancement.md)** - 音楽理論統合の技術仕様
 

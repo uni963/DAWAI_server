@@ -5,7 +5,9 @@ const useTrackContextMenu = ({
   setSelectedTracks,
   setLastSelectedTrack,
   handleCopyTracks,
+  handlePasteTracks,
   handleDeleteTracks,
+  clipboard,
   projectManager,
   forceRerenderApp,
   onTabChange
@@ -105,16 +107,17 @@ const useTrackContextMenu = ({
       return icon
     }
     
-    const createMenuItem = (text, iconSvg, onClick, isDestructive = false, shortcut = null) => {
+    const createMenuItem = (text, iconSvg, onClick, isDestructive = false, shortcut = null, isDisabled = false) => {
       const item = document.createElement('div')
       item.style.cssText = `
         padding: 8px 12px;
-        cursor: pointer;
+        cursor: ${isDisabled ? 'not-allowed' : 'pointer'};
         transition: all 0.15s ease;
         display: flex;
         align-items: center;
         justify-content: space-between;
         font-weight: 500;
+        opacity: ${isDisabled ? '0.4' : '1'};
         ${isDestructive ? 'color: #ef4444;' : ''}
       `
       
@@ -143,14 +146,18 @@ const useTrackContextMenu = ({
       }
       
       item.onmouseenter = () => {
-        item.style.background = isDestructive ? '#dc2626' : '#374151'
-        item.style.color = isDestructive ? '#ffffff' : '#f9fafb'
+        if (!isDisabled) {
+          item.style.background = isDestructive ? '#dc2626' : '#374151'
+          item.style.color = isDestructive ? '#ffffff' : '#f9fafb'
+        }
       }
       item.onmouseleave = () => {
-        item.style.background = 'transparent'
-        item.style.color = isDestructive ? '#ef4444' : '#f9fafb'
+        if (!isDisabled) {
+          item.style.background = 'transparent'
+          item.style.color = isDestructive ? '#ef4444' : '#f9fafb'
+        }
       }
-      item.onclick = onClick
+      item.onclick = isDisabled ? null : onClick
       
       return item
     }
@@ -177,7 +184,24 @@ const useTrackContextMenu = ({
       false,
       'Ctrl+X'
     )
-    
+
+    // クリップボードにデータがあるかチェック
+    const hasClipboardData = clipboard && clipboard.type === 'tracks' && clipboard.data && clipboard.data.length > 0
+
+    const pasteBtn = createMenuItem(
+      'ペースト',
+      '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M10 14h4"/><path d="M12 12v4"/>',
+      () => {
+        if (hasClipboardData && handlePasteTracks) {
+          handlePasteTracks()
+        }
+        closeMenu()
+      },
+      false,
+      'Ctrl+V',
+      !hasClipboardData
+    )
+
     const deleteBtn = createMenuItem(
       currentSelectionCount > 1 ? `削除 (${currentSelectionCount}個)` : '削除',
       '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
@@ -264,6 +288,7 @@ const useTrackContextMenu = ({
 
     menu.appendChild(copyBtn)
     menu.appendChild(cutBtn)
+    menu.appendChild(pasteBtn)
     menu.appendChild(deleteBtn)
     menu.appendChild(openTabBtn)
     document.body.appendChild(menu)
@@ -272,7 +297,7 @@ const useTrackContextMenu = ({
     document.addEventListener('click', closeMenu)
     document.addEventListener('contextmenu', closeMenu)
     document.addEventListener('keydown', handleEsc)
-  }, [selectedTracks, handleCopyTracks, handleDeleteTracks, projectManager, forceRerenderApp, onTabChange, setSelectedTracks, setLastSelectedTrack])
+  }, [selectedTracks, handleCopyTracks, handlePasteTracks, handleDeleteTracks, clipboard, projectManager, forceRerenderApp, onTabChange, setSelectedTracks, setLastSelectedTrack])
 
   return { showTrackContextMenu }
 }

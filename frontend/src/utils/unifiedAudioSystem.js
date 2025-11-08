@@ -3,6 +3,7 @@
 
 import { pianoKeyMapping } from './pianoTest.js';
 import { drumMapping } from './drumTest.js';
+import { SampledBassEngine } from './audio/SampledBassEngine.js';
 
 class UnifiedAudioSystem {
   constructor() {
@@ -12,6 +13,7 @@ class UnifiedAudioSystem {
     this.masterVolume = 0.8; // マスターボリュームを少し上げる
     this.masterGain = null;
     this.masterLimiter = null; // クリッピング防止用リミッター
+    this.playbackRate = 1.0; // 再生速度 (0.25x ~ 4.0x)
 
     // 現在再生中の音
     this.activeSounds = new Map();
@@ -24,6 +26,12 @@ class UnifiedAudioSystem {
 
     // イベントリスナー
     this.listeners = new Set();
+
+    // Bass Engine
+    this.bassEngine = null;
+
+    // 🎸 Bass Track専用: スケジュールされたタイマーを管理
+    this.scheduledBassTimers = new Map();
   }
 
   // 初期化
@@ -92,6 +100,18 @@ class UnifiedAudioSystem {
           this.masterLimiter.connect(this.audioContext.destination);
 
           console.log('✅ マスターリミッター初期化完了 (threshold: -3dB, ratio: 20:1)');
+        }
+
+        // Bass Engine初期化
+        if (!this.bassEngine) {
+          try {
+            this.bassEngine = new SampledBassEngine();
+            await this.bassEngine.loadSamples(); // サンプルを読み込み
+            console.log('✅ Bass Engine初期化完了');
+          } catch (error) {
+            console.warn('⚠️ Bass Engine初期化に失敗:', error.message);
+            // エラーがあっても続行 (他の楽器は動作する)
+          }
         }
 
         // AudioContextが実際にrunning状態になっているかチェック
@@ -186,6 +206,180 @@ class UnifiedAudioSystem {
     }
   }
 
+  // ベース音を再生（SampledBassEngineを使用）
+  async playBassNote(pitch, velocity = 0.8) {
+    if (!this.isInitialized) {
+      const success = await this.initialize();
+      if (!success) return null;
+    }
+
+    // Bass Engineが初期化されていない場合
+    if (!this.bassEngine) {
+      console.warn('⚠️ Bass Engine が初期化されていません');
+      return null;
+    }
+
+    try {
+      console.log(`🎸 ベース音再生: ピッチ=${pitch}, ベロシティ=${velocity}`);
+
+      // SampledBassEngine を使用してベース音を再生
+      const sourceNode = this.bassEngine.playNote(pitch, Math.floor(velocity * 127));
+
+      if (!sourceNode) {
+        console.warn(`⚠️ ベース音の再生に失敗: ピッチ=${pitch}`);
+        return null;
+      }
+
+      // 統合音声システムでの管理用に音IDを生成
+      const soundId = `bass-${pitch}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+      // アクティブサウンドに追加（統合音声システムでの管理用）
+      this.activeSounds.set(soundId, {
+        type: 'bass',
+        pitch: pitch,
+        startTime: this.audioContext.currentTime,
+        velocity: velocity,
+        trackId: 'bass-track',
+        source: sourceNode,
+        gainNode: null // SampledBassEngine内で管理
+      });
+
+      console.log(`✅ ベース音再生成功: ${soundId}`);
+      return { soundId, source: sourceNode };
+
+    } catch (error) {
+      console.error(`❌ ベース音の再生に失敗: ${error.message}`);
+      return null;
+    }
+  }
+
+  // Bass Track シーケンス再生（Arrangement View用）
+  async playBassTrackSequence(notes, startTime = 0, volume = 0.8) {
+    if (!this.isInitialized) {
+      const success = await this.initialize();
+      if (!success) return false;
+    }
+
+    // Bass Engineが初期化されていない場合
+    if (!this.bassEngine) {
+      console.warn('⚠️ Bass Engine が初期化されていません');
+      return false;
+    }
+
+    try {
+      console.log('🎸 [UnifiedAudioSystem] Starting Bass track sequence playback:', {
+        notesCount: notes.length,
+        startTime,
+        volume
+      });
+
+      const currentTime = this.audioContext.currentTime;
+      let successCount = 0;
+
+      // 各ノートをスケジューリング
+      for (const note of notes) {
+        try {
+          // ノートの開始時間を計算（秒単位）
+          const noteStartTime = currentTime + startTime + (note.time || 0);
+
+          // 過去の時間は再生しない
+          if (noteStartTime <= currentTime) {
+            console.log('🎸 [UnifiedAudioSystem] Skipping past Bass note:', {
+              pitch: note.pitch,
+              time: note.time,
+              noteStartTime,
+              currentTime
+            });
+            continue;
+          }
+
+          // 音量調整（ノートのベロシティ × トラック音量）
+          const noteVolume = (note.velocity || 100) / 127 * volume;
+
+          console.log('🎸 [UnifiedAudioSystem] Scheduling Bass note:', {
+            pitch: note.pitch,
+            velocity: note.velocity,
+            time: note.time,
+            noteStartTime,
+            volume: noteVolume
+          });
+
+          // 正しいスケジューリング処理（再生速度を考慮）
+          const delay = noteStartTime - currentTime;
+          // 再生速度を適用した遅延時間を計算
+          const adjustedDelay = delay / this.playbackRate;
+
+          if (delay > 0) {
+            // 未来のノート: スケジューリング（再生速度適用済み）
+            const timerId = setTimeout(() => {
+              try {
+                console.log('🎸 [UnifiedAudioSystem] Playing scheduled Bass note:', note.pitch);
+                const sourceNode = this.bassEngine.playNote(note.pitch, Math.floor(noteVolume * 127));
+                if (!sourceNode) {
+                  console.warn('🎸 [UnifiedAudioSystem] Failed to create scheduled Bass source for note:', note.pitch);
+                } else {
+                  // 再生速度をBass音源に適用（音程調整と組み合わせ）
+                  if (sourceNode._basePitchRate) {
+                    sourceNode.playbackRate.value = sourceNode._basePitchRate * this.playbackRate;
+                  }
+                }
+
+                // 🎸 タイマーが実行されたらMapから削除
+                const timerKey = `bass-${note.time}-${note.pitch}`;
+                this.scheduledBassTimers.delete(timerKey);
+                console.log(`🎸 [UnifiedAudioSystem] Timer executed and removed: ${timerKey}`);
+              } catch (scheduleError) {
+                console.error('🎸 [UnifiedAudioSystem] Error in scheduled Bass note:', scheduleError);
+              }
+            }, adjustedDelay * 1000);
+
+            // 🎸 タイマーIDを保存（一時停止時にクリアするため）
+            const timerKey = `bass-${note.time}-${note.pitch}`;
+            this.scheduledBassTimers.set(timerKey, timerId);
+            console.log(`🎸 [UnifiedAudioSystem] Scheduled timer saved: ${timerKey} (delay: ${adjustedDelay.toFixed(3)}s)`);
+
+            successCount++;
+          } else {
+            // 現在のノート: 即座に再生
+            try {
+              const sourceNode = this.bassEngine.playNote(note.pitch, Math.floor(noteVolume * 127));
+              if (sourceNode) {
+                console.log('🎸 [UnifiedAudioSystem] Playing immediate Bass note:', note.pitch);
+                // 再生速度をBass音源に適用（音程調整と組み合わせ）
+                if (sourceNode._basePitchRate) {
+                  sourceNode.playbackRate.value = sourceNode._basePitchRate * this.playbackRate;
+                }
+                successCount++;
+              } else {
+                console.warn('🎸 [UnifiedAudioSystem] Failed to create immediate Bass source for note:', note.pitch);
+              }
+            } catch (immediateError) {
+              console.error('🎸 [UnifiedAudioSystem] Error in immediate Bass note:', immediateError);
+            }
+          }
+
+        } catch (noteError) {
+          console.error('🎸 [UnifiedAudioSystem] Error playing Bass note:', {
+            note,
+            error: noteError.message
+          });
+        }
+      }
+
+      console.log('✅ [UnifiedAudioSystem] Bass track sequence playback started:', {
+        totalNotes: notes.length,
+        successCount,
+        failureCount: notes.length - successCount
+      });
+
+      return successCount > 0;
+
+    } catch (error) {
+      console.error('❌ [UnifiedAudioSystem] Error in Bass track sequence playback:', error);
+      return false;
+    }
+  }
+
   // MIDIピッチ番号をドラムキーにマッピング
   midiTodrummingKey(midiPitch) {
     const midiToDrumMap = {
@@ -240,6 +434,9 @@ class UnifiedAudioSystem {
       source.buffer = audioBuffer;
       gainNode.gain.value = velocity * this.masterVolume;
 
+      // 再生速度を適用
+      source.playbackRate.value = this.playbackRate;
+
       source.connect(gainNode);
       gainNode.connect(this.audioContext.destination);
 
@@ -251,7 +448,7 @@ class UnifiedAudioSystem {
         source.start(now, startTime);
       }
 
-      console.log('✅ [UnifiedAudio] DiffSinger音声再生開始');
+      console.log('✅ [UnifiedAudio] DiffSinger音声再生開始 (再生速度: ' + this.playbackRate.toFixed(2) + 'x)');
 
       return {
         source,
@@ -335,17 +532,25 @@ class UnifiedAudioSystem {
 
     const source = this.audioContext.createBufferSource();
     const gainNode = this.audioContext.createGain();
-    
+
     source.buffer = audioBuffer;
-    
-    // ピッチ変更を適用（ピアノの場合）
+
+    // ピッチ変更と再生速度を適用
     let pitchInfo = '';
+    let pitchRatio = 1.0;
     if (type === 'piano' && soundInfo.pitch !== 0) {
-      const pitchRatio = Math.pow(2, soundInfo.pitch / 12);
-      source.playbackRate.value = pitchRatio;
+      pitchRatio = Math.pow(2, soundInfo.pitch / 12);
       pitchInfo = ` (ピッチ変更: ${soundInfo.pitch > 0 ? '+' : ''}${soundInfo.pitch}半音, 比率: ${pitchRatio.toFixed(3)})`;
     }
-    
+
+    // 再生速度を適用（ピッチ変更と組み合わせる）
+    const finalPlaybackRate = pitchRatio * this.playbackRate;
+    source.playbackRate.value = finalPlaybackRate;
+
+    if (this.playbackRate !== 1.0) {
+      pitchInfo += ` (再生速度: ${this.playbackRate.toFixed(2)}x, 最終レート: ${finalPlaybackRate.toFixed(3)})`;
+    }
+
     // 音量調整（ミキサー設定を参照）
     const baseVolume = type === 'piano' ? 0.4 : (soundInfo.volume || 0.8); // ベース音量を少し上げる
     
@@ -422,13 +627,14 @@ class UnifiedAudioSystem {
     
     // アクティブサウンドとして記録
     const soundId = `${type}-${Date.now()}-${Math.random()}`;
-    this.activeSounds.set(soundId, { 
-      source, 
-      gainNode, 
-      startTime: this.audioContext.currentTime, 
+    this.activeSounds.set(soundId, {
+      source,
+      gainNode,
+      startTime: this.audioContext.currentTime,
       type,
       soundInfo: soundInfo, // 音の情報を保存
       pitch: soundInfo.pitch || soundInfo.note || null, // ピッチ情報を保存
+      pitchRatio: pitchRatio, // ピッチ比率を保存（再生速度調整に使用）
       trackId: null, // 後で設定可能
       duration: null, // 後で設定可能
       velocity: velocity // ベロシティを保存
@@ -460,7 +666,7 @@ class UnifiedAudioSystem {
     if (this.masterVolume === volume) {
       return;
     }
-    
+
     console.log(`🎵 setMasterVolume called: volume=${volume} (type: ${typeof volume})`);
     this.masterVolume = Math.max(0, Math.min(1, volume));
     if (this.masterGain) {
@@ -469,14 +675,47 @@ class UnifiedAudioSystem {
     console.log(`🎵 マスターボリューム設定: ${this.masterVolume.toFixed(3)}`);
   }
 
+  // 再生速度を設定 (0.25x ~ 4.0x)
+  setPlaybackRate(rate) {
+    // 既存の再生速度と同じ場合はスキップ
+    if (this.playbackRate === rate) {
+      console.log(`🎵 再生速度は既に ${rate}x に設定されています`);
+      return;
+    }
+
+    console.log(`🎵 setPlaybackRate called: rate=${rate} (type: ${typeof rate})`);
+
+    // 再生速度を 0.25x ~ 4.0x の範囲に制限
+    this.playbackRate = Math.max(0.25, Math.min(4.0, rate));
+
+    console.log(`🎵 再生速度設定: ${this.playbackRate.toFixed(2)}x`);
+
+    // 現在再生中の音声に速度を適用
+    this.activeSounds.forEach((sound, soundId) => {
+      if (sound.source && sound.source.playbackRate) {
+        try {
+          // 既存のピッチ調整との組み合わせ
+          const currentRate = sound.source.playbackRate.value;
+          const pitchRatio = sound.pitchRatio || 1.0;
+          const newRate = pitchRatio * this.playbackRate;
+
+          sound.source.playbackRate.value = newRate;
+          console.log(`🎵 音 ${soundId} の再生速度を更新: ${currentRate.toFixed(2)} → ${newRate.toFixed(2)}`);
+        } catch (error) {
+          console.warn(`🎵 音 ${soundId} の再生速度更新に失敗:`, error);
+        }
+      }
+    });
+  }
+
   // 全音を停止
   stopAllSounds() {
     console.log(`🎵 全音停止開始: ${this.activeSounds.size}個の音を停止します`);
-    
+
     this.activeSounds.forEach((sound, soundId) => {
       try {
         console.log(`🎵 音を停止中: ${soundId} (ピッチ: ${sound.pitch || '不明'}, トラック: ${sound.trackId || '不明'})`);
-        
+
         // 音声ノードが存在する場合は停止
         if (sound.source && typeof sound.source.stop === 'function') {
           sound.source.stop();
@@ -484,7 +723,7 @@ class UnifiedAudioSystem {
         if (sound.gainNode && typeof sound.gainNode.disconnect === 'function') {
           sound.gainNode.disconnect();
         }
-        
+
         // オシレーターも停止
         if (sound.oscillator && typeof sound.oscillator.stop === 'function') {
           sound.oscillator.stop();
@@ -492,14 +731,37 @@ class UnifiedAudioSystem {
         if (sound.filter && typeof sound.filter.disconnect === 'function') {
           sound.filter.disconnect();
         }
-        
+
         console.log(`🎵 音の停止完了: ${soundId}`);
       } catch (error) {
         console.warn(`音の停止に失敗: ${soundId}`, error);
       }
     });
-    
+
     this.activeSounds.clear();
+
+    // 🎸 Bass Track: スケジュールされたタイマーをすべてクリア
+    if (this.scheduledBassTimers.size > 0) {
+      console.log(`🎸 [UnifiedAudioSystem] Clearing ${this.scheduledBassTimers.size} scheduled Bass timers...`);
+      this.scheduledBassTimers.forEach((timerId, timerKey) => {
+        clearTimeout(timerId);
+        console.log(`🎸 [UnifiedAudioSystem] Cleared timer: ${timerKey}`);
+      });
+      this.scheduledBassTimers.clear();
+      console.log('✅ [UnifiedAudioSystem] All scheduled Bass timers cleared');
+    }
+
+    // 🎸 Bass Engineの停止処理を追加
+    if (this.bassEngine) {
+      try {
+        console.log('🎸 Bass Engineの全ノートを停止中...');
+        this.bassEngine.stopAllNotes();
+        console.log('✅ Bass Engine停止完了');
+      } catch (error) {
+        console.warn('⚠️ Bass Engine停止エラー:', error);
+      }
+    }
+
     console.log('🎵 全音を停止しました');
   }
 
@@ -833,17 +1095,25 @@ class UnifiedAudioSystem {
 
     const source = this.audioContext.createBufferSource();
     const gainNode = this.audioContext.createGain();
-    
+
     source.buffer = audioBuffer;
-    
-    // ピッチ変更を適用（ピアノの場合）
+
+    // ピッチ変更と再生速度を適用
     let pitchInfo = '';
+    let pitchRatio = 1.0;
     if (type === 'piano' && soundInfo.pitch !== 0) {
-      const pitchRatio = Math.pow(2, soundInfo.pitch / 12);
-      source.playbackRate.value = pitchRatio;
+      pitchRatio = Math.pow(2, soundInfo.pitch / 12);
       pitchInfo = ` (ピッチ変更: ${soundInfo.pitch > 0 ? '+' : ''}${soundInfo.pitch}半音, 比率: ${pitchRatio.toFixed(3)})`;
     }
-    
+
+    // 再生速度を適用（ピッチ変更と組み合わせる）
+    const finalPlaybackRate = pitchRatio * this.playbackRate;
+    source.playbackRate.value = finalPlaybackRate;
+
+    if (this.playbackRate !== 1.0) {
+      pitchInfo += ` (再生速度: ${this.playbackRate.toFixed(2)}x, 最終レート: ${finalPlaybackRate.toFixed(3)})`;
+    }
+
     // 音量調整（指定されたトラック音量を使用）
     const baseVolume = type === 'piano' ? 0.4 : (soundInfo.volume || 0.8);
     
@@ -857,11 +1127,17 @@ class UnifiedAudioSystem {
     
     // 再生開始
     source.start();
-    
+
     // アクティブサウンドとして記録
     const soundId = `${type}-${Date.now()}-${Math.random()}`;
-    this.activeSounds.set(soundId, { source, gainNode, startTime: this.audioContext.currentTime, type });
-    
+    this.activeSounds.set(soundId, {
+      source,
+      gainNode,
+      startTime: this.audioContext.currentTime,
+      type,
+      pitchRatio: pitchRatio // ピッチ比率を保存（再生速度調整に使用）
+    });
+
     // 自動クリーンアップ
     source.onended = () => {
       this.activeSounds.delete(soundId);
@@ -988,6 +1264,9 @@ class UnifiedAudioSystem {
       'electric_piano_2': 'piano',
       'harpsichord': 'piano',
       'clavi': 'piano',
+      'bass': 'bass',
+      'electric_bass': 'bass',
+      'acoustic_bass': 'bass',
       'drum': 'drum',
       'drums': 'drum',
       'percussion': 'drum'
@@ -1002,6 +1281,8 @@ class UnifiedAudioSystem {
       playNote: (pitch, velocity) => {
         if (mappedType === 'piano') {
           return this.playPianoNote(pitch, velocity);
+        } else if (mappedType === 'bass') {
+          return this.playBassNote(pitch, velocity);
         } else if (mappedType === 'drum') {
           return this.playDrumSound(pitch.toString(), velocity);
         }

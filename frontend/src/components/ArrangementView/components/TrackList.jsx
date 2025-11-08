@@ -6,15 +6,15 @@ import {
   AudioWaveform,
   Drum,
   Mic,
-  RefreshCw,
-  Volume2,
-  VolumeX,
   Music,
   Headphones,
-  Zap
+  Zap,
+  Sliders,
+  X
 } from 'lucide-react'
 import VoiceSynthTrack from './VoiceSynthTrack.jsx'
-import { 
+import BassTrack from '../../BassTrack.jsx'
+import {
   DEFAULT_TRACK_HEIGHT,
   NOTE_MIN,
   NOTE_RANGE,
@@ -22,8 +22,10 @@ import {
   getNoteName
 } from '../utils/arrangementUtils.js'
 import virtualizationManager from '../../../utils/virtualization.js'
-import { useMemo, useCallback, useRef, useEffect } from 'react'
+import { useMemo, useCallback, useRef, useEffect, useState } from 'react'
 import drumTrackManager from '../../../utils/drumTrackManager.js'
+import useInstrumentSettings from '../../../hooks/useInstrumentSettings.js'
+import InstrumentSettingsPanel from '../../MIDIEditor/InstrumentSettingsPanel.jsx'
 
 const TrackList = ({
   tracks,
@@ -44,6 +46,7 @@ const TrackList = ({
   onShowTrackContextMenu,
   onResizeStart,
   onTrackMenuToggle,
+  onCloseMenu,
   showTrackMenu,
   menuPosition,
   menuRef,
@@ -51,19 +54,46 @@ const TrackList = ({
   forceRerenderApp,
   onUpdateTrackState,
   onHorizontalScroll,
-  onEmptyAreaContextMenu
+  onEmptyAreaContextMenu,
+  audioEngine,
+  musicTheorySettings = {
+    scaleConstraintEnabled: false,
+    selectedGenre: null,
+    selectedScales: [],
+    rootNote: 'C'
+  },
+  onMusicTheorySettingsChange,
+  globalAISettings = {
+    aiModel: 'magenta',
+    ghostTextEnabled: false,
+    summaryStatus: null,
+    predictionSettings: { scale: null, rootNote: null }
+  },
+  onAISettingsChange
 }) => {
+  // AI関連propsのデバッグログ
+  useEffect(() => {
+    console.log('🎹 [TrackList] AI Settings Props Received:', {
+      globalAISettings,
+      onAISettingsChange: typeof onAISettingsChange
+    })
+  }, [globalAISettings, onAISettingsChange])
+
   // MIDIデータのキャッシュ
   const midiDataCache = useRef(new Map())
-  
+
+  // 音色設定パネルの状態管理
+  const [selectedTrackForSettings, setSelectedTrackForSettings] = useState(null)
+  const instrumentSettings = useInstrumentSettings(selectedTrackForSettings)
+
   // 仮想化されたトラックの計算をメモ化
   const virtualizedTracks = useMemo(() => {
     const containerHeight = trackAreaRef.current?.clientHeight || 600
     const trackHeight = DEFAULT_TRACK_HEIGHT
     return virtualizationManager.getVirtualizedTracks(
-      tracks, 
+      tracks,
       0, // スクロール位置は別途管理
-      containerHeight, 
+      containerHeight,
       trackHeight
     )
   }, [tracks, trackAreaRef])
@@ -167,21 +197,6 @@ const TrackList = ({
 
   return (
     <div className="flex-1 min-h-0 overflow-hidden">
-      {/* 複数選択ヘルプ */}
-      <div className="bg-gray-800/50 border-b border-gray-700 px-4 py-2 text-xs text-gray-400">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <span>💡 複数選択: <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">Shift</kbd> + クリックで範囲選択、<kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">Ctrl</kbd> + クリックで個別選択</span>
-            <span>⌨️ ショートカット: <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">Ctrl+A</kbd> 全選択、<kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">Ctrl+C</kbd> コピー、<kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">Ctrl+V</kbd> 貼り付け、<kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">Delete</kbd> 削除</span>
-            { (selectedTracks?.size ?? 0) > 0 && (
-              <span className="text-blue-400 font-medium">
-                {selectedTracks?.size ?? 0}個のトラックが選択中
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-      
       <div 
         ref={trackAreaRef}
         className="relative h-full overflow-x-auto overflow-y-auto main-scrollbar" 
@@ -250,10 +265,11 @@ const TrackList = ({
                  }}
                >
                  <div className="p-3 min-h-0" style={{ height: `${trackHeight}px` }}>
-                   <div className="flex items-center justify-between mb-2">
+                   {/* タイトルと音色設定ボタンを横並びに配置 */}
+                   <div className="flex items-center justify-between mb-1">
                      <div className="flex items-center space-x-2 min-w-0 flex-1">
-                       <div 
-                         className="w-3 h-3 rounded-full flex-shrink-0" 
+                       <div
+                         className="w-3 h-3 rounded-full flex-shrink-0"
                          style={{ backgroundColor: track.color }}
                        />
                        <span className={`font-medium text-white truncate ${
@@ -262,44 +278,32 @@ const TrackList = ({
                          {track.name}
                        </span>
                      </div>
+
+                     {/* Piano, Bass track用: 音色設定ボタン（タイトルの右側に配置） */}
+                     {(track.subtype === 'piano' || track.subtype === 'bass' ||
+                       track.name.toLowerCase().includes('piano') || track.name.toLowerCase().includes('bass')) && (
+                       <Button
+                         variant="ghost"
+                         size="sm"
+                         className="text-blue-400 hover:text-blue-300 hover:bg-blue-500/20 flex-shrink-0 p-1.5"
+                         onClick={(e) => {
+                           e.preventDefault()
+                           e.stopPropagation()
+                           console.log(`🎹 [TrackList] Opening tone settings for track: ${track.name} (${track.id})`)
+                           setSelectedTrackForSettings(track.id)
+                           instrumentSettings.openSettingsPanel()
+                         }}
+                         title="音色設定"
+                         data-testid={`tone-settings-button-${track.id}`}
+                       >
+                         <Sliders className="h-3.5 w-3.5" />
+                       </Button>
+                     )}
                    </div>
                    
-                   {/* コントロールボタン（高さが足りない場合は隠れる） */}
-                   {trackHeight >= 60 && (
-                     <div className="flex items-center justify-between mb-1">
-                       <div className="flex items-center space-x-1">
-                         <Button
-                           variant="ghost"
-                           size="sm"
-                           className={`${trackState.muted ? 'text-red-400' : 'text-gray-400'} hover:text-white`}
-                           onClick={(e) => {
-                             e.preventDefault()
-                             e.stopPropagation()
-                             onUpdateTrackState(track.id, { muted: !trackState.muted })
-                           }}
-                         >
-                           {trackState.muted ? <VolumeX className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
-                         </Button>
-                         
-                         <Button
-                           variant="ghost"
-                           size="sm"
-                           className={`${trackState.solo ? 'text-yellow-400' : 'text-gray-400'} hover:text-white`}
-                           onClick={(e) => {
-                             e.preventDefault()
-                             e.stopPropagation()
-                             onUpdateTrackState(track.id, { solo: !trackState.solo })
-                           }}
-                         >
-                           S
-                         </Button>
-                       </div>
-                     </div>
-                   )}
-                   
                    {/* ノート情報（高さが足りない場合は隠れる） */}
-                   {(hasMidiData || track.subtype === 'drums') && trackHeight >= 80 && (
-                     <div className="text-xs text-gray-400">
+                   {(hasMidiData || track.subtype === 'drums') && trackHeight >= 60 && (
+                     <div className="text-xs text-gray-400 mt-0.5">
                        {(() => {
                          // ドラムトラックの場合は実際のグリッドデータを表示
                          if (track.subtype === 'drums') {
@@ -336,7 +340,6 @@ const TrackList = ({
 
                          // 音階分析
                          const noteRange = { min: 127, max: 0 }
-                         let totalVelocity = 0
 
                          if (notes.length > 0) {
                            for (const note of notes) {
@@ -344,21 +347,18 @@ const TrackList = ({
                              const noteStart = note.time !== undefined ? note.time : note.start
                              const noteDuration = note.duration || 0.5
                              const pitch = note.pitch || 60
-                             const velocity = note.velocity || 0.8
 
                              maxEndTime = Math.max(maxEndTime, noteStart + noteDuration)
                              noteRange.min = Math.min(noteRange.min, pitch)
                              noteRange.max = Math.max(noteRange.max, pitch)
-                             totalVelocity += velocity
                            }
 
-                           const avgVelocity = totalVelocity / notes.length
                            const minNoteName = getNoteName(noteRange.min)
                            const maxNoteName = getNoteName(noteRange.max)
 
                            // Piano Trackの場合は音階範囲を表示
                            if (track.subtype === 'piano' || track.name.toLowerCase().includes('piano')) {
-                             return `🎹 ${noteCount} notes | ${minNoteName}-${maxNoteName} | ${maxEndTime.toFixed(1)}s | ${Math.round(avgVelocity * 100)}%`
+                             return `🎹 ${noteCount} notes | ${minNoteName}-${maxNoteName} | ${maxEndTime.toFixed(1)}s`
                            } else {
                              return `🎵 ${noteCount} notes | ${minNoteName}-${maxNoteName} | ${maxEndTime.toFixed(1)}s`
                            }
@@ -488,7 +488,7 @@ const TrackList = ({
                            })()}
                          </div>
                        </>
-                     ) : hasMidiData ? (
+                     ) : (hasMidiData && track.subtype !== 'drums') ? (
                        <>
                          {(() => {
                            // 通常のMIDIトラックの場合はMIDIデータを表示
@@ -602,7 +602,27 @@ const TrackList = ({
                     <button
                       key={trackType.id}
                       className="block w-full text-left px-4 py-3 text-sm text-gray-800 dark:text-white hover:bg-gray-100/80 dark:hover:bg-gray-800/80 transition-all duration-200 flex items-center group"
-                      onClick={() => onAddTrack(trackType.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        console.log('🔧 [TrackList] Button clicked:', trackType.id, 'onAddTrack:', typeof onAddTrack);
+
+                        // 🚀 FIX: メニューを即座に閉じる（トラック追加の前に実行）
+                        // 引数なしで呼び出すことで即座にクローズ
+                        console.log('🔧 [TrackList] Closing track menu IMMEDIATELY before track creation');
+                        if (onCloseMenu) {
+                          onCloseMenu(); // 引数なし = 即座クローズ
+                        }
+
+                        // メニューが確実に閉じるようにsetTimeoutを使用
+                        setTimeout(() => {
+                          if (onAddTrack) {
+                            console.log('🔧 [TrackList] Executing onAddTrack for:', trackType.id);
+                            onAddTrack(trackType.id);
+                          } else {
+                            console.error('🚨 [TrackList] onAddTrack is not defined!');
+                          }
+                        }, 10); // 10msの遅延でメニューのクローズを確実にする
+                      }}
                     >
                       <div className={`w-10 h-10 rounded-lg ${trackType.color} flex items-center justify-center mr-3 group-hover:opacity-80 transition-colors`}>
                         <IconComponent className={`h-5 w-5 ${trackType.iconColor}`} />
@@ -614,28 +634,41 @@ const TrackList = ({
                     </button>
                   )
                 })}
-                {forceRerenderApp && (
-                  <button 
-                    className="block w-full text-left px-4 py-3 text-sm text-gray-800 dark:text-white hover:bg-gray-100/80 dark:hover:bg-gray-800/80 transition-all duration-200 flex items-center group border-t border-gray-200/50 dark:border-gray-700/50"
-                    onClick={() => {
-                      forceRerenderApp()
-                    }}
-                  >
-                    <div className="w-8 h-8 rounded-lg bg-red-500/10 dark:bg-red-400/10 flex items-center justify-center mr-3 group-hover:bg-red-500/20 dark:group-hover:bg-red-400/20 transition-colors">
-                      <RefreshCw className="h-4 w-4 text-red-600 dark:text-red-400" />
-                    </div>
-                    <div>
-                      <div className="font-medium">強制再読み込み</div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">タブとコンポーネントを再ロード</div>
-                    </div>
-                  </button>
-                )}
               </div>
             </div>
           )}
         </div>
         </div>
       </div>
+
+      {/* 音色設定パネル */}
+      {instrumentSettings.showSettingsPanel && selectedTrackForSettings && (
+        <InstrumentSettingsPanel
+          trackId={selectedTrackForSettings}
+          instrument={instrumentSettings.instrument}
+          settings={instrumentSettings.settings}
+          onSettingsChange={instrumentSettings.handleSettingsChange}
+          onClose={instrumentSettings.closeSettingsPanel}
+          onSave={instrumentSettings.handleSaveSettings}
+          onReset={instrumentSettings.handleResetSettings}
+          musicTheorySettings={musicTheorySettings}
+          onMusicTheorySettingsChange={onMusicTheorySettingsChange}
+          aiModel={globalAISettings.aiModel}
+          onAiModelChange={(model) => {
+            console.log('🎹 [TrackList] AI Model Changed:', model)
+            onAISettingsChange('aiModel', model)
+          }}
+          ghostTextEnabled={globalAISettings.ghostTextEnabled}
+          onGhostTextToggle={(enabled) => {
+            console.log('🎹 [TrackList] Ghost Text Toggled:', enabled)
+            onAISettingsChange('ghostTextEnabled', enabled)
+          }}
+          summaryStatus={globalAISettings.summaryStatus}
+          onUpdateSummary={(status) => onAISettingsChange('summaryStatus', status)}
+          predictionSettings={globalAISettings.predictionSettings}
+          onPredictionSettingsChange={(settings) => onAISettingsChange('predictionSettings', settings)}
+        />
+      )}
     </div>
   )
 }

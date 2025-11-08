@@ -1,13 +1,13 @@
 import { Button } from '../../ui/button.jsx'
-import { 
+import {
   Play,
   Pause,
   StopCircle,
   SkipBack,
   SkipForward,
-  RotateCcw,
-  RotateCw,
-  Drum
+  Repeat,
+  FastForward,
+  Rewind
 } from 'lucide-react'
 
 const PlaybackControls = ({
@@ -19,8 +19,6 @@ const PlaybackControls = ({
   onSkipForward,
   loopEnabled,
   onLoopToggle,
-  metronomeEnabled,
-  onMetronomeToggle,
   playbackRate,
   onPlaybackRateChange,
   currentTime,
@@ -50,9 +48,23 @@ const PlaybackControls = ({
         <Button
           onClick={() => {
             console.log('🎵 PlaybackControls: Play/Pause button clicked, isPlaying:', isPlaying)
+
+            // 🎸 [Bass Track Debug] 再生ボタン押下ログ
+            console.log('🎸 [Bass Track Debug] ==================== PLAY BUTTON PRESSED ====================')
+            console.log('🎸 [Bass Track Debug] Play button pressed at:', new Date().toISOString())
+            console.log('🎸 [Bass Track Debug] Current isPlaying state:', isPlaying)
+            console.log('🎸 [Bass Track Debug] Will trigger:', isPlaying ? 'PAUSE' : 'PLAY')
+            console.log('🎸 [Bass Track Debug] Current time:', currentTime)
+            console.log('🎸 [Bass Track Debug] Total duration:', totalDuration)
+            console.log('🎸 [Bass Track Debug] BPM:', bpm)
+            console.log('🎸 [Bass Track Debug] Active tab:', window.dawaiState?.activeTab || 'Unknown')
+            console.log('🎸 [Bass Track Debug] ================================================================')
+
             if (isPlaying) {
+              console.log('🎸 [Bass Track Debug] → Calling onPause()')
               onPause()
             } else {
+              console.log('🎸 [Bass Track Debug] → Calling onPlay()')
               onPlay()
             }
           }}
@@ -91,20 +103,9 @@ const PlaybackControls = ({
           className={`${loopEnabled ? 'text-blue-400 bg-blue-900/30' : 'text-white hover:bg-gray-700'}`}
           title="ループ"
         >
-          <RotateCcw className="h-4 w-4" />
+          <Repeat className="h-4 w-4" />
         </Button>
-        
-        {/* メトロノーム機能 */}
-        <Button
-          onClick={onMetronomeToggle}
-          variant="ghost"
-          size="sm"
-          className={`${metronomeEnabled ? 'text-yellow-400 bg-yellow-900/30' : 'text-white hover:bg-gray-700'}`}
-          title="メトロノーム"
-        >
-          <Drum className="h-4 w-4" />
-        </Button>
-        
+
         {/* 再生速度 */}
         <div className="w-px h-6 bg-gray-600 mx-2" />
         <div className="flex items-center space-x-1">
@@ -115,7 +116,7 @@ const PlaybackControls = ({
             className="text-white hover:bg-gray-700 px-2 py-1 text-xs"
             title="再生速度を下げる"
           >
-            <RotateCcw className="h-3 w-3" />
+            <Rewind className="h-3 w-3" />
           </Button>
           <span className="text-xs text-gray-300 min-w-[3rem] text-center">
             {playbackRate}x
@@ -127,7 +128,7 @@ const PlaybackControls = ({
             className="text-white hover:bg-gray-700 px-2 py-1 text-xs"
             title="再生速度を上げる"
           >
-            <RotateCw className="h-3 w-3" />
+            <FastForward className="h-3 w-3" />
           </Button>
         </div>
       </div>

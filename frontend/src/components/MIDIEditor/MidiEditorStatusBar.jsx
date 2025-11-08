@@ -12,8 +12,7 @@ const MidiEditorStatusBar = ({
   
   // ノート情報
   notesCount,
-  pendingNotesCount = 0, // 承認待ちノート数
-  
+
   // オーディオ・再生状態
   audioEnabled,
   isPlaying,
@@ -68,11 +67,6 @@ const MidiEditorStatusBar = ({
         <Badge variant="outline" className="text-xs">
           Notes: {notesCount}
         </Badge>
-        {pendingNotesCount > 0 && (
-          <Badge variant="outline" className="bg-orange-800 border-orange-400 text-orange-100 text-xs animate-pulse font-bold">
-            ⏳ 承認待ち: {pendingNotesCount}個
-          </Badge>
-        )}
         <Badge variant="outline" className={`text-xs ${audioEnabled ? 'bg-green-900' : 'bg-gray-700'}`}>
           Audio: {audioEnabled ? 'ON' : 'OFF'}
         </Badge>

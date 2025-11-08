@@ -226,9 +226,17 @@ export default class GhostTextSystem {
       isActive: this.isActive,
       isConnected: this.isConnected,
       hasGhostNotes: this.predictionRenderer ? this.predictionRenderer.hasGhostNotes() : false,
+      pendingNotesCount: this.getPendingNotesCount(),
       performanceMetrics: this.engineClient.getPerformanceMetrics(),
       systemMetrics: { ...this.performanceMonitor }
     };
+  }
+
+  getPendingNotesCount() {
+    if (!this.predictionRenderer || !this.predictionRenderer.ghostNotes) {
+      return 0;
+    }
+    return this.predictionRenderer.ghostNotes.length;
   }
 
   getPerformanceMetrics() {
@@ -289,16 +297,69 @@ export default class GhostTextSystem {
     });
   }
 
+  // 🎼 フレーズ予測機能の統合
+
+  /**
+   * フレーズノートを更新
+   * @param {Array} phraseNotes - フレーズノートの配列
+   */
+  updatePhraseNotes(phraseNotes) {
+    if (!this.predictionRenderer) return;
+
+    this.predictionRenderer.updatePhraseNotes(phraseNotes);
+    this.notifyListeners('phraseUpdated', { phraseNotes });
+  }
+
+  /**
+   * フレーズ全体の再生プレビュー
+   * @param {Object} audioEngine - オーディオエンジン
+   * @returns {Promise<void>}
+   */
+  async previewPhrase(audioEngine) {
+    if (!this.predictionRenderer) return;
+
+    try {
+      await this.predictionRenderer.previewPhrase(audioEngine);
+      this.notifyListeners('phrasePreviewStarted', {});
+    } catch (error) {
+      console.error('Error previewing phrase:', error);
+      this.notifyListeners('error', { error: error.message });
+    }
+  }
+
+  /**
+   * フレーズを一括で受け入れ
+   * @returns {Array} 受け入れたノートの配列
+   */
+  acceptPhrase() {
+    if (!this.predictionRenderer) return [];
+
+    const acceptedNotes = this.predictionRenderer.acceptPhrase();
+    this.performanceMonitor.predictionsAccepted += acceptedNotes.length;
+    this.notifyListeners('phraseAccepted', { notes: acceptedNotes });
+    return acceptedNotes;
+  }
+
+  /**
+   * フレーズノートをクリア
+   */
+  clearPhraseNotes() {
+    if (!this.predictionRenderer) return;
+
+    this.predictionRenderer.clearPhraseNotes();
+    this.notifyListeners('phraseCleared', {});
+  }
+
   // クリーンアップ
   destroy() {
     this.disable();
     this.engineClient.clearCache();
-    
+
     if (this.predictionRenderer) {
       this.predictionRenderer.hide();
       this.predictionRenderer = null;
     }
-    
+
     this.listeners = [];
     this.inputContext = null;
     this.engineClient = null;

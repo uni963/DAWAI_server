@@ -1,4 +1,13 @@
 import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from './ui/dialog.jsx'
+import { Button } from './ui/button.jsx'
 
 import { 
   DEFAULT_TRACK_HEIGHT,
@@ -45,7 +54,33 @@ import useKeyboardShortcuts from './ArrangementView/hooks/useKeyboardShortcuts.j
 import useTrackContextMenu from './ArrangementView/hooks/useTrackContextMenu.js'
 import drumTrackManager from '../utils/drumTrackManager.js'
 
-const ArrangementView = ({ tracks = [], addNewTrack, projectManager, audioEngine, forceRerenderApp, onTabChange, globalTempo = 120, onGlobalTempoChange, trackVolume = {}, trackMuted = {}, masterVolume = 100 }) => {
+const ArrangementView = ({
+  tracks = [],
+  addNewTrack,
+  projectManager,
+  audioEngine,
+  forceRerenderApp,
+  onTabChange,
+  globalTempo = 120,
+  onGlobalTempoChange,
+  trackVolume = {},
+  trackMuted = {},
+  masterVolume = 100,
+  musicTheorySettings = {
+    scaleConstraintEnabled: false,
+    selectedGenre: null,
+    selectedScales: [],
+    rootNote: 'C'
+  },
+  onMusicTheorySettingsChange,
+  globalAISettings = {
+    aiModel: 'magenta',
+    ghostTextEnabled: false,
+    summaryStatus: null,
+    predictionSettings: { scale: null, rootNote: null }
+  },
+  onAISettingsChange
+}) => {
   // グローバルBPMを使用
   const bpm = globalTempo
   const timeSignature = projectManager?.getProject()?.settings?.timeSignature || '4/4'
@@ -53,6 +88,7 @@ const ArrangementView = ({ tracks = [], addNewTrack, projectManager, audioEngine
   const [scrollStartY, setScrollStartY] = useState(0)
   const [scrollStartScrollTop, setScrollStartScrollTop] = useState(0)
   const [showDurationModal, setShowDurationModal] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const arrangementRef = useRef(null)
   const trackAreaRef = useRef(null) // トラックエリアの参照を追加
   const timelineRef = useRef(null) // タイムラインの参照を追加
@@ -164,6 +200,53 @@ const ArrangementView = ({ tracks = [], addNewTrack, projectManager, audioEngine
     drumTrackManager
   })
 
+  // アンドゥ・リドゥ状態
+  const [canUndo, setCanUndo] = useState(false)
+  const [canRedo, setCanRedo] = useState(false)
+
+  // アンドゥ・リドゥハンドラー
+  const handleUndo = useCallback(() => {
+    if (projectManager && projectManager.undo()) {
+      forceRerenderApp()
+      setCanUndo(projectManager.canUndo())
+      setCanRedo(projectManager.canRedo())
+    }
+  }, [projectManager, forceRerenderApp])
+
+  const handleRedo = useCallback(() => {
+    if (projectManager && projectManager.redo()) {
+      forceRerenderApp()
+      setCanUndo(projectManager.canUndo())
+      setCanRedo(projectManager.canRedo())
+    }
+  }, [projectManager, forceRerenderApp])
+
+  // 削除確認ダイアログを表示
+  const handleDeleteTracksWithConfirm = useCallback(() => {
+    if (selectedTracks && selectedTracks.size > 0) {
+      setShowDeleteConfirm(true)
+    }
+  }, [selectedTracks])
+
+  // 削除を実行
+  const confirmDeleteTracks = useCallback(() => {
+    arrangementEventHandlers.handleDeleteTracks()
+    setShowDeleteConfirm(false)
+    // アンドゥ・リドゥ状態を更新
+    if (projectManager) {
+      setCanUndo(projectManager.canUndo())
+      setCanRedo(projectManager.canRedo())
+    }
+  }, [arrangementEventHandlers, projectManager])
+
+  // アンドゥ・リドゥ状態を更新
+  useEffect(() => {
+    if (projectManager) {
+      setCanUndo(projectManager.canUndo())
+      setCanRedo(projectManager.canRedo())
+    }
+  }, [projectManager, tracks])
+
   // キーボードショートカットフックの使用
   useKeyboardShortcuts({
     isPlaying,
@@ -175,7 +258,9 @@ const ArrangementView = ({ tracks = [], addNewTrack, projectManager, audioEngine
     onSelectAll: arrangementEventHandlers.handleSelectAll,
     onInvertSelection: arrangementEventHandlers.handleInvertSelection,
     onDeselectAll: arrangementEventHandlers.handleDeselectAll,
-    onDeleteTracks: arrangementEventHandlers.handleDeleteTracks
+    onDeleteTracks: arrangementEventHandlers.handleDeleteTracks,
+    onUndo: handleUndo,
+    onRedo: handleRedo
   })
 
   // トラックコンテキストメニューフックの使用
@@ -184,7 +269,9 @@ const ArrangementView = ({ tracks = [], addNewTrack, projectManager, audioEngine
     setSelectedTracks,
     setLastSelectedTrack,
     handleCopyTracks: arrangementEventHandlers.handleCopyTracks,
+    handlePasteTracks: arrangementEventHandlers.handlePasteTracks,
     handleDeleteTracks: arrangementEventHandlers.handleDeleteTracks,
+    clipboard,
     projectManager,
     forceRerenderApp,
     onTabChange
@@ -197,16 +284,33 @@ const ArrangementView = ({ tracks = [], addNewTrack, projectManager, audioEngine
   // 再生コントロール
   const handlePlay = useCallback(async () => {
     await audioState.handlePlay(playbackState.setIsPlaying, playbackState.setCurrentTime, playbackState.setPlaybackPosition)
-    
+
+    // ループ再開時のコールバック（MIDI/Bassトラックの再スケジュール用）
+    const onLoopRestart = async (loopStartTime) => {
+      console.log('🔄 [ArrangementView] Loop restart callback triggered, rescheduling tracks from:', loopStartTime);
+
+      // ドラムトラック以外のトラック（MIDI、Bass、DiffSinger）を再スケジュール
+      if (audioState.currentPlayingTracksRef && audioState.currentPlayingTracksRef.current) {
+        const tracksToReschedule = audioState.currentPlayingTracksRef.current.filter(
+          track => track.subtype !== 'drums'
+        );
+
+        if (tracksToReschedule.length > 0) {
+          await audioState.scheduleTracksFromTime(loopStartTime, tracksToReschedule);
+        }
+      }
+    };
+
     // 再生開始後、タイマーを開始
     audioState.startPlaybackTimer(
       null, // startTimeは内部で管理
-      playbackState.setCurrentTime, 
-      playbackState.setPlaybackPosition, 
-      playbackState.loopEnabled, 
-      playbackState.loopEnd, 
-      playbackState.loopStart, 
-      () => audioState.handleStop(playbackState.setIsPlaying, playbackState.setCurrentTime, playbackState.setPlaybackPosition)
+      playbackState.setCurrentTime,
+      playbackState.setPlaybackPosition,
+      playbackState.loopEnabled,
+      playbackState.loopEnd,
+      playbackState.loopStart,
+      () => audioState.handleStop(playbackState.setIsPlaying, playbackState.setCurrentTime, playbackState.setPlaybackPosition),
+      onLoopRestart // ループ再開コールバックを追加
     )
   }, [audioState, playbackState])
 
@@ -564,8 +668,6 @@ const ArrangementView = ({ tracks = [], addNewTrack, projectManager, audioEngine
         onSkipForward={() => playbackState.handleSkipForward(audioState)}
         loopEnabled={loopEnabled}
         onLoopToggle={playbackState.handleLoopToggle}
-        metronomeEnabled={metronomeEnabled}
-        onMetronomeToggle={() => playbackState.handleMetronomeToggle(audioState)}
         playbackRate={playbackRate}
         onPlaybackRateChange={(rate) => playbackState.handlePlaybackRateChange(rate, audioState)}
         currentTime={currentTime}
@@ -590,7 +692,12 @@ const ArrangementView = ({ tracks = [], addNewTrack, projectManager, audioEngine
         onInvertSelection={handleInvertSelection}
         onCopyTracks={handleCopyTracks}
         onPasteTracks={handlePasteTracks}
+        onDeleteTracks={handleDeleteTracksWithConfirm}
         onOpenSelectedTracks={handleOpenSelectedTracks}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        canUndo={canUndo}
+        canRedo={canRedo}
       />
 
       {/* タイムライン */}
@@ -629,6 +736,7 @@ const ArrangementView = ({ tracks = [], addNewTrack, projectManager, audioEngine
         onShowTrackContextMenu={showTrackContextMenu}
         onResizeStart={handleResizeStart}
         onTrackMenuToggle={handleTrackMenuToggle}
+        onCloseMenu={closeMenu}
         showTrackMenu={showTrackMenu}
         menuPosition={menuPosition}
         menuRef={menuRef}
@@ -637,6 +745,11 @@ const ArrangementView = ({ tracks = [], addNewTrack, projectManager, audioEngine
         onUpdateTrackState={updateTrackState}
         onHorizontalScroll={handleHorizontalScroll}
         onEmptyAreaContextMenu={showEmptyAreaContextMenu}
+        audioEngine={audioEngine}
+        musicTheorySettings={musicTheorySettings}
+        onMusicTheorySettingsChange={onMusicTheorySettingsChange}
+        globalAISettings={globalAISettings}
+        onAISettingsChange={onAISettingsChange}
       />
 
       {/* 曲の長さ設定モーダル */}
@@ -646,6 +759,38 @@ const ArrangementView = ({ tracks = [], addNewTrack, projectManager, audioEngine
         onSetDuration={handleSetDuration}
         totalDuration={playbackState.totalDuration}
       />
+
+      {/* 削除確認ダイアログ */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent className="bg-gray-800 border-gray-700 text-white">
+          <DialogHeader>
+            <DialogTitle>トラックの削除</DialogTitle>
+            <DialogDescription className="text-gray-300">
+              選択した{selectedTracks?.size ?? 0}トラックを削除しますか？
+              <br />
+              <span className="text-sm text-gray-400">
+                この操作は元に戻すことができます（Ctrl+Z）
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteConfirm(false)}
+              className="border-gray-600 text-white hover:bg-gray-700"
+            >
+              キャンセル
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDeleteTracks}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              削除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

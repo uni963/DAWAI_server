@@ -21,7 +21,6 @@ const Header = ({
   onExportAudio,
   onExportMidi,
   onOpenGenreSelector,
-  onOpenDemoSongBrowser,
   genreContext,
   demoSongMetadata,
   smartSuggestionsEnabled,
@@ -338,36 +337,19 @@ const Header = ({
             )}
           </div>
 
-          {/* ジャンル選択ボタン */}
+          {/* Demo Songs選択ボタン */}
           <Button
             variant="ghost"
             size="sm"
             className="text-white hover:bg-gray-700 flex items-center gap-2 h-9 px-3 font-medium"
             onClick={onOpenGenreSelector}
-            title={genreContext ? `現在のジャンル: ${genreContext.genre.name.ja}` : 'ジャンルを選択'}
+            title={genreContext ? `現在のジャンル: ${genreContext.genre.name.ja}` : 'Demo Songsを選択'}
           >
             <Music className="h-4 w-4" />
-            ジャンル
+            Demo Songs
             {genreContext && (
               <span className="text-xs bg-blue-600 px-1 rounded">
                 {genreContext.genre.name.ja}
-              </span>
-            )}
-          </Button>
-
-          {/* Demo Songブラウザボタン */}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-white hover:bg-gray-700 flex items-center gap-2 h-9 px-3 font-medium"
-            onClick={onOpenDemoSongBrowser}
-            title={demoSongMetadata ? `読み込み済み: ${demoSongMetadata.title}` : 'Demo Songを読み込み'}
-          >
-            <Sparkles className="h-4 w-4" />
-            Demo Song
-            {demoSongMetadata && (
-              <span className="text-xs bg-green-600 px-1 rounded">
-                読込済
               </span>
             )}
           </Button>
@@ -379,9 +361,6 @@ const Header = ({
         <div className="flex flex-col items-center">
           <span className="text-sm text-gray-300 font-medium">
             {currentFileName}
-          </span>
-          <span className="text-xs text-red-400 font-medium mt-1">
-            ⚠️ 開発版 - バグが含まれる可能性があります。また、一部機能が動いていないことを確認しています。
           </span>
         </div>
       </div>

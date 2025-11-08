@@ -82,11 +82,14 @@ const ChatHeader = ({
               </Button>
             </>
           )}
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="h-9 w-9 p-0 text-gray-400 hover:text-white hover:bg-gray-700" 
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-9 w-9 p-0 text-gray-400 hover:text-white hover:bg-gray-700 transition-all duration-200"
             onClick={() => setIsAIAssistantCollapsed(!isAIAssistantCollapsed)}
+            aria-label={isAIAssistantCollapsed ? "AIアシスタントを展開" : "AIアシスタントを折りたたむ"}
+            aria-expanded={!isAIAssistantCollapsed}
+            title={isAIAssistantCollapsed ? "クリックで展開" : "クリックで折りたたむ"}
           >
             {isAIAssistantCollapsed ? <ChevronLeft className="h-6 w-6" /> : <ChevronRight className="h-6 w-6" />}
           </Button>

@@ -257,7 +257,8 @@ class SmartSuggestionEngine {
         duration: 0.5, // 0.5秒の長さ
         confidence: suggestion.confidence,
         id: `ghost-${Date.now()}-${index}`,
-        isGhost: true
+        isGhost: true,
+        isPending: true  // AI承認待ちフラグを追加
       }));
 
       console.log(`👻 Generated ${ghostNotes.length} ghost notes`);

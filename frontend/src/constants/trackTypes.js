@@ -11,7 +11,6 @@ export const TRACK_TYPES = {
 // トラックサブタイプの定義
 export const TRACK_SUBTYPES = {
   PIANO: 'piano',
-  SYNTH: 'synth',
   BASS: 'bass',
   GUITAR: 'guitar',
   DRUMS: 'drums',

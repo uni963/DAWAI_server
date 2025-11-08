@@ -7,10 +7,12 @@
  * @date 2025-10-05
  */
 
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useBassAudio } from '../hooks/useBassAudio.js';
-import { EnhancedMidiEditor } from './EnhancedMidiEditor.jsx';
+import EnhancedMidiEditor from './EnhancedMidiEditor.jsx';
 import { log } from '../utils/logger.js';
+import { HistoryManager } from '../utils/historyManager.js';
+import { Undo2, Redo2 } from 'lucide-react';
 
 /**
  * Bass Track メインコンポーネント
@@ -22,7 +24,8 @@ const BassTrack = ({
   currentTime = 0,
   projectManager = null,
   trackId = null,
-  className = ''
+  className = '',
+  embedded = false
 }) => {
   // Bass Audio Hook
   const {
@@ -46,12 +49,18 @@ const BassTrack = ({
     muted: false,
     solo: false,
     pan: 0,
-    eqEnabled: false
+    eqEnabled: false,
+    loopEnabled: false
   });
 
   // UI状態
   const [showSettings, setShowSettings] = useState(false);
   const [lastPlayedNote, setLastPlayedNote] = useState(null);
+
+  // 履歴管理
+  const historyManagerRef = useRef(new HistoryManager(50));
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
 
   // Bass専用設定
   const bassConfig = useMemo(() => ({
@@ -85,6 +94,13 @@ const BassTrack = ({
     }
   }, [trackSettings.muted, trackSettings.volume, isLoaded, setBassVolume, stopAllBassNotes]);
 
+  // 履歴更新用ヘルパー
+  const updateHistory = useCallback((notes) => {
+    historyManagerRef.current.push({ notes: [...notes] });
+    setCanUndo(historyManagerRef.current.canUndo());
+    setCanRedo(historyManagerRef.current.canRedo());
+  }, []);
+
   // ノート操作ハンドラー
   const handleNoteAdd = useCallback((note) => {
     try {
@@ -96,6 +112,10 @@ const BassTrack = ({
       };
 
       const updatedNotes = [...trackData.notes, newNote];
+
+      // 履歴に追加
+      updateHistory(updatedNotes);
+
       onTrackUpdate({
         ...trackData,
         notes: updatedNotes,
@@ -113,13 +133,16 @@ const BassTrack = ({
     } catch (err) {
       log.error('Failed to add bass note:', err);
     }
-  }, [trackData, onTrackUpdate, trackId, isPlaying, isLoaded, trackSettings.muted, playBassNote]);
+  }, [trackData, onTrackUpdate, trackId, isPlaying, isLoaded, trackSettings.muted, playBassNote, updateHistory]);
 
   const handleNoteEdit = useCallback((noteId, changes) => {
     try {
       const updatedNotes = trackData.notes.map(note =>
         note.id === noteId ? { ...note, ...changes } : note
       );
+
+      // 履歴に追加
+      updateHistory(updatedNotes);
 
       onTrackUpdate({
         ...trackData,
@@ -132,11 +155,14 @@ const BassTrack = ({
     } catch (err) {
       log.error('Failed to edit bass note:', err);
     }
-  }, [trackData, onTrackUpdate]);
+  }, [trackData, onTrackUpdate, updateHistory]);
 
   const handleNoteDelete = useCallback((noteId) => {
     try {
       const updatedNotes = trackData.notes.filter(note => note.id !== noteId);
+
+      // 履歴に追加
+      updateHistory(updatedNotes);
 
       onTrackUpdate({
         ...trackData,
@@ -149,7 +175,7 @@ const BassTrack = ({
     } catch (err) {
       log.error('Failed to delete bass note:', err);
     }
-  }, [trackData, onTrackUpdate]);
+  }, [trackData, onTrackUpdate, updateHistory]);
 
   // 音量変更ハンドラー
   const handleVolumeChange = useCallback((volume) => {
@@ -202,6 +228,79 @@ const BassTrack = ({
       log.audio('🎸 Bass EQ updated:', eqSettings);
     }
   }, [isLoaded, setBassEQ]);
+
+  // ループ設定変更
+  const handleLoopChange = useCallback((enabled) => {
+    setTrackSettings(prev => {
+      const newSettings = { ...prev, loopEnabled: enabled };
+
+      // ProjectManager更新
+      if (projectManager && trackId) {
+        projectManager.updateTrack(trackId, { loopEnabled: enabled });
+      }
+
+      log.audio(`🎸 Bass loop ${enabled ? 'enabled' : 'disabled'}`);
+
+      return newSettings;
+    });
+  }, [projectManager, trackId]);
+
+  // アンドゥ・リドゥハンドラー
+  const handleUndo = useCallback(() => {
+    const previousState = historyManagerRef.current.undo();
+    if (previousState) {
+      onTrackUpdate({
+        ...trackData,
+        notes: previousState.notes,
+        lastModified: new Date().toISOString()
+      });
+      setCanUndo(historyManagerRef.current.canUndo());
+      setCanRedo(historyManagerRef.current.canRedo());
+      log.audio('🔄 Bass Track: Undo');
+    }
+  }, [trackData, onTrackUpdate]);
+
+  const handleRedo = useCallback(() => {
+    const nextState = historyManagerRef.current.redo();
+    if (nextState) {
+      onTrackUpdate({
+        ...trackData,
+        notes: nextState.notes,
+        lastModified: new Date().toISOString()
+      });
+      setCanUndo(historyManagerRef.current.canUndo());
+      setCanRedo(historyManagerRef.current.canRedo());
+      log.audio('🔄 Bass Track: Redo');
+    }
+  }, [trackData, onTrackUpdate]);
+
+  // 初期履歴の設定
+  useEffect(() => {
+    if (trackData.notes && trackData.notes.length > 0) {
+      historyManagerRef.current.push({ notes: [...trackData.notes] });
+      setCanUndo(historyManagerRef.current.canUndo());
+      setCanRedo(historyManagerRef.current.canRedo());
+    }
+  }, []); // 初回のみ実行
+
+  // キーボードショートカット
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ctrl+Z（アンドゥ）
+      if (e.ctrlKey && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+      }
+      // Ctrl+Y または Ctrl+Shift+Z（リドゥ）
+      else if (e.ctrlKey && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        handleRedo();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleUndo, handleRedo]);
 
   // ローディング状態
   if (!isLoaded && loadingProgress < 100) {
@@ -352,66 +451,91 @@ const BassTrack = ({
   // メインUI
   return (
     <div className={`bass-track ${className}`} data-testid="bass-track-loaded">
-      {/* ヘッダー */}
-      <div className="bass-track-header">
-        <div className="track-title-section">
-          <h3 className="track-title">🎸 Bass Track</h3>
-          <span className="track-info">
-            {trackData.notes?.length || 0} notes • {bassConfig.midiRange.min}-{bassConfig.midiRange.max}
-          </span>
-          {lastPlayedNote && (
-            <span className="last-played">
-              Last: MIDI {lastPlayedNote}
+      {/* ヘッダー - 埋め込み時は非表示 */}
+      {!embedded && (
+        <div className="bass-track-header">
+          <div className="track-title-section">
+            <h3 className="track-title">🎸 Bass Track</h3>
+            <span className="track-info">
+              {trackData.notes?.length || 0} notes • {bassConfig.midiRange.min}-{bassConfig.midiRange.max}
             </span>
-          )}
-        </div>
-
-        <div className="bass-controls">
-          {/* 音量スライダー */}
-          <div className="volume-control">
-            <label className="control-label">Volume</label>
-            <input
-              type="range"
-              min="0"
-              max="200"
-              value={trackSettings.volume}
-              onChange={(e) => handleVolumeChange(Number(e.target.value))}
-              className="volume-slider bass-slider"
-              data-testid="bass-volume-slider"
-            />
-            <span className="volume-value">{trackSettings.volume}%</span>
+            {lastPlayedNote && (
+              <span className="last-played">
+                Last: MIDI {lastPlayedNote}
+              </span>
+            )}
           </div>
 
-          {/* ミュート・ソロボタン */}
-          <button
-            className={`control-btn mute-btn ${trackSettings.muted ? 'active' : ''}`}
-            onClick={handleMuteToggle}
-            data-testid="bass-mute-button"
-            title="Mute Bass Track"
-          >
-            {trackSettings.muted ? '🔇' : '🔊'}
-          </button>
+          <div className="bass-controls">
+            {/* アンドゥ・リドゥボタン */}
+            <button
+              className="control-btn undo-btn"
+              onClick={handleUndo}
+              disabled={!canUndo}
+              data-testid="bass-undo-button"
+              title="元に戻す (Ctrl+Z)"
+            >
+              <Undo2 size={16} />
+            </button>
 
-          <button
-            className={`control-btn solo-btn ${trackSettings.solo ? 'active' : ''}`}
-            onClick={handleSoloToggle}
-            data-testid="bass-solo-button"
-            title="Solo Bass Track"
-          >
-            S
-          </button>
+            <button
+              className="control-btn redo-btn"
+              onClick={handleRedo}
+              disabled={!canRedo}
+              data-testid="bass-redo-button"
+              title="やり直す (Ctrl+Y)"
+            >
+              <Redo2 size={16} />
+            </button>
 
-          {/* 設定ボタン */}
-          <button
-            className={`control-btn settings-btn ${showSettings ? 'active' : ''}`}
-            onClick={() => setShowSettings(!showSettings)}
-            data-testid="bass-settings-button"
-            title="Bass Settings"
-          >
-            ⚙️
-          </button>
+            <div className="control-divider" />
+
+            {/* 音量スライダー */}
+            <div className="volume-control">
+              <label className="control-label">Volume</label>
+              <input
+                type="range"
+                min="0"
+                max="200"
+                value={trackSettings.volume}
+                onChange={(e) => handleVolumeChange(Number(e.target.value))}
+                className="volume-slider bass-slider"
+                data-testid="bass-volume-slider"
+              />
+              <span className="volume-value">{trackSettings.volume}%</span>
+            </div>
+
+            {/* ミュート・ソロボタン */}
+            <button
+              className={`control-btn mute-btn ${trackSettings.muted ? 'active' : ''}`}
+              onClick={handleMuteToggle}
+              data-testid="bass-mute-button"
+              title="Mute Bass Track"
+            >
+              {trackSettings.muted ? '🔇' : '🔊'}
+            </button>
+
+            <button
+              className={`control-btn solo-btn ${trackSettings.solo ? 'active' : ''}`}
+              onClick={handleSoloToggle}
+              data-testid="bass-solo-button"
+              title="Solo Bass Track"
+            >
+              S
+            </button>
+
+            {/* 設定ボタン */}
+            <button
+              className={`control-btn settings-btn ${showSettings ? 'active' : ''}`}
+              onClick={() => setShowSettings(!showSettings)}
+              data-testid="bass-settings-button"
+              title="Bass Settings"
+            >
+              ⚙️
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* 設定パネル */}
       {showSettings && (
@@ -480,8 +604,12 @@ const BassTrack = ({
           onNoteStop={stopBassNote}
           isPlaying={isPlaying}
           currentTime={currentTime}
+          loopEnabled={trackSettings.loopEnabled}
+          onLoopChange={handleLoopChange}
           className="bass-midi-editor"
           data-testid="bass-midi-editor"
+          hideHeader={false}
+          embedded={true}
         />
       </div>
 
@@ -575,6 +703,21 @@ const BassTrack = ({
         .control-btn.active {
           background: rgba(255, 255, 255, 0.9);
           color: #d97706;
+        }
+
+        .control-btn:disabled {
+          opacity: 0.4;
+          cursor: not-allowed;
+        }
+
+        .control-btn:disabled:hover {
+          background: rgba(255, 255, 255, 0.2);
+        }
+
+        .control-divider {
+          width: 1px;
+          height: 24px;
+          background: rgba(255, 255, 255, 0.3);
         }
 
         .bass-settings-panel {

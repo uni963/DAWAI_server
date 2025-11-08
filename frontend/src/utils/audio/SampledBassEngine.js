@@ -16,18 +16,54 @@ export class SampledBassEngine {
     this.loaded = false;                // 初期化状態
     this.masterGain = null;             // マスター音量制御
 
-    // Bass固有設定
-    this.bassRange = { min: 24, max: 60 };      // C1-C4
+    // Bass固有設定（音域調整 - 低すぎる問題を解決）
+    this.bassRange = { min: 28, max: 64 };      // E1-E4 (4半音上げて適切な音域に)
     this.samplePath = '/sounds/MuseScore_General/samples/bass/';
-    this.defaultVolume = 0.8;                   // Bass推奨音量
+    this.defaultVolume = 0.7;                   // Bass推奨音量（少し下げる）
     this.polyphonyLimit = 16;                   // 同時発音数制限
+
+    // リアルベースギター音響特性（ピッキングリズム特化）
+    this.noteDuration = 0.45;                   // 音の最大持続時間（秒）- さらに短縮でピッキング感強化
+    this.envelope = {                           // ADSR エンベロープ（リズムギター特化）
+      attack: 0.001,                           // アタック: 1ms (超高速、ピック感重視)
+      decay: 0.05,                             // ディケイ: 50ms (速い減衰)
+      sustain: 0.3,                            // サステイン: 30% (さらに低く、明確な分離)
+      release: 0.1                             // リリース: 100ms (より短く、スタッカート感)
+    };
 
     // パフォーマンス設定
     this.compressionThreshold = -24;            // コンプレッサー設定
-    this.eqSettings = {                         // Bass専用EQ
-      lowGain: 3,                              // 60-250Hz +3dB
-      midGain: 0,                              // 250Hz-2kHz
-      highGain: -2                             // 2kHz+ -2dB
+    this.eqSettings = {                         // ベースギター特化EQ（弦楽器音質）
+      lowGain: 2.5,                            // 60-250Hz +2.5dB (ベース基音強調)
+      midGain: 1.8,                            // 250Hz-2kHz +1.8dB (ピック音・弦質感強調)
+      highGain: 0.5                            // 2kHz+ +0.5dB (アタック感・明瞭度向上)
+    };
+
+    // ベースギター特化バリエーション設定（ピッキングリズム強化）
+    this.naturalVariation = {
+      enabled: true,
+      pitchVariation: 0.01,                    // ±1.0セント（より安定したピッチ）
+      volumeVariation: 0.15,                   // ±15%音量変動（ピッキング強弱をより強調）
+      timingVariation: 0.005                   // ±5ms タイミング変動（タイトなリズム感）
+    };
+
+    // ベースギター特有の音響エフェクト設定
+    this.bassCharacteristics = {
+      stringResonance: {
+        enabled: true,
+        frequency: 100,                        // 弦共鳴周波数
+        resonance: 1.2                         // 共鳴強度
+      },
+      pickAttack: {
+        enabled: true,
+        boost: 2.0,                           // ピック音強調（2倍）
+        frequency: 2500                        // ピック音周波数
+      },
+      fretNoise: {
+        enabled: true,
+        level: 0.03,                          // フレットノイズレベル（3%）
+        randomness: 0.5                        // ランダム性
+      }
     };
 
     // 初期化
@@ -191,7 +227,7 @@ export class SampledBassEngine {
   }
 
   /**
-   * 最近接サンプル選択
+   * 最適サンプル選択（ピッチシフト品質重視）
    * @param {number} targetMidiNote - 対象MIDIノート
    * @returns {Object} サンプル情報
    */
@@ -201,23 +237,48 @@ export class SampledBassEngine {
     }
 
     const sampleNotes = Array.from(this.samples.keys());
+    const maxPitchShift = 6; // 最大ピッチシフト範囲（半音）
 
-    // 最小距離のサンプルを選択
-    let closestNote = sampleNotes[0];
-    let minDistance = Math.abs(targetMidiNote - closestNote);
+    // 品質を重視したサンプル選択
+    let bestSample = null;
+    let bestScore = Infinity;
 
     for (const sampleNote of sampleNotes) {
       const distance = Math.abs(targetMidiNote - sampleNote);
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestNote = sampleNote;
+
+      // ピッチシフト範囲制限
+      if (distance > maxPitchShift) {
+        continue;
+      }
+
+      // 品質スコア計算（距離が近いほど良い）
+      const qualityScore = distance + (distance > 3 ? distance * 0.5 : 0);
+
+      if (qualityScore < bestScore) {
+        bestScore = qualityScore;
+        bestSample = sampleNote;
       }
     }
 
+    // 制限内にサンプルがない場合は最も近いものを使用
+    if (bestSample === null) {
+      let closestNote = sampleNotes[0];
+      let minDistance = Math.abs(targetMidiNote - closestNote);
+
+      for (const sampleNote of sampleNotes) {
+        const distance = Math.abs(targetMidiNote - sampleNote);
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestNote = sampleNote;
+        }
+      }
+      bestSample = closestNote;
+    }
+
     return {
-      midiNote: closestNote,
-      buffer: this.samples.get(closestNote),
-      pitchShift: this.calculatePitchShift(targetMidiNote, closestNote)
+      midiNote: bestSample,
+      buffer: this.samples.get(bestSample),
+      pitchShift: this.calculatePitchShift(targetMidiNote, bestSample)
     };
   }
 
@@ -253,38 +314,58 @@ export class SampledBassEngine {
   }
 
   /**
-   * Bass EQ適用
+   * ベースギター特化EQ適用（弦楽器音響特性込み）
    * @param {AudioNode} audioNode - 対象オーディオノード
    * @returns {AudioNode} EQ適用済みノード
    */
   applyBassEQ(audioNode) {
-    // Low frequency boost (60-250Hz)
+    // Low frequency boost (60-250Hz) - ベース基音強調
     const lowFilter = this.audioContext.createBiquadFilter();
     lowFilter.type = 'peaking';
     lowFilter.frequency.value = 120;
     lowFilter.Q.value = 0.7;
     lowFilter.gain.value = this.eqSettings.lowGain;
 
-    // Mid frequency control (250Hz-2kHz)
+    // Mid frequency boost (250Hz-2kHz) - ピック音・弦質感強調
     const midFilter = this.audioContext.createBiquadFilter();
     midFilter.type = 'peaking';
     midFilter.frequency.value = 800;
     midFilter.Q.value = 1.0;
     midFilter.gain.value = this.eqSettings.midGain;
 
-    // High frequency cut (2kHz+)
+    // High frequency boost (2kHz+) - アタック感・明瞭度向上
     const highFilter = this.audioContext.createBiquadFilter();
     highFilter.type = 'peaking';
     highFilter.frequency.value = 4000;
     highFilter.Q.value = 0.7;
     highFilter.gain.value = this.eqSettings.highGain;
 
-    // フィルターチェーン構築
+    // ピック音強調フィルター（ベースギター特有）
+    const pickFilter = this.audioContext.createBiquadFilter();
+    if (this.bassCharacteristics.pickAttack.enabled) {
+      pickFilter.type = 'peaking';
+      pickFilter.frequency.value = this.bassCharacteristics.pickAttack.frequency;
+      pickFilter.Q.value = 2.0;
+      pickFilter.gain.value = this.bassCharacteristics.pickAttack.boost;
+    }
+
+    // 弦共鳴フィルター（ベースギター特有）
+    const resonanceFilter = this.audioContext.createBiquadFilter();
+    if (this.bassCharacteristics.stringResonance.enabled) {
+      resonanceFilter.type = 'peaking';
+      resonanceFilter.frequency.value = this.bassCharacteristics.stringResonance.frequency;
+      resonanceFilter.Q.value = this.bassCharacteristics.stringResonance.resonance;
+      resonanceFilter.gain.value = 1.0;
+    }
+
+    // フィルターチェーン構築（ベースギター特化）
     audioNode.connect(lowFilter);
     lowFilter.connect(midFilter);
     midFilter.connect(highFilter);
+    highFilter.connect(pickFilter);
+    pickFilter.connect(resonanceFilter);
 
-    return highFilter;
+    return resonanceFilter;
   }
 
   /**
@@ -316,13 +397,74 @@ export class SampledBassEngine {
       const sourceNode = this.audioContext.createBufferSource();
       sourceNode.buffer = sample.buffer;
 
-      // ピッチシフト適用
-      sourceNode.detune.value = sample.pitchShift.detune;
-      sourceNode.playbackRate.value = sample.pitchShift.playbackRate;
+      // 自然なバリエーション適用
+      let finalPlaybackRate = sample.pitchShift.playbackRate;
+      let finalVolume = (velocity / 127) * this.defaultVolume;
+      let timingOffset = 0;
 
-      // ベロシティ対応ゲイン
+      if (this.naturalVariation.enabled) {
+        // 弦楽器特有のピッチ変動（±1.5セント）
+        const pitchVariation = (Math.random() - 0.5) * this.naturalVariation.pitchVariation;
+        finalPlaybackRate *= Math.pow(2, pitchVariation / 12);
+
+        // ピッキング強弱による音量変動（±12%）
+        const volumeVariation = 1 + (Math.random() - 0.5) * this.naturalVariation.volumeVariation;
+        finalVolume *= volumeVariation;
+
+        // グルーヴ感重視のタイミング変動（±8ms）
+        timingOffset = (Math.random() - 0.5) * this.naturalVariation.timingVariation;
+      }
+
+      // フレットノイズ生成（ベースギター特有のリアリティ）
+      let fretNoiseGain = null;
+      if (this.bassCharacteristics.fretNoise.enabled && Math.random() < this.bassCharacteristics.fretNoise.randomness) {
+        fretNoiseGain = this.audioContext.createGain();
+        fretNoiseGain.gain.value = this.bassCharacteristics.fretNoise.level * finalVolume;
+
+        // 高周波ノイズ（フレット音再現）
+        const noiseBuffer = this.audioContext.createBuffer(1, 1024, this.audioContext.sampleRate);
+        const noiseData = noiseBuffer.getChannelData(0);
+        for (let i = 0; i < 1024; i++) {
+          noiseData[i] = (Math.random() - 0.5) * 0.1;
+        }
+
+        const noiseSource = this.audioContext.createBufferSource();
+        noiseSource.buffer = noiseBuffer;
+        noiseSource.connect(fretNoiseGain);
+        fretNoiseGain.connect(this.masterGain);
+
+        // フレットノイズは短時間のみ
+        const noiseStartTime = this.audioContext.currentTime + Math.max(0, timingOffset) - 0.005;
+        noiseSource.start(noiseStartTime);
+        noiseSource.stop(noiseStartTime + 0.01);
+      }
+
+      // ピッチシフト適用（自然なバリエーション込み）
+      // 再生速度も考慮する場合は外部から適用可能にするため、ここでは音程調整のみ
+      sourceNode.playbackRate.value = finalPlaybackRate;
+
+      // 外部システム（UnifiedAudioSystem）から再生速度を適用できるよう、
+      // sourceNodeを返す前にプロパティとして保存
+      sourceNode._basePitchRate = finalPlaybackRate;
+
+      // ベロシティ対応ゲイン（ADSR エンベロープ付き）
       const velocityGain = this.audioContext.createGain();
-      velocityGain.gain.value = (velocity / 127) * this.defaultVolume;
+      const baseVolume = finalVolume;
+
+      // ADSR エンベロープ適用（自然なタイミングバリエーション込み）
+      const startTime = this.audioContext.currentTime + Math.max(0, timingOffset);
+      const attackEnd = startTime + this.envelope.attack;
+      const decayEnd = attackEnd + this.envelope.decay;
+      const sustainLevel = baseVolume * this.envelope.sustain;
+      const noteEnd = startTime + this.noteDuration;
+      const releaseEnd = noteEnd + this.envelope.release;
+
+      // エンベロープカーブ設定
+      velocityGain.gain.setValueAtTime(0, startTime);                    // 開始は無音
+      velocityGain.gain.linearRampToValueAtTime(baseVolume, attackEnd);  // アタック
+      velocityGain.gain.linearRampToValueAtTime(sustainLevel, decayEnd); // ディケイ
+      velocityGain.gain.setValueAtTime(sustainLevel, noteEnd);           // サステイン
+      velocityGain.gain.linearRampToValueAtTime(0, releaseEnd);          // リリース
 
       // Bass EQ適用
       const eqOutput = this.applyBassEQ(sourceNode);
@@ -331,27 +473,38 @@ export class SampledBassEngine {
       eqOutput.connect(velocityGain);
       velocityGain.connect(this.masterGain);
 
-      // 再生開始
-      const startTime = this.audioContext.currentTime;
+      // 再生開始とスケジューリング
       sourceNode.start(startTime);
 
-      // アクティブノート管理
+      // 自動停止をスケジューリング（エンベロープ完了後）
+      sourceNode.stop(releaseEnd);
+
+      // アクティブノート管理（追加情報付き）
       const noteInfo = {
         sourceNode,
         velocityGain,
         startTime,
+        releaseEnd,
         midiNote,
-        velocity
+        velocity,
+        isScheduledToStop: true
       };
 
       this.activeNotes.set(midiNote, noteInfo);
 
-      // 自動クリーンアップ（音源終了時）
+      // 自動クリーンアップ（音源終了時 + タイマーによる安全な削除）
       sourceNode.addEventListener('ended', () => {
         if (this.activeNotes.has(midiNote)) {
           this.activeNotes.delete(midiNote);
         }
       });
+
+      // 安全な自動削除タイマー（エンベロープ完了の少し後）
+      setTimeout(() => {
+        if (this.activeNotes.has(midiNote)) {
+          this.activeNotes.delete(midiNote);
+        }
+      }, (releaseEnd - startTime + 0.1) * 1000);
 
       return sourceNode;
 

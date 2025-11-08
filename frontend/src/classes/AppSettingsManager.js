@@ -123,12 +123,14 @@ class AppSettingsManager {
   /**
    * 設定オブジェクト全体を更新
    * @param {Object} newSettings - 新しい設定オブジェクト
+   * @param {boolean} isPartialUpdate - 部分更新かどうか（デフォルト: false）
    */
-  updateSettings(newSettings) {
-    if (this.validateSettings(newSettings)) {
+  updateSettings(newSettings, isPartialUpdate = false) {
+    if (this.validateSettings(newSettings, isPartialUpdate)) {
       this.currentSettings = this.mergeSettings(this.currentSettings, newSettings)
       this.saveSettings()
-      console.log('⚙️ 設定が一括更新されました')
+      const updateType = isPartialUpdate ? '部分' : '一括'
+      console.log(`⚙️ 設定が${updateType}更新されました`)
       return true
     }
     return false
@@ -173,14 +175,29 @@ class AppSettingsManager {
   /**
    * 設定の妥当性を検証
    * @param {Object} settings - 検証する設定オブジェクト
+   * @param {boolean} isPartialUpdate - 部分更新かどうか（デフォルト: false）
    * @returns {boolean} 妥当性
    */
-  validateSettings(settings) {
+  validateSettings(settings, isPartialUpdate = false) {
     if (!settings || typeof settings !== 'object') {
       return false
     }
 
-    // 基本的な構造チェック
+    if (isPartialUpdate) {
+      // 部分更新の場合は、存在するカテゴリのみを検証
+      for (const category in settings) {
+        if (settings.hasOwnProperty(category)) {
+          if (typeof settings[category] !== 'object' || settings[category] === null) {
+            console.warn(`設定カテゴリ '${category}' が不正です`)
+            return false
+          }
+        }
+      }
+      console.log('✅ [validateSettings] 部分更新の検証に成功しました')
+      return true
+    }
+
+    // 完全更新の場合は全カテゴリを検証（従来通り）
     const requiredCategories = ['general', 'audio', 'midi', 'ui', 'midiEditor', 'drumTrack']
     for (const category of requiredCategories) {
       if (!settings[category] || typeof settings[category] !== 'object') {

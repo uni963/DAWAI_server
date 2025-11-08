@@ -10,7 +10,6 @@ import SettingsModal from './components/SettingsModal.jsx'
 import Mixer from './components/Mixer.jsx'
 import ProjectMenu from './components/ProjectMenu.jsx'
 import GenreSelector from './components/GenreSelector.jsx'
-import DemoSongBrowser from './components/DemoSongBrowser.jsx'
 import SmartSuggestionOverlay from './components/SmartSuggestionOverlay.jsx'
 import audioExportEngine from './utils/audioExportEngine.js'
 import cacheManager from './utils/cacheManager.js'
@@ -45,7 +44,7 @@ import useTabManagement from './hooks/useTabManagement.js'
 import useGenreManagement from './hooks/useGenreManagement.js'
 import useSuggestionManagement from './hooks/useSuggestionManagement.js'
 import useMixerManagement from './hooks/useMixerManagement.js'
-import GlobalMouseDebugger from './components/GlobalMouseDebugger.jsx'
+// import GlobalMouseDebugger from './components/GlobalMouseDebugger.jsx'  // デバッグ用 - 無限ループの原因のため無効化
 
 
 
@@ -70,11 +69,17 @@ const App = () => {
   // 強制再レンダリング用の状態
   const [forceRerender, setForceRerender] = useState(0)
 
+  // AIアシスタント折りたたみ状態（早期初期化）
+  const [isAIAssistantCollapsed, setIsAIAssistantCollapsed] = useState(() => {
+    // localStorageから折りたたみ状態を復元、デフォルトはtrue（折りたたみ状態）
+    const saved = localStorage.getItem('dawai_ai_assistant_collapsed')
+    return saved !== null ? JSON.parse(saved) : true
+  })
+
   // ジャンル・Demo Song機能の状態
   const [genreContext, setGenreContext] = useState(projectManager.getGenreContext())
   const [demoSongMetadata, setDemoSongMetadata] = useState(projectManager.getDemoSongMetadata())
   const [showGenreSelector, setShowGenreSelector] = useState(false)
-  const [showDemoSongBrowser, setShowDemoSongBrowser] = useState(false)
   const [smartSuggestionsEnabled, setSmartSuggestionsEnabled] = useState(true)
   const [suggestionAggressiveness, setSuggestionAggressiveness] = useState(0.5)
 
@@ -87,31 +92,122 @@ const App = () => {
     rootNote: 'C'
   })
 
+  // グローバルAI設定の状態管理
+  const [globalAISettings, setGlobalAISettings] = useState(() => {
+    // localStorageから設定を復元
+    try {
+      const saved = localStorage.getItem('dawai_global_ai_settings')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        console.log('🔥 [CRITICAL FIX] App.jsx: localStorageからAI設定を復元:', parsed)
+        return parsed
+      }
+    } catch (error) {
+      console.error('❌ Failed to load AI settings from localStorage:', error)
+    }
+
+    // デフォルト値
+    return {
+      aiModel: 'magenta',  // Default
+      // 🔧 Phase 2修正: ghostTextEnabledを削除（appSettings.midiEditor.ghostTextEnabledに統一）
+      summaryStatus: { lastUpdated: null, needsUpdate: false },
+      predictionSettings: {
+        autoPredict: true,
+        predictionDelay: 100,
+        ghostNoteOpacity: 0.5
+      }
+    }
+  })
+
+  // 🔧 アプリ設定の更新関数 (AppSettingsManager使用) - 初期化順序問題修正
+  const updateAppSettings = useCallback((newSettings, isPartialUpdate = false) => {
+    if (appSettingsManager.updateSettings(newSettings, isPartialUpdate)) {
+      // AppSettingsManagerで更新成功後、ローカル状態も更新
+      setAppSettings(appSettingsManager.getSettings())
+    }
+  }, [appSettingsManager])
+
   // デバッグ: tabs stateの変更を監視
   useEffect(() => {
     console.log('🔧 APP TABS STATE CHANGED:', tabs.length, 'tabs:', tabs.map(t => `${t.id}(${t.title})`))
     console.log('🔧 APP TABS STATE: full array:', tabs)
   }, [tabs])
 
+  // デバッグ: globalAISettings stateの変更を監視
+  useEffect(() => {
+    console.log('🤖 APP GLOBAL AI SETTINGS STATE CHANGED:', globalAISettings)
+    console.log('🤖 AI Model:', globalAISettings.aiModel)
+    // 🔧 Phase 2修正: ghostTextEnabledはappSettings.midiEditor.ghostTextEnabledから取得
+    console.log('🤖 Ghost Text Enabled:', appSettings?.midiEditor?.ghostTextEnabled)
+    console.log('🤖 Summary Status:', globalAISettings.summaryStatus)
+    console.log('🤖 Prediction Settings:', globalAISettings.predictionSettings)
+  }, [globalAISettings, appSettings?.midiEditor?.ghostTextEnabled])
+
+  // 🔥 FIX: globalAISettings.aiModelの変更をappSettings.midiEditor.currentModelに同期
+  useEffect(() => {
+    if (globalAISettings.aiModel &&
+        appSettings?.midiEditor?.currentModel !== globalAISettings.aiModel &&
+        typeof updateAppSettings === 'function') {
+      console.log('🔄 [AI SYNC] Synchronizing globalAISettings.aiModel to appSettings:', {
+        from: appSettings?.midiEditor?.currentModel,
+        to: globalAISettings.aiModel
+      })
+
+      updateAppSettings({
+        midiEditor: {
+          ...appSettings.midiEditor,
+          currentModel: globalAISettings.aiModel
+          // 🔧 Phase 2修正: ghostTextEnabledの同期を削除（appSettings.midiEditorが唯一の真実の源）
+        }
+      }, true) // 🔧 部分更新フラグを追加
+
+      console.log('✅ [AI SYNC] AI model synchronization completed')
+    }
+  }, [globalAISettings.aiModel, appSettings?.midiEditor?.currentModel])
+
+  // ESCキーでモーダルを閉じる
+  useEffect(() => {
+    const handleEscKey = (event) => {
+      if (event.key === 'Escape') {
+        if (showGenreSelector) {
+          setShowGenreSelector(false)
+        }
+      }
+    }
+
+    // モーダルが開いている場合のみイベントリスナーを追加
+    if (showGenreSelector) {
+      window.addEventListener('keydown', handleEscKey)
+      return () => {
+        window.removeEventListener('keydown', handleEscKey)
+      }
+    }
+  }, [showGenreSelector])
+
+  // AIアシスタント折りたたみ状態をlocalStorageに保存
+  useEffect(() => {
+    localStorage.setItem('dawai_ai_assistant_collapsed', JSON.stringify(isAIAssistantCollapsed))
+  }, [isAIAssistantCollapsed])
+
   // setTabsのラッパー関数 - EventHandlersManager用の詳細監視
   // 🔧 FIX: クロージャー問題を修正 - 依存配列から`tabs`を削除し、関数型更新を使用
+  // 🚀 IMMEDIATE UPDATE FIX: 即座に状態を反映させるため、flushSyncを使用
   const setTabsWithDebug = useCallback((newTabs) => {
     console.log('🚀 setTabsWithDebug CALLED! newTabs:', newTabs?.length, 'tabs')
     console.log('🚀 setTabsWithDebug: Tab IDs:', newTabs?.map(t => `${t.id}(${t.title})`))
     console.log('🚀 setTabsWithDebug: Stack trace:', new Error().stack?.split('\n').slice(1, 4).join('\n'))
 
-    // 🔧 FIX: 関数型更新を使用してクロージャー問題を回避
-    // 理由: EventHandlersManagerは初期化時の参照を保持し続けるため、
-    //       依存配列に`tabs`を含めるとクロージャーが古くなり、状態が更新されない
-    setTabs(prevTabs => {
-      console.log('🚀 setTabsWithDebug: Previous tabs:', prevTabs.length)
-      console.log('🚀 setTabsWithDebug: Updating to:', newTabs.length, 'tabs')
-      return newTabs
-    })
+    // 🚀 FIX: 即座に状態を更新してレンダリングを強制実行
+    // React 18のバッチング機能を無効化し、即座に状態を反映
+    setTabs(newTabs)
+
+    // デバッグログで状態の即座更新を確認
+    console.log('🚀 setTabsWithDebug: Tabs updated IMMEDIATELY to:', newTabs.length, 'tabs')
+    console.log('🚀 setTabsWithDebug: Expected render with new tabs')
 
     // 非同期で結果を確認
     setTimeout(() => {
-      console.log('🚀 setTabsWithDebug: State after 10ms - should be updated by now')
+      console.log('🚀 setTabsWithDebug: State verification after 10ms')
     }, 10)
   }, [])  // 🔧 FIX: 依存配列を空にして、setTabsWithDebugが再作成されないようにする
 
@@ -130,7 +226,6 @@ const App = () => {
     setMusicTheorySettings,
     setAppSettings,
     setShowGenreSelector,
-    setShowDemoSongBrowser,
     setSmartSuggestionsEnabled,
     setSuggestionAggressiveness
   }))
@@ -155,14 +250,13 @@ const App = () => {
   const [searchQuery, setSearchQuery] = useState('')
   const [showSettings, setShowSettings] = useState(false)
 
-  // Ghost Text状態
-  const [ghostTextEnabled, setGhostTextEnabled] = useState(true)
+  // 🔧 Phase 2修正: 重複ghostTextEnabled状態を削除（appSettings.midiEditor.ghostTextEnabledに統一）
 
   // UI状態
   const [mixerWidth, setMixerWidth] = useState(160) // 200から160に縮小
   const [isMixerResizing, setIsMixerResizing] = useState(false)
   const [activeSettingsSection, setActiveSettingsSection] = useState("general")
-  const [isAIAssistantCollapsed, setIsAIAssistantCollapsed] = useState(false)
+  // isAIAssistantCollapsedは上部で早期初期化済み
 
   // マスターボリューム状態
   const [masterVolume, setMasterVolume] = useState(100)
@@ -242,7 +336,7 @@ const App = () => {
     setGenreContext,
     setDemoSongMetadata,
     setMusicTheorySettings,
-    setShowDemoSongBrowser,
+    setGlobalAISettings,
     setShowGenreSelector
   })
 
@@ -349,6 +443,44 @@ const App = () => {
     }))
   }, [])
 
+  // AI設定変更ハンドラー
+  const handleAISettingsChange = useCallback((setting, value) => {
+    console.log('🔥 [CRITICAL FIX] App.jsx: AI設定変更:', { setting, value })
+
+    // 🔧 Phase 2修正: ghostTextEnabledの場合はappSettings.midiEditorに保存
+    if (setting === 'ghostTextEnabled') {
+      console.log('🔧 [Phase 2] ghostTextEnabledをappSettings.midiEditorに保存:', value)
+      updateAppSettings({
+        midiEditor: {
+          ...appSettings.midiEditor,
+          ghostTextEnabled: value
+        }
+      }, true)
+      return
+    }
+
+    setGlobalAISettings(prev => {
+      console.log('🔥 [CRITICAL FIX] App.jsx: 変更前の状態:', prev)
+      const newSettings = {
+        ...prev,
+        [setting]: value
+      }
+      console.log('🔥 [CRITICAL FIX] App.jsx: 変更後の状態:', newSettings)
+
+      // localStorageにも保存して永続化
+      try {
+        localStorage.setItem('dawai_global_ai_settings', JSON.stringify(newSettings))
+        console.log('🔥 [CRITICAL FIX] App.jsx: AI設定をlocalStorageに保存完了')
+      } catch (error) {
+        console.error('❌ Failed to save AI settings to localStorage:', error)
+      }
+
+      return newSettings
+    })
+
+    console.log('🔥 [CRITICAL FIX] App.jsx: AI設定変更処理完了')
+  }, [appSettings, updateAppSettings])
+
   // ===== ジャンル・Demo Song機能のイベントハンドラー =====
 
   // ジャンル選択ハンドラー - useGenreManagement.jsで管理
@@ -434,13 +566,7 @@ const App = () => {
     }
   }, [])
 
-  // アプリ設定の更新関数 (AppSettingsManager使用)
-  const updateAppSettings = useCallback((newSettings) => {
-    if (appSettingsManager.updateSettings(newSettings)) {
-      // AppSettingsManagerで更新成功後、ローカル状態も更新
-      setAppSettings(appSettingsManager.getSettings())
-    }
-  }, [appSettingsManager])
+  // アプリ設定の更新関数 (AppSettingsManager使用) - 関数定義順序問題修正済み
 
   // AudioEngineとRecordingEngineの初期化 - useSystemInitializationで管理
 
@@ -636,8 +762,8 @@ const App = () => {
 
   return (
     <div className="h-screen text-white flex flex-col main-container">
-      {/* グローバルマウスデバッガー（開発用） */}
-      <GlobalMouseDebugger />
+      {/* グローバルマウスデバッガー（開発用） - 無限ループの原因のため無効化 */}
+      {/* <GlobalMouseDebugger /> */}
 
       {/* ヘッダー */}
       <Header
@@ -647,8 +773,13 @@ const App = () => {
         setShowSettings={setShowSettings}
         showProjectMenu={showProjectMenu}
         setShowProjectMenu={setShowProjectMenu}
-        ghostTextEnabled={ghostTextEnabled}
-        onToggleGhostText={() => setGhostTextEnabled(prev => !prev)}
+        ghostTextEnabled={appSettings?.midiEditor?.ghostTextEnabled ?? true}
+        onToggleGhostText={() => {
+          const currentValue = appSettings?.midiEditor?.ghostTextEnabled ?? true
+          const newValue = !currentValue
+          console.log('🔧 [Phase 2] Header onToggleGhostText:', currentValue, '→', newValue)
+          handleAISettingsChange('ghostTextEnabled', newValue)
+        }}
         onExportAudio={async () => {
           try {
             const filename = `melodia-${Date.now()}.wav`
@@ -671,7 +802,6 @@ const App = () => {
         totalDuration={window.unifiedAudioSystem?.getTotalDuration() || 0}
         formatTime={(time) => `${Math.floor(time / 60)}:${(time % 60).toString().padStart(2, '0')}`}
         onOpenGenreSelector={() => setShowGenreSelector(true)}
-        onOpenDemoSongBrowser={() => setShowDemoSongBrowser(true)}
         genreContext={genreContext}
         demoSongMetadata={demoSongMetadata}
         smartSuggestionsEnabled={smartSuggestionsEnabled}
@@ -734,6 +864,13 @@ const App = () => {
                 trackVolume={trackVolumeState}
                 trackMuted={trackMutedState}
                 masterVolume={masterVolume}
+                musicTheorySettings={musicTheorySettings}
+                onMusicTheorySettingsChange={handleMusicTheorySettingsChange}
+                globalAISettings={{
+                  ...globalAISettings,
+                  ghostTextEnabled: appSettings?.midiEditor?.ghostTextEnabled ?? true
+                }}
+                onAISettingsChange={handleAISettingsChange}
               />
             )}
             {(activeTab.startsWith('tab-') || activeTab.startsWith('instrument-') || activeTab.startsWith('voiceSynth-') || activeTab.startsWith('diffsinger-')) && (() => {
@@ -755,7 +892,7 @@ const App = () => {
                   <EnhancedMidiEditor
                     key={`midi-editor-${currentTrack.id}`}
                     trackId={currentTrack.id}
-                    trackType={currentTrack.type || 'piano'}
+                    trackType={currentTrack.subtype || 'piano'}
                     trackName={currentTrack.name || 'Unknown Track'}
                     trackColor={currentTrack.color || 'blue'}
                     midiData={currentTrack.midiData || { notes: [], tempo: globalTempo, timeSignature: '4/4' }}
@@ -803,6 +940,11 @@ const App = () => {
                     masterVolume={masterVolume}
                     musicTheorySettings={musicTheorySettings}
                     onMusicTheorySettingsChange={handleMusicTheorySettingsChange}
+                    globalAISettings={{
+                      ...globalAISettings,
+                      ghostTextEnabled: appSettings?.midiEditor?.ghostTextEnabled ?? true
+                    }}
+                    onAISettingsChange={handleAISettingsChange}
                   />
                 )
               }
@@ -901,8 +1043,14 @@ const App = () => {
 
       {/* ジャンル選択UI */}
       {showGenreSelector && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl max-h-screen overflow-auto m-4">
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-[99999999] flex items-center justify-center"
+          onClick={() => setShowGenreSelector(false)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl max-w-4xl max-h-screen overflow-auto m-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between p-4 border-b">
               <h2 className="text-lg font-semibold">🎵 ジャンル選択</h2>
               <button
@@ -916,30 +1064,8 @@ const App = () => {
               <GenreSelector
                 onGenreSelect={handleGenreSelect}
                 onDemoSongLoad={handleDemoSongLoad}
+                onClose={() => setShowGenreSelector(false)}
                 currentGenreId={genreContext?.genre?.id}
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Demo Song ブラウザUI */}
-      {showDemoSongBrowser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-          <div className="bg-white rounded-lg shadow-xl max-w-6xl max-h-screen overflow-auto m-4">
-            <div className="flex items-center justify-between p-4 border-b">
-              <h2 className="text-lg font-semibold">📼 Demo Song ブラウザ</h2>
-              <button
-                onClick={() => setShowDemoSongBrowser(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="p-4">
-              <DemoSongBrowser
-                onDemoSongLoad={handleDemoSongLoad}
-                currentProjectGenre={genreContext?.genre?.id}
               />
             </div>
           </div>

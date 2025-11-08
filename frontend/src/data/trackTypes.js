@@ -2,7 +2,7 @@
  * 統一トラックタイプ定義
  * ArrangementViewのAdd New Trackメニューとタブの+メニューで共通使用
  */
-import { Piano, Headphones, Drum, Zap, Mic } from 'lucide-react'
+import { Piano, Headphones, Drum, Mic } from 'lucide-react'
 
 export const UNIFIED_TRACK_TYPES = [
   {
@@ -42,18 +42,6 @@ export const UNIFIED_TRACK_TYPES = [
     instrumentType: 'drums'
   },
   {
-    id: 'synth',
-    name: 'Synth Track',
-    description: 'シンセサイザー・リード音色',
-    icon: Zap,
-    color: 'bg-orange-500/10 hover:bg-orange-500/20',
-    iconColor: 'text-orange-600 dark:text-orange-400',
-    type: 'instrument',
-    subtype: 'synth',
-    tabType: 'midi_editor',
-    instrumentType: 'synth_lead'
-  },
-  {
     id: 'voice_synth',
     name: '歌声合成トラック',
     description: 'DiffSinger歌声合成',
@@ -82,8 +70,9 @@ export const getLegacyTrackType = (legacyKey) => {
     'piano': 'piano',
     'bass': 'bass',
     'drums': 'drums',
-    'lead': 'synth',
-    'pad': 'synth',
+    'lead': 'piano',  // 旧synth -> piano
+    'pad': 'piano',   // 旧synth -> piano
+    'synth': 'piano', // 旧synth -> piano
     'voiceSynth': 'voice_synth',
     'midi': 'piano',  // TabBarのlegacy
     'drum': 'drums',  // TabBarのlegacy
@@ -131,17 +120,17 @@ export const mapInstrumentTypeToTrackType = (instrumentType) => {
     'drums': 'drums',
     'percussion': 'drums',
 
-    // Synth Track - シンセサイザー・ストリングス系
-    'synth_lead': 'synth',
-    'synth_pad': 'synth',
-    'synth_lead_edm': 'synth',
-    'future_synth': 'synth',
+    // Piano Track - シンセサイザー・ストリングス系（メロディ楽器として扱う）
+    'synth_lead': 'piano',
+    'synth_pad': 'piano',
+    'synth_lead_edm': 'piano',
+    'future_synth': 'piano',
 
-    // Synth Track - ストリングス楽器（シンセパッドとして扱う）
-    'violin': 'synth',
-    'viola': 'synth',
-    'cello_heavy': 'synth',
-    'cello': 'synth',
+    // Piano Track - ストリングス楽器（メロディ楽器として扱う）
+    'violin': 'piano',
+    'viola': 'piano',
+    'cello_heavy': 'piano',
+    'cello': 'piano',
 
     // 歌声合成トラック - ボーカル系
     'vocals': 'voice_synth',

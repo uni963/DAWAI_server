@@ -16,7 +16,7 @@ export default defineConfig({
     },
   },
   server: {
-    host: 'localhost',
+    host: '0.0.0.0', // iPhone等外部デバイスからアクセス可能
     port: 5173,
     strictPort: true, // ポート競合時にエラーで停止（複数起動禁止）
     hmr: {

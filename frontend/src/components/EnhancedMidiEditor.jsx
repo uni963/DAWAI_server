@@ -42,8 +42,8 @@ import { getMidiNoteFromKeyCode, calculateOptimalOctave } from '../utils/keyboar
 const METRONOME_FREQUENCY = 800 // Hz
 const METRONOME_DURATION = 0.1 // 秒
 
-const EnhancedMidiEditor = ({ 
-  trackId, 
+const EnhancedMidiEditor = ({
+  trackId,
   trackType = 'piano',
   trackName = 'Unknown Track',
   trackColor = 'blue',
@@ -66,12 +66,16 @@ const EnhancedMidiEditor = ({
     selectedScales: [],
     rootNote: 'C'
   },
-  onMusicTheorySettingsChange
+  onMusicTheorySettingsChange,
+  hideHeader = false,
+  embedded = false,
+  loopEnabled: externalLoopEnabled,
+  onLoopChange: externalOnLoopChange
 }) => {
   // 音量情報の受け取りをログ出力（重複を防ぐため条件付きで出力）
   const prevVolumeInfoRef = useRef({ trackVolume, trackMuted, masterVolume })
-  if (prevVolumeInfoRef.current.trackVolume !== trackVolume || 
-      prevVolumeInfoRef.current.trackMuted !== trackMuted || 
+  if (prevVolumeInfoRef.current.trackVolume !== trackVolume ||
+      prevVolumeInfoRef.current.trackMuted !== trackMuted ||
       prevVolumeInfoRef.current.masterVolume !== masterVolume) {
     console.log('🎵 Enhanced Midi Editor: Received volume props:', {
       trackId,
@@ -83,7 +87,14 @@ const EnhancedMidiEditor = ({
   }
   // 状態管理フックの使用
   const state = useMidiEditorState(trackId)
-  
+
+  // 外部からのloopEnabled設定を内部stateに同期
+  useEffect(() => {
+    if (externalLoopEnabled !== undefined && externalLoopEnabled !== state.loopEnabled) {
+      state.setLoopEnabled(externalLoopEnabled);
+    }
+  }, [externalLoopEnabled]);
+
   // グローバルBPMを状態に反映
   useEffect(() => {
     console.log('🎵 Global tempo useEffect triggered:', {
@@ -192,7 +203,7 @@ const EnhancedMidiEditor = ({
           }
         },
         getCurrentTime: () => {
-          return 0 // Bass音源では時間管理不要
+          return bassAudioHook.getCurrentTime() // Bass音源の実際の現在時間を返す
         },
         isAudioContextAvailable: () => {
           return bassAudioHook.isLoaded
@@ -217,6 +228,15 @@ const EnhancedMidiEditor = ({
   // 音色設定フックの使用
   const instrumentSettings = useInstrumentSettings(trackId)
 
+  // デバッグ: trackIdとinstrumentSettingsの状態をログ出力
+  console.log('🔧 Debug EnhancedMidiEditor:', {
+    trackId,
+    trackType,
+    isActive,
+    showSettingsPanel: instrumentSettings.showSettingsPanel,
+    openSettingsPanelExists: !!instrumentSettings.openSettingsPanel
+  })
+
   // 音楽理論設定変更ハンドラ（App.jsxから渡された関数を使用）
   const handleMusicTheorySettingsChange = useCallback((setting, value) => {
     console.log('🎼 Music Theory Setting Changed:', setting, value)
@@ -229,6 +249,46 @@ const EnhancedMidiEditor = ({
   useEffect(() => {
     console.log('🎼 EnhancedMidiEditor: Music Theory Settings Updated:', musicTheorySettings)
   }, [musicTheorySettings])
+
+  // 🎨 Phase 3: GhostRenderer Canvas統合（修正版 - TDZエラー回避）
+  // dynamicCanvasRefが利用可能になったらGhostRendererに設定
+  useEffect(() => {
+    // TDZ回避：refの存在チェックをeffect内で行い、依存配列には含めない
+    const canvas = dynamicCanvasRef?.current
+    const ghostRenderer = ghostText?.ghostRendererRef?.current
+
+    if (ghostRenderer && canvas) {
+      console.log('🎨 [Phase 3] Initializing GhostRenderer with dynamicCanvas')
+
+      console.log('🎨 [Phase 3] Canvas found:', {
+        width: canvas.width,
+        height: canvas.height,
+        hasContext: !!canvas.getContext('2d')
+      })
+
+      // GhostRendererにCanvasを設定
+      ghostRenderer.initialize(canvas)
+
+      // MIDIエディタの座標変換関数を設定
+      ghostRenderer.midiEditor = {
+        timeToX: (time) => {
+          // coordinateTransforms.timeToXを使用
+          const x = time * GRID_WIDTH * state.zoom + PIANO_WIDTH - state.scrollX
+          return x
+        },
+        pitchToY: (pitch) => {
+          // coordinateTransforms.pitchToYを使用
+          const keyIndex = TOTAL_KEYS - 1 - (pitch - OCTAVE_RANGE[0] * 12)
+          const y = HEADER_HEIGHT + keyIndex * GRID_HEIGHT - state.scrollY
+          return y
+        },
+        currentTime: state.currentTime || 0,
+        noteHeight: NOTE_HEIGHT
+      }
+
+      console.log('🎨 [Phase 3] GhostRenderer initialized with Canvas and coordinate transforms')
+    }
+  }, [state.zoom, state.scrollX, state.scrollY, state.currentTime, ghostText]) // TDZ回避：refを依存配列から除外
 
   // 元のMIDIデータを保持
   const [originalMidiData, setOriginalMidiData] = useState(null)
@@ -246,7 +306,7 @@ const EnhancedMidiEditor = ({
   
   // 現在のノート状態を参照するためのRef
   const currentNotesRef = useRef([])
-  
+
   // キーボード入力用の音の管理
   const keyboardAudioRef = useRef(new Map()) // keyCode -> { noteId, startTime }
 
@@ -256,13 +316,21 @@ const EnhancedMidiEditor = ({
   const audioRef = useRef(audio)
   const trackIdRef = useRef(trackId)
 
+  // 🎯 FIX: 頻繁に変更される値のための安定したRef（キーボードイベントリスナーの再登録を防ぐ）
+  const stateRef = useRef()
+  const activeKeysRef = useRef()
+  const liveRecordingNotesRef = useRef()
+
   // Refを最新の値で更新
   useEffect(() => {
     onNoteAddRef.current = onNoteAdd
     onNoteEditRef.current = onNoteEdit
     audioRef.current = audio
     trackIdRef.current = trackId
-  }, [onNoteAdd, onNoteEdit, audio, trackId])
+    stateRef.current = state
+    activeKeysRef.current = activeKeys
+    liveRecordingNotesRef.current = liveRecordingNotes
+  }, [onNoteAdd, onNoteEdit, audio, trackId, state, activeKeys, liveRecordingNotes])
 
   // ライブ録音中のノートのリアルタイム更新
   useEffect(() => {
@@ -271,29 +339,33 @@ const EnhancedMidiEditor = ({
     console.log(`🎹 Starting live recording update for ${liveRecordingNotes.size} notes`)
 
     const updateInterval = setInterval(() => {
-      const currentTime = state.currentTime
       let hasUpdates = false
-      
+
+      // 🎯 修正: 実時間ベースで長さを計算（既存ノート再生と独立）
+      const now = Date.now()
+
       // 現在のノート状態を取得
       const currentNotes = currentNotesRef.current
-      
+
       // ライブ録音中のノートの長さをリアルタイムで更新
       const updatedNotes = currentNotes.map(note => {
         const recordingData = Array.from(liveRecordingNotes.values()).find(data => data.noteId === note.id)
         if (recordingData) {
-          const newDuration = currentTime - recordingData.startTime
+          // 実時間経過から長さを計算（再生中のcurrentTimeとは独立）
+          const elapsedMs = now - recordingData.startTimestamp
+          const newDuration = Math.max(0.1, elapsedMs / 1000)
           if (newDuration > note.duration) {
             hasUpdates = true
             console.log(`🎹 Updating live note duration: ${note.id} (pitch: ${note.pitch}) -> ${newDuration.toFixed(2)}s`)
             return {
               ...note,
-              duration: Math.max(0.1, newDuration)
+              duration: newDuration
             }
           }
         }
         return note
       })
-      
+
       if (hasUpdates) {
         state.setNotes(updatedNotes)
         currentNotesRef.current = updatedNotes
@@ -305,29 +377,70 @@ const EnhancedMidiEditor = ({
       clearInterval(updateInterval)
       console.log('🎹 Stopped live recording update')
     }
-  }, [state.isPlaying, state.currentTime, liveRecordingNotes])
+  }, [state.isPlaying, liveRecordingNotes])
 
-  // シンプルなキーボードイベント処理（重複設定を防ぐ）
-  const keyboardListenersSetupRef = useRef(false)
-  useEffect(() => {
-    console.log('🎹 Keyboard useEffect triggered with dependencies:', {
-      stateAudioEnabled: state.audioEnabled,
-      audio: !!audio,
-      manualOctaveOffset,
-      isActive,
-      trackId,
-      keyboardListenersSetupRef: keyboardListenersSetupRef.current
-    })
+  // 巻き戻し機能（永続化フック使用）（refから取得）
+  const undoLastAction = useCallback(() => {
+    if (!trackId || !stateRef.current?.isInitialized) return
 
-    if (keyboardListenersSetupRef.current) {
-      console.log('🎹 Keyboard listeners already set up, skipping')
-      return // 既に設定済みの場合はスキップ
+    const previousState = persistence.restoreFromHistory('undo')
+
+    if (previousState) {
+      // ディープコピーで確実に分離
+      const previousStateCopy = previousState.map(note => ({ ...note }))
+      stateRef.current.setNotes(previousStateCopy)
+
+      // データを永続化
+      trackDataRef.current[trackId] = [...previousStateCopy]
+      lastSavedRef.current[trackId] = Date.now()
+      persistence.saveNotes(previousStateCopy, trackId)
+
+      stateRef.current.setSelectedNotes(new Set())
+      stateRef.current.setNeedsRedraw(true)
     }
-    console.log('🎹 Setting up simple keyboard listeners')
-    keyboardListenersSetupRef.current = true
-    
-    const handleKeyDown = (event) => {
-      console.log(`🎹 KeyDown: ${event.code}`)
+  }, [trackId, persistence])
+
+  // やり直し機能（永続化フック使用）（refから取得）
+  const redoLastAction = useCallback(() => {
+    if (!trackId || !stateRef.current?.isInitialized) return
+
+    const nextState = persistence.restoreFromHistory('redo')
+
+    if (nextState) {
+      // ディープコピーで確実に分離
+      const nextStateCopy = nextState.map(note => ({ ...note }))
+      stateRef.current.setNotes(nextStateCopy)
+
+      // データを永続化
+      trackDataRef.current[trackId] = [...nextStateCopy]
+      lastSavedRef.current[trackId] = Date.now()
+      persistence.saveNotes(nextStateCopy, trackId)
+
+      stateRef.current.setSelectedNotes(new Set())
+      stateRef.current.setNeedsRedraw(true)
+    }
+  }, [trackId, persistence])
+
+  // シンプルなキーボードイベント処理
+  const handleKeyDown = useCallback((event) => {
+    console.log(`🎹 KeyDown: ${event.code}`)
+
+      // アンドゥ・リドゥのキーボードショートカット（最優先処理）
+      if (event.ctrlKey && event.code === 'KeyZ' && !event.shiftKey) {
+        event.preventDefault()
+        event.stopPropagation()
+        undoLastAction()
+        console.log('🔄 Undo triggered by Ctrl+Z')
+        return
+      }
+
+      if (event.ctrlKey && (event.code === 'KeyY' || (event.code === 'KeyZ' && event.shiftKey))) {
+        event.preventDefault()
+        event.stopPropagation()
+        redoLastAction()
+        console.log('🔄 Redo triggered by Ctrl+Y or Ctrl+Shift+Z')
+        return
+      }
 
       // システムキーと矢印キーの明示的ガード（最優先で処理）
       if (event.code === 'Tab' || event.key === 'Tab' ||
@@ -375,17 +488,17 @@ const EnhancedMidiEditor = ({
       
       // キーリピートは無視
       if (event.repeat) return
-      
-      // 既に押されているキーは無視
-      if (activeKeys.has(event.code)) return
-      
-      // MIDIノートに対応するキーの場合のみ処理
+
+      // 既に押されているキーは無視（refから取得）
+      if (activeKeysRef.current.has(event.code)) return
+
+      // MIDIノートに対応するキーの場合のみ処理（refから取得）
       const octave = calculateOptimalOctave(
-        state.scrollY, 
-        state.currentTime, 
-        [0, 9], 
-        120, 
-        20, 
+        stateRef.current.scrollY,
+        stateRef.current.currentTime,
+        [0, 9],
+        120,
+        20,
         manualOctaveOffset
       )
       
@@ -415,10 +528,10 @@ const EnhancedMidiEditor = ({
       
       // アクティブキーに追加
       setActiveKeys(prev => new Set([...prev, event.code]))
-      
-      // 音を再生（再生中でも常に音を鳴らす）
-      if (state.audioEnabled && audioRef.current) {
-        console.log(`🎹 Attempting to play note ${midiNote} with audio enabled: ${state.audioEnabled}`)
+
+      // 音を再生（再生中でも常に音を鳴らす）（refから取得）
+      if (stateRef.current.audioEnabled && audioRef.current) {
+        console.log(`🎹 Attempting to play note ${midiNote} with audio enabled: ${stateRef.current.audioEnabled}`)
 
         // キーボード入力の音を記録
         keyboardAudioRef.current.set(event.code, {
@@ -440,57 +553,64 @@ const EnhancedMidiEditor = ({
           })
         }
       } else {
-        console.log(`🎹 Audio not enabled or audio not available. audioEnabled: ${state.audioEnabled}, audio: ${!!audioRef.current}`)
-      }
-      
-      // 再生中のキーボード挿入機能
-      if (state.isPlaying) {
-        const currentTime = state.currentTime
-        const noteId = `live-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-        
-        // 新しいノートを作成
-        const newNote = {
-          id: noteId,
-          pitch: midiNote,
-          time: currentTime,
-          duration: 0.1, // 最初は小さな長さから開始
-          velocity: 0.7
-        }
-        
-        console.log(`🎹 Adding live note: ${noteId} at time ${currentTime}`)
-        
-        // ノートを追加
-        state.setNotes(prev => {
-          const newNotes = [...prev, newNote]
-          currentNotesRef.current = newNotes
-          return newNotes
-        })
-        
-        // ライブ録音中のノートとして記録
-        setLiveRecordingNotes(prev => new Map(prev).set(event.code, {
-          noteId: noteId,
-          startTime: currentTime,
-          keyCode: event.code
-        }))
-        
-        // 親コンポーネントに通知
-        if (onNoteAddRef.current) {
-          onNoteAddRef.current(newNote, trackIdRef.current)
-        }
+        console.log(`🎹 Audio not enabled or audio not available. audioEnabled: ${stateRef.current.audioEnabled}, audio: ${!!audioRef.current}`)
       }
 
-      // 視覚的フィードバック（複数キー対応）
-      state.setPressedKey(prev => {
+      // キーボード入力でのノート作成（再生中・停止中両方で動作）（refから取得）
+      const currentTime = stateRef.current.isPlaying ? stateRef.current.currentTime : 0
+      const noteId = `live-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+
+      // 新しいノートを作成（最初は最小長さ、keyupで確定）
+      const newNote = {
+        id: noteId,
+        pitch: midiNote,
+        time: currentTime,
+        duration: 0.25, // 最小長さ（1/16音符相当）、keyupで更新
+        velocity: 0.7
+      }
+
+      console.log(`🎹 Adding live note: ${noteId} at time ${currentTime} (isPlaying: ${stateRef.current.isPlaying})`)
+
+      // ノートを追加（refから取得）
+      stateRef.current.setNotes(prev => {
+        const newNotes = [...prev, newNote]
+        currentNotesRef.current = newNotes
+        return newNotes
+      })
+
+      // キー押下開始時刻を記録（リアルタイムの時刻を使用）
+      setLiveRecordingNotes(prev => new Map(prev).set(event.code, {
+        noteId: noteId,
+        startTime: currentTime,
+        startTimestamp: Date.now(), // 実時間での開始時刻
+        keyCode: event.code
+      }))
+
+      // 親コンポーネントに通知
+      if (onNoteAddRef.current) {
+        onNoteAddRef.current(newNote, trackIdRef.current)
+      }
+
+      // 視覚的フィードバック（複数キー対応）（refから取得）
+      stateRef.current.setPressedKey(prev => {
         if (prev === null) return midiNote
         if (Array.isArray(prev)) {
           return [...prev, midiNote]
         }
         return [prev, midiNote]
       })
-      state.setNeedsRedraw(true)
-    }
-    
-    const handleKeyUp = (event) => {
+      stateRef.current.setNeedsRedraw(true)
+  }, [
+    undoLastAction,
+    redoLastAction,
+    isActive,
+    setManualOctaveOffset,
+    manualOctaveOffset,
+    setActiveKeys,
+    setLiveRecordingNotes
+  ])
+
+    const handleKeyUp = useCallback((event) => {
       console.log(`🎹 KeyUp: ${event.code}`)
       
       // MIDIエディタがアクティブでない場合は処理しない
@@ -505,14 +625,14 @@ const EnhancedMidiEditor = ({
         newSet.delete(event.code)
         return newSet
       })
-      
-      // MIDIノートに対応するキーの場合のみ処理
+
+      // MIDIノートに対応するキーの場合のみ処理（refから取得）
       const octave = calculateOptimalOctave(
-        state.scrollY, 
-        state.currentTime, 
-        [0, 9], 
-        120, 
-        20, 
+        stateRef.current.scrollY,
+        stateRef.current.currentTime,
+        [0, 9],
+        120,
+        20,
         manualOctaveOffset
       )
       
@@ -524,51 +644,52 @@ const EnhancedMidiEditor = ({
         
         console.log(`🎹 Stopping note: ${midiNote}`)
 
-        // 音を停止（統一された音声システムでは自動的に管理される）
-        if (state.audioEnabled && audioRef.current) {
+        // 音を停止（統一された音声システムでは自動的に管理される）（refから取得）
+        if (stateRef.current.audioEnabled && audioRef.current) {
           // useMidiAudioのnoteOffを使用
           audioRef.current.noteOff(midiNote);
           // キーボード入力の音を記録から削除
           keyboardAudioRef.current.delete(event.code)
         }
-        
-        // 再生中のキーボード挿入の終了処理
-        const recordingData = liveRecordingNotes.get(event.code)
-        if (recordingData && state.isPlaying) {
-          const currentTime = state.currentTime
-          const duration = Math.max(0.1, currentTime - recordingData.startTime)
-          
-          console.log(`🎹 Finalizing live note: ${recordingData.noteId} with duration ${duration}`)
-          
-          // ノートの長さを更新
-          state.setNotes(prev => {
-            const updatedNotes = prev.map(note => 
-              note.id === recordingData.noteId 
+
+        // キーボード入力ノートの長さ確定処理（再生中・停止中両方で動作）（refから取得）
+        const recordingData = liveRecordingNotesRef.current.get(event.code)
+        if (recordingData) {
+          // 🎯 修正: 停止中・再生中共に実時間をそのまま使用（BPM補正なし）
+          const elapsedMs = Date.now() - recordingData.startTimestamp
+          const duration = Math.max(0.25, elapsedMs / 1000)
+
+          console.log(`🎹 Finalizing live note: ${recordingData.noteId} with duration ${duration}s (elapsed: ${elapsedMs}ms, isPlaying: ${stateRef.current.isPlaying})`)
+
+          // ノートの長さを更新（refから取得）
+          stateRef.current.setNotes(prev => {
+            const updatedNotes = prev.map(note =>
+              note.id === recordingData.noteId
                 ? { ...note, duration: duration }
                 : note
             )
             currentNotesRef.current = updatedNotes
             return updatedNotes
           })
-          
+
           // ライブ録音中のノートから削除
           setLiveRecordingNotes(prev => {
             const newMap = new Map(prev)
             newMap.delete(event.code)
             return newMap
           })
-          
-          // 親コンポーネントに通知
+
+          // 親コンポーネントに通知（refから取得）
           if (onNoteEditRef.current) {
-            const updatedNote = state.notes.find(note => note.id === recordingData.noteId)
+            const updatedNote = stateRef.current.notes.find(note => note.id === recordingData.noteId)
             if (updatedNote) {
               onNoteEditRef.current(updatedNote, trackIdRef.current)
             }
           }
         }
-        
-        // 視覚的フィードバックをクリア（複数キー対応）
-        state.setPressedKey(prev => {
+
+        // 視覚的フィードバックをクリア（複数キー対応）（refから取得）
+        stateRef.current.setPressedKey(prev => {
           if (prev === null) return null
           if (Array.isArray(prev)) {
             const newPressedKeys = prev.filter(key => key !== midiNote)
@@ -576,10 +697,18 @@ const EnhancedMidiEditor = ({
           }
           return prev === midiNote ? null : prev
         })
-        state.setNeedsRedraw(true)
+        stateRef.current.setNeedsRedraw(true)
       }
-    }
-    
+  }, [
+    isActive,
+    setActiveKeys,
+    manualOctaveOffset,
+    setLiveRecordingNotes
+  ])
+
+  // キーボードリスナーをセットアップ
+  useEffect(() => {
+    console.log('🎹 Setting up keyboard listeners')
     document.addEventListener('keydown', handleKeyDown)
     document.addEventListener('keyup', handleKeyUp)
 
@@ -588,9 +717,8 @@ const EnhancedMidiEditor = ({
       document.removeEventListener('keydown', handleKeyDown)
       document.removeEventListener('keyup', handleKeyUp)
       console.log('🎹 Keyboard listeners removed')
-      keyboardListenersSetupRef.current = false
     }
-  }, [state.audioEnabled, manualOctaveOffset, isActive])
+  }, [handleKeyDown, handleKeyUp])
 
   // オーディオ初期化
   useEffect(() => {
@@ -831,17 +959,26 @@ const EnhancedMidiEditor = ({
   // コンポーネントのクリーンアップ処理
   useEffect(() => {
     console.log('🎵 Cleanup useEffect triggered for trackId:', trackId)
+
+    // トラック切り替え時に再生状態をリセット
+    console.log('🎵 Resetting playback state for track switch:', trackId)
+    isPlayingRef.current = false
+    state.setIsPlaying(false)
+
     return () => {
       console.log('🎵 Component cleanup - resetting initialization state')
       // コンポーネントがアンマウントされた時に初期化状態をリセット
       if (trackId) {
+        // 再生状態を確実にリセット
+        isPlayingRef.current = false
+        state.setIsPlaying(false)
 
         // trackDataRefからは削除しない（他のタブで使用される可能性があるため）
         // 初期化状態のみリセット
         state.setIsInitialized(false)
       }
     }
-  }, [trackId])
+  }, [trackId, state.setIsPlaying, state.setIsInitialized])
 
   // 前回のトラックIDを記録するRef
   const previousTrackIdRef = useRef(null)
@@ -1246,9 +1383,10 @@ const EnhancedMidiEditor = ({
       return
     }
     
+    // 🎯 修正: 空トラックでも再生可能にする（リアルタイム録音のため）
     if (state.notes.length === 0) {
-      console.log('🎵 No notes to play')
-      return
+      console.log('🎵 Empty track - starting playback for live recording')
+      // 空トラックでも再生状態に入り、キーボード入力を受け付ける
     }
     
     // 再生状態を先に設定（Refとstateの両方を更新）
@@ -1595,7 +1733,20 @@ const EnhancedMidiEditor = ({
 
         
         state.setCurrentTime(newTime)
-        
+
+        // 🔍 [Bass Track Debug] playhead更新ログ
+        console.log('🔍 [Bass Track Debug] playhead update:', {
+          trackType: trackType,
+          trackId: trackId,
+          elapsedTime: elapsedTime,
+          newTime: newTime,
+          stateCurrentTime: state.currentTime,
+          currentAudioTime: currentAudioTime,
+          playbackStartTime: playbackStartTimeRef.current,
+          isPlaying: state.isPlaying,
+          timestamp: Date.now()
+        });
+
         // 再生中のノートを更新
         const currentPlaybackNotes = new Set()
         
@@ -1721,8 +1872,9 @@ const EnhancedMidiEditor = ({
         }
         
         // ループ処理
-        if (state.loopEnabled && newTime >= state.playbackDuration) {
-          state.setCurrentTime(0)
+        if (state.loopEnabled && newTime >= state.loopEnd) {
+          console.log('🔄 [EnhancedMidiEditor] Loop end reached, resetting to start:', state.loopStart);
+          state.setCurrentTime(state.loopStart)
           state.setPlaybackStartTime(currentAudioTime)
           playbackStartTimeRef.current = currentAudioTime
           
@@ -1733,10 +1885,74 @@ const EnhancedMidiEditor = ({
           })
           scheduledNotesRef.current.clear()
           activeAudioNodesRef.current.clear()
+
+          // ループ開始位置からノートを再スケジュール
+          console.log('🔄 [EnhancedMidiEditor] Re-scheduling notes for loop from:', state.loopStart);
+          state.notes.forEach(note => {
+            // ループ開始位置からの相対時間でスケジュール
+            const noteStartTime = playbackStartTimeRef.current + note.time
+            const noteEndTime = noteStartTime + note.duration
+            const delay = Math.max(0, (noteStartTime - currentAudioTime) * 1000)
+
+            // ノート開始をスケジュール
+            const startTimeout = setTimeout(async () => {
+              if (!isPlayingRef.current) return
+
+              try {
+                const result = await audio.playScheduledNote(note.pitch, noteStartTime, note.duration, note.velocity)
+                if (result) {
+                  state.setPlaybackNotes(prev => {
+                    const newSet = new Set(prev)
+                    newSet.add(note.id)
+                    return newSet
+                  })
+                  activeAudioNodesRef.current.set(note.id, result)
+                }
+              } catch (error) {
+                console.error('🎵 Error playing loop note:', error)
+              }
+            }, delay)
+
+            // ノート終了をスケジュール
+            const endTimeout = setTimeout(() => {
+              if (activeAudioNodesRef.current.has(note.id)) {
+                try {
+                  const audioNode = activeAudioNodesRef.current.get(note.id)
+                  if (audioNode && typeof audioNode.stop === 'function') {
+                    audioNode.stop()
+                  }
+                } catch (error) {
+                  console.error('🎵 Error stopping note:', error)
+                }
+                activeAudioNodesRef.current.delete(note.id)
+
+                state.setPlaybackNotes(prev => {
+                  const newSet = new Set(prev)
+                  newSet.delete(note.id)
+                  return newSet
+                })
+              }
+            }, delay + (note.duration * 1000))
+
+            // スケジュール参照を保存
+            scheduledNotesRef.current.set(note.id, {
+              startTimeout,
+              endTimeout
+            })
+          })
         }
         
+        // ノートの最大時間を計算
+        const maxNoteTime = state.notes.length > 0
+          ? Math.max(...state.notes.map(note => (note.time || 0) + (note.duration || 1)))
+          : 0;
+
+        // 最大時間 + 余裕（5秒）を超えたら停止
+        const effectiveEndTime = maxNoteTime + 5;
+
         // 再生終了処理
-        if (!state.loopEnabled && newTime >= state.playbackDuration) {
+        if (!state.loopEnabled && newTime >= effectiveEndTime) {
+          console.log('🎵 [EnhancedMidiEditor] Playback ended at:', newTime, 'effective end:', effectiveEndTime);
           stopPlayback()
           return
         }
@@ -1977,25 +2193,85 @@ const EnhancedMidiEditor = ({
     }, 0)
   }, [trackId, state.audioEnabled, onNoteAdd, persistence, ghostText, state.isPlaying, audio]) // 🔧 修正: state.notesを依存配列から削除（無限ループ防止）
 
-  // Ghost Text予測の全適用は専用フックで処理
-  const acceptAllGhostPredictions = useCallback(() => {
-    ghostText.acceptAllGhostPredictions(state.notes, addNote)
+  // 🔴 [NEW] Wrapper function for acceptNextGhostNote (Issue #146)
+  const acceptNextGhostNote = useCallback(() => {
+    // Try phrase predictions first, then ghost predictions
+    const hasPhraseNotes = ghostText.phraseNotes && ghostText.phraseNotes.length > 0 && ghostText.nextPhraseIndex < ghostText.phraseNotes.length
+    const hasGhostPredictions = ghostText.ghostPredictions && ghostText.ghostPredictions.length > 0 && ghostText.nextGhostIndex < ghostText.ghostPredictions.length
+
+    if (hasPhraseNotes) {
+      console.log('🎯 Accepting next phrase note')
+      const result = ghostText.acceptNextPhraseNote(state.notes, addNote)
+      if (result.success) {
+        console.log('✅ Phrase note accepted')
+      }
+    } else if (hasGhostPredictions) {
+      console.log('🎯 Accepting next ghost note')
+      const result = ghostText.acceptNextGhostNote(state.notes, addNote)
+      if (result.success) {
+        console.log('✅ Ghost note accepted')
+      }
+    } else {
+      console.warn('⚠️ No notes available to approve')
+    }
   }, [ghostText, state.notes, addNote])
 
-  // グローバルGhost Text補完イベントのリスナー
+  // 🔴 [NEW] Wrapper function for undoLastGhostApproval (Issue #146)
+  const undoLastGhostApproval = useCallback(() => {
+    console.log('↩️ Undoing last approval')
+    const result = ghostText.undoLastGhostApproval(state.notes, removeNote)
+    if (result.success) {
+      console.log('✅ Approval undone')
+    } else {
+      console.warn('⚠️ Nothing to undo')
+    }
+  }, [ghostText, state.notes, removeNote])
+
+  // Keep acceptAllGhostPredictions for backward compatibility or fallback
+  const acceptAllGhostPredictions = useCallback(() => {
+    const hasPhrasePredictions = ghostText.phraseNotes && ghostText.phraseNotes.length > 0
+    const hasGhostPredictions = ghostText.ghostPredictions && ghostText.ghostPredictions.length > 0
+
+    console.log('🎹 acceptAllGhostPredictions (fallback): 実行開始', {
+      hasPhrasePredictions,
+      hasGhostPredictions,
+      phraseNotesCount: ghostText.phraseNotes?.length || 0,
+      ghostPredictionsCount: ghostText.ghostPredictions?.length || 0
+    })
+
+    // フレーズ予測を優先して採用
+    if (hasPhrasePredictions) {
+      console.log('🎵 フレーズ予測を採用')
+      ghostText.acceptAllPhrasePredictions(state.notes, addNote)
+    }
+    // フレーズ予測がない場合は通常予測を採用
+    else if (hasGhostPredictions) {
+      console.log('👻 通常Ghost Text予測を採用')
+      ghostText.acceptAllGhostPredictions(state.notes, addNote)
+    } else {
+      console.warn('⚠️ 採用可能な予測がありません')
+    }
+  }, [ghostText, state.notes, addNote])
+
+  // グローバルGhost Text補完イベントのリスナー (Issue #146: 1音ずつ承認に変更)
   useEffect(() => {
     const handleGlobalAcceptGhostText = (event) => {
       if (!isActive) return // アクティブなタブのみ処理
 
-      console.log('🎹 Global Ghost Text accept event received')
+      console.log('🎹 Global Ghost Text accept event received', {
+        shiftKey: event.detail.shiftKey,
+        hasPhrasePredictions: ghostText.phraseNotes?.length > 0,
+        hasGhostPredictions: ghostText.ghostPredictions?.length > 0
+      })
 
       if (event.detail.shiftKey) {
-        // Shift+Tab: 前の予測を選択（将来的に実装）
-        console.log('🎹 Shift+Tab: 前の予測選択（未実装）')
+        // 🔴 [CHANGED] Shift+Tab: Undo last approval
+        console.log('↩️ Shift+Tab: Undoing last approval')
+        undoLastGhostApproval()
       } else {
-        // Tab: 全予測を受け入れる
-        acceptAllGhostPredictions()
-        console.log('✅ Tab: Ghost Text予測を全適用')
+        // 🔴 [CHANGED] Tab: Accept next note one-by-one
+        acceptNextGhostNote()
+        console.log('✅ Tab: Next note approved (one-by-one)')
       }
     }
 
@@ -2004,7 +2280,7 @@ const EnhancedMidiEditor = ({
     return () => {
       window.removeEventListener('accept-ghost-text-global', handleGlobalAcceptGhostText)
     }
-  }, [isActive, acceptAllGhostPredictions])
+  }, [isActive, acceptNextGhostNote, undoLastGhostApproval])
 
   // ノート削除関数
   const removeNote = useCallback((noteId) => {
@@ -2299,30 +2575,6 @@ const EnhancedMidiEditor = ({
   const toggleGhostText = useCallback(() => {
     ghostText.toggleGhostText()
   }, [ghostText])
-  // 巻き戻し機能（永続化フック使用）
-  const undoLastAction = useCallback(() => {
-    if (!trackId || !state.isInitialized) return
-    
-
-    
-    const previousState = persistence.restoreFromHistory('undo')
-    
-    if (previousState) {
-
-      
-      // ディープコピーで確実に分離
-      const previousStateCopy = previousState.map(note => ({ ...note }))
-      state.setNotes(previousStateCopy)
-      
-      // データを永続化
-      trackDataRef.current[trackId] = [...previousStateCopy]
-      lastSavedRef.current[trackId] = Date.now()
-      persistence.saveNotes(previousStateCopy, trackId)
-      
-      state.setSelectedNotes(new Set())
-      state.setNeedsRedraw(true)
-    }
-  }, [trackId, persistence]) // 🔧 修正: state.isInitializedを依存配列から削除
   
 
 
@@ -2341,7 +2593,8 @@ const EnhancedMidiEditor = ({
       }}
     >
       {/* ツールバー */}
-      <MidiEditorToolbar
+      {!hideHeader && (
+        <MidiEditorToolbar
         // 再生関連
         isPlaying={state.isPlaying}
         onPlayPause={async (e) => {
@@ -2376,6 +2629,8 @@ const EnhancedMidiEditor = ({
         // 操作関連
         onUndo={undoLastAction}
         canUndo={state.isInitialized && persistence.getHistoryInfo().canUndo}
+        onRedo={redoLastAction}
+        canRedo={state.isInitialized && persistence.getHistoryInfo().canRedo}
         onShowDeleteConfirm={() => state.setShowDeleteConfirm(true)}
         
         // オーディオ関連
@@ -2392,8 +2647,69 @@ const EnhancedMidiEditor = ({
         // ループ・メトロノーム関連
         loopEnabled={state.loopEnabled}
         onToggleLoop={() => {
-          console.log('🎵 Toggling loop:', !state.loopEnabled)
-          state.setLoopEnabled(!state.loopEnabled)
+          const newLoopEnabled = !state.loopEnabled;
+          console.log('🎵 Toggling loop:', newLoopEnabled);
+
+          // ループ有効化時にスマート区間設定
+          if (newLoopEnabled && state.loopStart === 0 && state.loopEnd === 4) {
+            // デフォルト値のままの場合のみ自動設定
+            const secondsPerBeat = 60 / state.tempo;
+
+            // プロジェクトマネージャーから拍子設定を取得（動的）
+            let beatsPerBar = 4; // デフォルト4拍子
+            try {
+              const project = window.projectManager?.getProject();
+              const currentTrack = project?.tracks?.find(t => t.id === trackId);
+              if (currentTrack?.midiData?.timeSignature) {
+                const [numerator] = currentTrack.midiData.timeSignature.split('/').map(Number);
+                if (numerator && numerator > 0) {
+                  beatsPerBar = numerator;
+                  console.log('🎵 Using time signature from project:', currentTrack.midiData.timeSignature);
+                }
+              }
+            } catch (error) {
+              console.warn('🎵 Failed to get time signature, using default 4/4:', error);
+            }
+
+            const secondsPerBar = secondsPerBeat * beatsPerBar;
+
+            if (state.notes.length > 0) {
+              // 選択ノートまたは全ノートに基づいて設定
+              const selectedNoteArray = Array.from(state.selectedNotes).map(id =>
+                state.notes.find(n => `${n.pitch}-${n.time}` === id)
+              ).filter(Boolean);
+
+              const relevantNotes = selectedNoteArray.length > 0 ? selectedNoteArray : state.notes;
+
+              const minTime = Math.min(...relevantNotes.map(n => n.time));
+              const maxTime = Math.max(...relevantNotes.map(n => n.time + n.duration));
+
+              // 小節単位に丸める
+              let loopStart = Math.floor(minTime / secondsPerBar) * secondsPerBar;
+              let loopEnd = Math.ceil(maxTime / secondsPerBar) * secondsPerBar;
+
+              // ループ区間の検証: 最低1小節は確保
+              if (loopEnd <= loopStart) {
+                loopEnd = loopStart + secondsPerBar;
+                console.warn('🎵 Loop end was <= loop start, adjusted to minimum 1 bar');
+              }
+
+              state.setLoopStart(loopStart);
+              state.setLoopEnd(loopEnd);
+
+              console.log('🎵 Smart loop region set:', { loopStart, loopEnd, secondsPerBar, beatsPerBar });
+            } else {
+              // ノートがない場合は4小節をデフォルトに
+              state.setLoopStart(0);
+              state.setLoopEnd(secondsPerBar * 4);
+            }
+          }
+
+          state.setLoopEnabled(newLoopEnabled);
+          // 外部コールバックがあれば呼び出し
+          if (externalOnLoopChange) {
+            externalOnLoopChange(newLoopEnabled);
+          }
         }}
         metronomeEnabled={state.metronomeEnabled}
         onToggleMetronome={() => {
@@ -2410,49 +2726,58 @@ const EnhancedMidiEditor = ({
         onToggleGhostText={ghostText.toggleGhostText}
         showGhostText={ghostText.showGhostText}
         onToggleShowGhostText={ghostText.toggleShowGhostText}
-        
+
+        // 承認待ちノート数 (ghostPredictions + phraseNotesの合計)
+        pendingNotesCount={(ghostText.ghostPredictions?.length || 0) + (ghostText.phraseNotes?.length || 0)}
+
         // 設定関連
         showSettings={false}
         onToggleSettings={onOpenSettings}
-        
-        // 音色関連
-        currentInstrument={instrumentSettings.instrument}
-        onInstrumentChange={instrumentSettings.handleInstrumentChange}
-        onOpenInstrumentSettings={instrumentSettings.openSettingsPanel}
+
+        // 音色設定関連
+        onOpenSoundSettings={instrumentSettings.openSettingsPanel}
       />
+      )}
 
+      {(!hideHeader && appSettings?.midiEditor?.developerMode) && (() => {
+        // ノートの最大時間を計算
+        const maxTime = state.notes.length > 0
+          ? Math.max(...state.notes.map(note => (note.time || 0) + (note.duration || 1)))
+          : 0;
 
-
-      {/* ステータスバー */}
-      {appSettings?.midiEditor?.developerMode && (
+        return (
         <MidiEditorStatusBar
           // トラック情報
           trackName={trackName}
           trackType={trackType}
           trackColor={trackColor}
-          
+
           // Ghost Text関連
           ghostTextStatus={ghostText.ghostTextStatus}
           currentModel={ghostText.currentModel}
-          
+
           // ノート情報
           notesCount={state.notes.length}
-          
+
           // オーディオ・再生状態
           audioEnabled={state.audioEnabled}
           isPlaying={state.isPlaying}
           tempo={globalTempo}
           loopEnabled={state.loopEnabled}
           metronomeEnabled={state.metronomeEnabled}
-          
+
           // 時間情報
           currentTime={state.currentTime}
-          playbackDuration={state.playbackDuration}
+          playbackDuration={maxTime}
           
           // パフォーマンス指標
           performanceMetrics={ghostText.performanceMetrics}
+
+          // 音色設定関連
+          onOpenSoundSettings={instrumentSettings.openSettingsPanel}
         />
-      )}
+        );
+      })()}
 
 
 
@@ -2482,6 +2807,10 @@ const EnhancedMidiEditor = ({
         // Ghost Text関連
         ghostPredictions={ghostText.ghostPredictions}
         showGhostText={ghostText.showGhostText}
+        phrasePredictions={ghostText.phraseNotes || []} // 🎨 [Phase 3] フレーズ予測
+        nextGhostIndex={ghostText.nextGhostIndex}       // 🔴 [NEW] Issue #146: Next ghost note index
+        nextPhraseIndex={ghostText.nextPhraseIndex}     // 🔴 [NEW] Issue #146: Next phrase note index
+        approvalHistory={ghostText.approvalHistory}     // 🔴 [NEW] Issue #146: Approval history
         onAcceptPrediction={acceptGhostPrediction}
         onAcceptAllPredictions={acceptAllGhostPredictions}
         
@@ -2499,10 +2828,20 @@ const EnhancedMidiEditor = ({
         onWheel={() => {}} // ReactのonWheelは使用しない
         onTimelineClick={eventHandlers.handleTimelineClick}
         onPianoRollClick={async (pitch) => {
-          // ピアノロールクリック時の音再生（コンソールと同じ方法）
+          // ピアノロールクリック時の音再生（トラックタイプに応じた楽器音を再生）
           if (state.audioEnabled && window.unifiedAudioSystem) {
-            console.log(`🎹 ピアノロールクリック: キー ${pitch} を再生`);
-            await window.unifiedAudioSystem.playPianoNote(pitch, 0.24); // コンソールと同じ音量0.24
+            console.log(`🎵 楽器マッピング: ${trackType} -> ${trackType}`);
+            console.log(`🎹 ピアノロールクリック: キー ${pitch} を再生 (楽器: ${trackType})`);
+
+            // トラックタイプに応じて適切な楽器音を再生
+            if (trackType === 'bass') {
+              console.log(`🎸 Bass音再生: ピッチ=${pitch}, ベロシティ=0.8`);
+              await window.unifiedAudioSystem.playBassNote(pitch, 0.8);
+              console.log(`✅ Bass音再生成功: bass-${pitch}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
+            } else {
+              // デフォルトはピアノ音
+              await window.unifiedAudioSystem.playPianoNote(pitch, 0.24);
+            }
           }
         }}
       />
@@ -2592,6 +2931,7 @@ const EnhancedMidiEditor = ({
       {/* 音色設定パネル */}
       {instrumentSettings.showSettingsPanel && (
         <InstrumentSettingsPanel
+          trackId={trackId}
           instrument={instrumentSettings.instrument}
           settings={instrumentSettings.settings}
           onSettingsChange={instrumentSettings.handleSettingsChange}
@@ -2611,17 +2951,6 @@ const EnhancedMidiEditor = ({
 
 
 
-      {/* ライブ録音状態表示 */}
-      {state.isPlaying && (
-        <div className="fixed top-4 left-4 z-50">
-          <div className="bg-red-500 text-white px-3 py-2 rounded-lg shadow-lg text-sm font-medium animate-pulse">
-            🎹 Live Recording
-            <div className="text-xs mt-1 opacity-80">
-              Press keys to record notes
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

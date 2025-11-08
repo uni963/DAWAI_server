@@ -309,6 +309,15 @@ export const useBassAudio = () => {
     return sourceNodes;
   }, [playBassNote]);
 
+  // 現在時間取得 (playhead動作に必要)
+  const getCurrentTime = useCallback(() => {
+    if (!window.unifiedAudioSystem) {
+      log.warn('Unified Audio System not initialized, returning 0');
+      return 0;
+    }
+    return window.unifiedAudioSystem.getCurrentTime();
+  }, []);
+
   return {
     // 状態
     isLoaded,
@@ -334,6 +343,7 @@ export const useBassAudio = () => {
     getBassRange,
     getEngineInfo,
     getDebugInfo,
+    getCurrentTime,
 
     // ユーティリティ
     isValidBassNote,

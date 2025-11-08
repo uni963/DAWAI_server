@@ -19,6 +19,11 @@ export const MUSIC_GENRES = {
     id: "pop",
     description: "明るく親しみやすいポップスタイル",
     recommendedScales: ["major", "minor", "major pentatonic"],
+    recommendedAI: {
+      ghostText: 'magenta',
+      chatAssistant: 'gemini',
+      reason: 'ポップスには明るく親しみやすいメロディ生成に適したGeminiが最適'
+    },
     rhythmCharacteristics: {
       straightFeel: true,
       syncopation: 0.3,
@@ -44,6 +49,11 @@ export const MUSIC_GENRES = {
     id: "jazz",
     description: "洗練されたジャズハーモニーとスウィング",
     recommendedScales: ["major", "dorian", "mixolydian", "blues", "bebop"],
+    recommendedAI: {
+      ghostText: 'magenta',
+      chatAssistant: 'claude',
+      reason: 'ジャズの複雑なハーモニーと理論にはClaudeの深い理解が有効'
+    },
     rhythmCharacteristics: {
       straightFeel: false,
       swingRatio: 0.67,
@@ -71,6 +81,11 @@ export const MUSIC_GENRES = {
     id: "rnb",
     description: "ソウルフルなR&Bグルーヴ",
     recommendedScales: ["minor", "minor pentatonic", "blues", "dorian"],
+    recommendedAI: {
+      ghostText: 'magenta',
+      chatAssistant: 'openai',
+      reason: 'R&Bのソウルフルな表現力とグルーヴにはOpenAIの創造性が適合'
+    },
     rhythmCharacteristics: {
       straightFeel: true,
       syncopation: 0.5,
@@ -98,6 +113,11 @@ export const MUSIC_GENRES = {
     id: "rock",
     description: "力強いロックサウンド",
     recommendedScales: ["minor", "minor pentatonic", "blues", "natural minor"],
+    recommendedAI: {
+      ghostText: 'magenta',
+      chatAssistant: 'openai',
+      reason: 'ロックの力強いサウンドとエネルギーにはOpenAIのバランス型が適合'
+    },
     rhythmCharacteristics: {
       straightFeel: true,
       syncopation: 0.4,
@@ -125,6 +145,11 @@ export const MUSIC_GENRES = {
     id: "ballad",
     description: "感動的なバラードスタイル",
     recommendedScales: ["major", "minor", "major pentatonic", "minor pentatonic"],
+    recommendedAI: {
+      ghostText: 'magenta',
+      chatAssistant: 'claude',
+      reason: 'バラードの感情的な表現と深いメロディにはClaudeの理解力が最適'
+    },
     rhythmCharacteristics: {
       straightFeel: true,
       syncopation: 0.2,
@@ -152,6 +177,11 @@ export const MUSIC_GENRES = {
     id: "lofi_hiphop",
     description: "リラックスしたLo-Fiビート",
     recommendedScales: ["minor", "minor pentatonic", "dorian"],
+    recommendedAI: {
+      ghostText: 'magenta',
+      chatAssistant: 'gemini',
+      reason: 'Lo-Fiのリラックスした雰囲気とアンビエント感にはGeminiが最適'
+    },
     rhythmCharacteristics: {
       straightFeel: true,
       syncopation: 0.35,

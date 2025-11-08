@@ -278,8 +278,23 @@ const useMidiAudio = () => {
         instrument: instrumentRef.current
       })
       
-      // 同期的なピアノ音再生を使用
-      window.unifiedAudioSystem.playPianoNoteSync(note, velocity)
+      // 楽器タイプに基づいて適切な音声メソッドを呼び出し
+      const track = window.unifiedAudioSystem.tracks.get(trackIdRef.current)
+      if (track && track.instrument && track.instrument.playNote) {
+        // トラックの楽器オブジェクトを使用
+        track.instrument.playNote(note, velocity)
+      } else {
+        // フォールバック: 楽器タイプに基づいて適切なメソッドを直接呼び出し
+        const instrumentType = instrumentRef.current || 'piano'
+        if (instrumentType === 'bass' || instrumentType === 'electric_bass' || instrumentType === 'acoustic_bass') {
+          window.unifiedAudioSystem.playBassNote(note, velocity)
+        } else if (instrumentType === 'drums' || instrumentType === 'drum') {
+          window.unifiedAudioSystem.playDrumSound(note.toString(), velocity)
+        } else {
+          // デフォルトはピアノ
+          window.unifiedAudioSystem.playPianoNoteSync(note, velocity)
+        }
+      }
       
       return { 
         note,
@@ -342,8 +357,23 @@ const useMidiAudio = () => {
         instrument: instrumentRef.current
       })
       
-      // 同期的なピアノ音再生を使用
-      window.unifiedAudioSystem.playPianoNoteSync(note, velocity)
+      // 楽器タイプに基づいて適切な音声メソッドを呼び出し
+      const track = window.unifiedAudioSystem.tracks.get(trackIdRef.current)
+      if (track && track.instrument && track.instrument.playNote) {
+        // トラックの楽器オブジェクトを使用
+        track.instrument.playNote(note, velocity)
+      } else {
+        // フォールバック: 楽器タイプに基づいて適切なメソッドを直接呼び出し
+        const instrumentType = instrumentRef.current || 'piano'
+        if (instrumentType === 'bass' || instrumentType === 'electric_bass' || instrumentType === 'acoustic_bass') {
+          window.unifiedAudioSystem.playBassNote(note, velocity)
+        } else if (instrumentType === 'drums' || instrumentType === 'drum') {
+          window.unifiedAudioSystem.playDrumSound(note.toString(), velocity)
+        } else {
+          // デフォルトはピアノ
+          window.unifiedAudioSystem.playPianoNoteSync(note, velocity)
+        }
+      }
       
       return { 
         note,
