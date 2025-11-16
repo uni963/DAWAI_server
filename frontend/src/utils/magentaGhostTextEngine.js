@@ -39,7 +39,7 @@ class MagentaGhostTextEngine {
     this.barBasedSwitchThreshold = 2 // 小節に応じて自動切り替えする閾値
 
     // 🔴 NEW: フレーズセッション管理
-    this.currentPhraseSession = null // { id, notes, startTime, locked, approvedCount, totalCount }
+    this.currentPhraseSession = null // { id, notes, startTime, locked, approvedCount, nextPhraseIndex, totalCount }
     this.phraseSessionHistory = []   // 完了したセッションの履歴（最大50件）
 
     // Magentaモデル設定（動的に設定）
@@ -52,6 +52,9 @@ class MagentaGhostTextEngine {
     this.enableMusicTheoryFiltering = true // 音楽理論フィルタリングを有効化
     this.enableGenreWeighting = true // ジャンル重み付けを有効化
     this.enableScaleConstraints = true // スケール制約を有効化
+
+    // 🎯 CRITICAL FIX: 承認済みフレーズノートトラッキングシステム
+    this.approvedPhraseNotes = [] // 承認されたフレーズノートの独立追跡
 
     // 音楽コンテキスト（プロジェクトから取得）
     this.musicContext = {
@@ -485,9 +488,28 @@ class MagentaGhostTextEngine {
     }
   }
 
+  // 🎯 NEW: プロジェクトリセット時の承認ノート配列クリア
+  clearApprovedPhraseNotes(reason = 'manual') {
+    const previousCount = this.approvedPhraseNotes.length
+    this.approvedPhraseNotes = []
+    console.log('🗑️ [DIVERSITY_DEBUG][APPROVED_CLEAR] 承認ノート配列クリア:', {
+      previousCount,
+      reason,
+      newCount: this.approvedPhraseNotes.length,
+      step: 'approved_notes_cleared'
+    })
+  }
+
   // 🔴 NEW: フレーズセッション管理メソッド
   unlockPhraseSession() {
     if (this.currentPhraseSession) {
+      console.log(`🔍 [セッション] 削除: id=${this.currentPhraseSession.id}, approved=${this.currentPhraseSession.approvedCount}/${this.currentPhraseSession.totalCount}`)
+      console.log('🔓 Unlocking phrase session:', {
+        id: this.currentPhraseSession.id,
+        approvedCount: this.currentPhraseSession.approvedCount,
+        totalCount: this.currentPhraseSession.totalCount
+      })
+
       this.phraseSessionHistory.push({
         ...this.currentPhraseSession,
         completedAt: Date.now()
@@ -499,34 +521,257 @@ class MagentaGhostTextEngine {
       }
 
       this.currentPhraseSession = null
-      console.log('🎵 Phrase session unlocked')
+      console.log('🔓 Phrase session unlocked - ready for new phrase on next user input')
+    } else {
+      console.log('⚠️ unlockPhraseSession called but no active session')
     }
   }
 
-  generateNextPhrase() {
-    console.log('🎵 Generating next phrase...')
+  generateNextPhrase(originalSequence = this.currentSequence) {
+    // 🎯 CRITICAL FIX: 承認ノート累積追跡（リセットしない）
+    const currentApprovedCount = this.approvedPhraseNotes.length
+    console.log('📈 [DIVERSITY_DEBUG][PHRASE_ACCUMULATE] 承認ノート累積追跡:', {
+      currentApprovedCount,
+      action: 'accumulate_not_reset',
+      step: 'approved_notes_accumulate'
+    })
+
+    console.log('🎵 [DIVERSITY_DEBUG][PHRASE_GENERATION] generateNextPhrase開始:', {
+      existingSessionId: this.currentPhraseSession?.id,
+      sequenceLength: originalSequence.length,
+      phrasePredictionEnabled: this.phrasePredictionEnabled,
+      predictionCount: this.predictionCount,
+      timestamp: Date.now(),
+      step: 'generation_start'
+    })
 
     const barDuration = this.calculateBarDuration()
     const phraseNotes = this.generateRuleBasedPhrase(barDuration)
+
+    // 🎯 CRITICAL FIX: 承認済みフレーズノートトラッキングシステム
+    console.log('🔍 [DIVERSITY_DEBUG][BASETIME_CALC] baseTime計算開始:', {
+      originalSequenceLength: originalSequence.length,
+      approvedPhraseNotesCount: this.approvedPhraseNotes?.length || 0,
+      step: 'basetime_calculation_start'
+    })
+
+    // 承認済みフレーズノートから最後の位置を計算
+    let calculatedBaseTime = 0
+
+    if (this.approvedPhraseNotes && this.approvedPhraseNotes.length > 0) {
+      // 承認済みフレーズノートの詳細ログ
+      const endTimes = this.approvedPhraseNotes.map(note => {
+        const endTime = (note.time || 0) + (note.duration || 0.25)
+        return { note: note, endTime: endTime }
+      })
+
+      // 承認済みフレーズノートの終了時間の最大値を取得
+      calculatedBaseTime = Math.max(...this.approvedPhraseNotes.map(note => (note.time || 0) + (note.duration || 0.25)))
+      console.log('✅ [DIVERSITY_DEBUG][BASETIME_CALC] 承認ノートベース計算:', {
+        approvedNotesCount: this.approvedPhraseNotes.length,
+        calculatedBaseTime,
+        method: 'approved_phrase_notes',
+        lastNote: this.approvedPhraseNotes[this.approvedPhraseNotes.length - 1],
+        allEndTimes: endTimes,
+        maxEndTime: Math.max(...endTimes.map(item => item.endTime)),
+        step: 'basetime_from_approved_notes'
+      })
+    } else {
+      // フォールバック：originalSequenceから計算
+      const lastNote = originalSequence[originalSequence.length - 1]
+      calculatedBaseTime = lastNote ? lastNote.time + lastNote.duration : 0
+      console.log('🔄 [DIVERSITY_DEBUG][BASETIME_CALC] フォールバック計算:', {
+        originalSequenceLength: originalSequence.length,
+        calculatedBaseTime,
+        method: 'fallback_original_sequence',
+        step: 'basetime_fallback'
+      })
+    }
+
+    const baseTime = calculatedBaseTime
+
+    console.log('🎯 [DIVERSITY_DEBUG][BASETIME_FINAL] 最終baseTime決定:', {
+      finalBaseTime: baseTime,
+      approvedNotesCount: this.approvedPhraseNotes?.length || 0,
+      originalSequenceLength: originalSequence.length,
+      calculationMethod: this.approvedPhraseNotes?.length > 0 ? 'approved_notes' : 'fallback',
+      step: 'basetime_final'
+    })
+
+    // 🔍 [2ND_PHRASE_DEBUG] 新フレーズセッション作成
+    console.log('🔍 [2ND_PHRASE_DEBUG] フレーズセッション作成:', {
+      sessionId: `phrase-session-${Date.now()}`,
+      baseTime,
+      phraseNotesCount: phraseNotes.length,
+      approvedPhraseNotesCount: this.approvedPhraseNotes.length,
+      calculationMethod: this.approvedPhraseNotes.length > 0 ? 'approved_phrase_notes' : 'fallback',
+      step: 'session_creation'
+    })
 
     this.currentPhraseSession = {
       id: `phrase-session-${Date.now()}`,
       notes: phraseNotes,
       startTime: Date.now(),
+      baseTime: baseTime,  // 🔒 フレーズ全体の基準時刻を固定
       locked: true,
       approvedCount: 0,
+      nextPhraseIndex: 0,  // 🚨 FIX: 次に承認するノートのインデックスを追加
       totalCount: phraseNotes.length,
       barDuration: barDuration,
       createdAt: Date.now()
     }
 
-    this.notifyListeners('phrasePrediction', {
+    // 🎵 [DIVERSITY_DEBUG] フレーズ通知前の詳細ログ
+    const notificationData = {
       phraseNotes: this.currentPhraseSession.notes,
       sessionId: this.currentPhraseSession.id,
       locked: true
+    }
+    console.log('🔍 [PHRASE_FLOW] Phase 1.2: generateNextPhrase()完了 - 単一フレーズ生成')
+    console.log('🔍 [PHRASE_FLOW] Phase 1.3: phrasePredictionイベント送信準備')
+    console.log('📤 [DIVERSITY_DEBUG][PHRASE_SEND] generateNextPhrase→phrasePrediction送信:', {
+      sessionId: this.currentPhraseSession.id,
+      phraseNotesCount: this.currentPhraseSession.notes.length,
+      baseTime: this.currentPhraseSession.baseTime,
+      locked: true,
+      timestamp: Date.now(),
+      notificationData: notificationData,
+      step: 'phrase_send_preparation'
     })
 
+    this.notifyListeners('phrasePrediction', notificationData)
+
+    console.log('🔍 [PHRASE_FLOW] Phase 1.4: phrasePredictionイベント送信完了 (v1.0.0互換)')
+    console.log('✅ [DIVERSITY_DEBUG][PHRASE_SENT] phrasePrediction送信完了:', {
+      sessionId: this.currentPhraseSession.id,
+      step: 'phrase_send_complete'
+    })
+
+    console.log(`🔍 [セッション] 作成: id=${this.currentPhraseSession.id}, baseTime=${baseTime}, noteCount=${phraseNotes.length}`)
     console.log('🎵 New phrase session created:', this.currentPhraseSession.id)
+  }
+
+  // 🆕 v2.0.0: 複数フレーズセット生成機能
+  /**
+   * 温度パラメータ計算 - セットインデックスに基づく多様性確保
+   * @param {number} setIndex - セットインデックス (0-2)
+   * @returns {number} temperature - 温度パラメータ (0.8-1.2)
+   */
+  calculateTemperature(setIndex) {
+    const temperatureRange = { min: 0.8, max: 1.2 }
+    const phraseSetCount = 3
+    const step = (temperatureRange.max - temperatureRange.min) / (phraseSetCount - 1)
+    const temperature = temperatureRange.min + (step * setIndex)
+
+    console.log(`🌡️ [PHRASE_SET_TEMP] セット${setIndex}の温度: ${temperature.toFixed(2)}`)
+    return temperature
+  }
+
+  /**
+   * 単一フレーズセット生成（内部メソッド）
+   * @private
+   * @param {number} barDuration - 小節の長さ
+   * @param {number} notesPerPhrase - フレーズあたりのノート数
+   * @param {number} temperature - 温度パラメータ
+   * @param {number} setIndex - セットインデックス
+   * @returns {Array} phraseNotes - 生成されたフレーズノート配列
+   */
+  generateSinglePhraseSet(barDuration, notesPerPhrase, temperature, setIndex) {
+    console.log(`🎵 [PHRASE_GEN_SET${setIndex}] 生成開始:`, {
+      temperature,
+      notesPerPhrase,
+      barDuration
+    })
+
+    // 既存のgenerateRuleBasedPhraseメソッドを使用（温度パラメータ付き）
+    const phraseNotes = this.generateRuleBasedPhrase(barDuration, { temperature, seed: Date.now() + setIndex })
+
+    console.log(`✅ [PHRASE_GEN_SET${setIndex}] 生成完了:`, {
+      notesCount: phraseNotes.length,
+      pitches: phraseNotes.map(n => n.pitch)
+    })
+
+    return phraseNotes
+  }
+
+  /**
+   * 複数フレーズセット生成 - 3つの多様なフレーズセットを生成
+   * @param {Array} originalSequence - 現在のMIDIシーケンス
+   * @param {number} phraseSetCount - 生成するセット数（デフォルト3）
+   * @param {number} notesPerPhrase - 各フレーズのノート数（デフォルト5）
+   * @returns {Array<Array>} phraseSets - 生成されたフレーズセット配列
+   */
+  generateMultiplePhraseSets(originalSequence = this.currentSequence, phraseSetCount = 3, notesPerPhrase = 5) {
+    console.log('🎼 [PHRASE_SET_GEN_START] 複数フレーズセット生成開始:', {
+      inputNotes: originalSequence.length,
+      phraseSetCount,
+      notesPerPhrase,
+      parallelGeneration: false  // Phase 1では順次生成
+    })
+
+    const phraseSets = []
+    const startTime = performance.now()
+    const barDuration = this.calculateBarDuration()
+
+    // Phase 1: 順次生成（実装簡易化）
+    for (let i = 0; i < phraseSetCount; i++) {
+      const temperature = this.calculateTemperature(i)
+      const phraseNotes = this.generateSinglePhraseSet(barDuration, notesPerPhrase, temperature, i)
+      phraseSets.push(phraseNotes)
+    }
+
+    const endTime = performance.now()
+    const generationTime = endTime - startTime
+
+    console.log('✅ [PHRASE_SET_GEN_COMPLETE] 複数フレーズセット生成完了:', {
+      generatedSets: phraseSets.length,
+      generationTime: `${generationTime.toFixed(2)}ms`,
+      avgTimePerSet: `${(generationTime / phraseSetCount).toFixed(2)}ms`,
+      phraseSets: phraseSets.map((set, idx) => ({
+        setIndex: idx,
+        noteCount: set.length,
+        pitches: set.map(n => n.pitch)
+      }))
+    })
+
+    // パフォーマンス警告
+    if (generationTime > 600) {
+      console.warn('⚠️ [PHRASE_SET_PERF] 生成時間が目標値(600ms)を超過:', {
+        actual: `${generationTime.toFixed(2)}ms`,
+        target: '600ms',
+        suggestion: 'parallelGeneration有効化を検討'
+      })
+    }
+
+    // 🚨 baseTime計算（承認済みフレーズノートベース）
+    let baseTime = 0
+    if (this.approvedPhraseNotes && this.approvedPhraseNotes.length > 0) {
+      baseTime = Math.max(...this.approvedPhraseNotes.map(note => (note.time || 0) + (note.duration || 0.25)))
+      console.log('✅ [PHRASE_SET_BASETIME] 承認ノートベース:', {
+        approvedNotesCount: this.approvedPhraseNotes.length,
+        baseTime
+      })
+    } else {
+      const lastNote = originalSequence[originalSequence.length - 1]
+      baseTime = lastNote ? lastNote.time + lastNote.duration : 0
+      console.log('🔄 [PHRASE_SET_BASETIME] フォールバック:', {
+        originalSequenceLength: originalSequence.length,
+        baseTime
+      })
+    }
+
+    // イベント送信: 'phrase-sets-generated'
+    const notificationData = {
+      phraseSets: phraseSets,
+      selectedSetIndex: 0,  // デフォルトで最初のセットを選択
+      baseTime: baseTime,
+      sessionId: `phrase-sets-${Date.now()}`
+    }
+
+    console.log('📤 [PHRASE_SETS_SEND] phrase-sets-generatedイベント送信:', notificationData)
+    this.notifyListeners('phrase-sets-generated', notificationData)
+
+    return phraseSets
   }
 
   // MIDI入力の処理
@@ -538,10 +783,22 @@ class MagentaGhostTextEngine {
       noteData: note
     })
 
-    // 🔴 NEW: フレーズロック中は予測をスキップ
+    // 🔴 CRITICAL FIX: フレーズロック中は全ての予測生成を完全停止
     if (this.currentPhraseSession && this.currentPhraseSession.locked) {
-      console.log('🎵 Phrase session locked, skipping new prediction')
-      return
+      console.log('🔒 Phrase session LOCKED - ALL predictions blocked')
+      console.log('🔒 Current session:', {
+        id: this.currentPhraseSession.id,
+        approvedCount: this.currentPhraseSession.approvedCount,
+        totalCount: this.currentPhraseSession.totalCount,
+        locked: this.currentPhraseSession.locked
+      })
+      // 🚨 追加の安全策: デバウンスタイマーもクリア
+      if (this.debounceTimeout) {
+        clearTimeout(this.debounceTimeout)
+        this.debounceTimeout = null
+        console.log('🔒 Debounce timer cleared (phrase locked)')
+      }
+      return // 🚨 完全にブロック - 新規予測生成なし
     }
 
     if (!this.isInitialized) {
@@ -573,50 +830,81 @@ class MagentaGhostTextEngine {
       this.currentSequence.shift()
     }
 
-    // デバウンス処理で予測を実行
+    // デバウンス処理で予測を実行（フレーズロック中は既にブロック済み）
     console.log('🎯 デバウンス処理で予測実行開始...')
     this.debouncedPredict()
 
     // 🔧 Phase 2修正: 予測モードに応じた統合予測
-    // 🔴 NEW: フレーズロック中でない場合のみ、通常の予測モードを実行
-    if (this.phrasePredictionEnabled && (!this.currentPhraseSession || !this.currentPhraseSession.locked)) {
-      console.log('🎵 [Phase 2] 予測モード:', this.predictionMode)
-      this.predictWithMode().then(phraseNotes => {
-        if (phraseNotes && phraseNotes.length > 0) {
-          this.phraseNotes = phraseNotes
-          console.log('🎵 [Phase 2] 予測完了:', phraseNotes.length, 'ノート, モード:', this.predictionMode)
-
-          // リスナーに通知
-          this.notifyListeners('phrasePrediction', {
-            phraseNotes: this.phraseNotes
-          })
-        }
-      }).catch(error => {
-        console.error('🎵 フレーズ予測エラー:', error)
+    // 🚨 CRITICAL FIX: ロック中はこのブロックに到達しない（上でreturn済み）
+    if (this.phrasePredictionEnabled) {
+      if (!this.currentPhraseSession) {
+        // 🔴 初回フレーズセッション生成
+        console.log('🔍 [PHRASE_FLOW] Phase 1 START: 初回フレーズセッション生成開始')
+        console.log('🔍 [PHRASE_FLOW] Phase 1.1: generateMultiplePhraseSets()呼び出し (v2.0.0機能)')
+        this.generateMultiplePhraseSets(this.currentSequence, 3, 5)
+      } else if (!this.currentPhraseSession.locked) {
+        // 🆕 セッション完了後の再生成を許可
+        console.log('🔍 [PHRASE_FLOW] Phase 1 RESTART: フレーズセッション再生成開始')
+        console.log('🔍 [PHRASE_FLOW] Phase 1.1: generateMultiplePhraseSets()呼び出し (v2.0.0機能)')
+        this.generateMultiplePhraseSets(this.currentSequence, 3, 5)
+      } else {
+        console.log('🔍 [PHRASE_FLOW] Phase 1 SKIP: セッションロック中のため予測スキップ')
+        console.log('🎵 [Phase 2] 予測スキップ (セッションロック中):', {
+          sessionId: this.currentPhraseSession.id,
+          locked: this.currentPhraseSession.locked
+        })
+      }
+    } else {
+      console.log('🔍 [PHRASE_FLOW] Phase 1 DISABLED: フレーズ予測機能無効')
+      console.log('🎵 [Phase 2] 予測スキップ (フレーズ予測無効):', {
+        phrasePredictionEnabled: this.phrasePredictionEnabled
       })
-    } else if (this.phrasePredictionEnabled && !this.currentPhraseSession) {
-      // 🔴 NEW: 初回フレーズ生成（セッションが存在しない場合）
-      console.log('🎵 [Phase 2] 初回フレーズ生成をトリガー')
-      this.generateNextPhrase()
     }
   }
 
   // デバウンス処理
   debouncedPredict() {
+    // 🔴 CRITICAL FIX: フレーズロック中はデバウンス処理もスキップ
+    if (this.currentPhraseSession && this.currentPhraseSession.locked) {
+      console.log('🔒 debouncedPredict: Phrase session locked, debounce skipped')
+      // タイマーをクリア
+      if (this.debounceTimeout) {
+        clearTimeout(this.debounceTimeout)
+        this.debounceTimeout = null
+      }
+      return
+    }
+
     if (this.debounceTimeout) {
       clearTimeout(this.debounceTimeout)
     }
 
     // 重い処理を非同期で実行し、setTimeout違反を回避
     this.debounceTimeout = setTimeout(() => {
+      // 🔴 CRITICAL FIX: 実行時にも再度ロック状態をチェック
+      if (this.currentPhraseSession && this.currentPhraseSession.locked) {
+        console.log('🔒 debouncedPredict timeout: Phrase session locked, prediction cancelled')
+        return
+      }
+
       // requestIdleCallbackを使用してブラウザのアイドル時間に実行
       if (window.requestIdleCallback) {
         requestIdleCallback(() => {
+          // 🔴 CRITICAL FIX: requestIdleCallback内でも再度ロック状態をチェック
+          if (this.currentPhraseSession && this.currentPhraseSession.locked) {
+            console.log('🔒 requestIdleCallback: Phrase session locked, prediction cancelled')
+            return
+          }
           this.generatePrediction()
         }, { timeout: 100 })
       } else {
         // フォールバック: より短いタイムアウトで実行
         setTimeout(() => {
+          // 🔴 CRITICAL FIX: フォールバックでも再度ロック状態をチェック
+          if (this.currentPhraseSession && this.currentPhraseSession.locked) {
+            console.log('🔒 setTimeout fallback: Phrase session locked, prediction cancelled')
+            return
+          }
           this.generatePrediction()
         }, 0)
       }
@@ -776,6 +1064,12 @@ class MagentaGhostTextEngine {
 
   // 予測生成
   async generatePrediction() {
+    // 🔴 CRITICAL FIX: フレーズロック中は予測生成をブロック
+    if (this.currentPhraseSession && this.currentPhraseSession.locked) {
+      console.log('🔒 generatePrediction: Phrase session locked, prediction blocked')
+      return
+    }
+
     if (this.currentSequence.length === 0) {
       console.log('🎵 generatePrediction: シーケンスが空のためスキップ')
       return
@@ -1208,8 +1502,32 @@ class MagentaGhostTextEngine {
       return this.fallbackPrediction(originalSequence)
     }
 
-    const lastNote = originalSequence[originalSequence.length - 1]
-    const nextTime = lastNote.time + lastNote.duration
+    // 🎯 フレーズセッション中は固定baseTimeを使用（位置ずれ防止）
+    let nextTime
+
+    // 📊 nextTime計算式詳細デバッグ
+    console.log(`🚨🚨🚨 [TIMING_DEBUG] nextTime決定プロセス:`)
+    console.log(`🚨🚨🚨 [TIMING_DEBUG]    フレーズセッション状態: ${this.currentPhraseSession ? 'あり' : 'なし'}`)
+
+    if (this.currentPhraseSession && this.currentPhraseSession.baseTime !== undefined) {
+      nextTime = this.currentPhraseSession.baseTime
+      console.log(`🚨🚨🚨 [TIMING_DEBUG]    ✅ パターン: フレーズセッション中 → 固定baseTime使用`)
+      console.log(`🚨🚨🚨 [TIMING_DEBUG]    計算式: nextTime = currentPhraseSession.baseTime`)
+      console.log(`🚨🚨🚨 [TIMING_DEBUG]    計算式: nextTime = ${this.currentPhraseSession.baseTime}`)
+      console.log(`🚨🚨🚨 [TIMING_DEBUG]    🎯 フレーズ開始位置: ${nextTime} (固定値)`)
+      console.log(`🔍 [BaseTime] 固定使用: baseTime=${this.currentPhraseSession.baseTime} (セッション中)`)
+      console.log('🔒 Using fixed baseTime from phrase session:', nextTime)
+    } else {
+      const lastNote = originalSequence[originalSequence.length - 1]
+      nextTime = lastNote.time + lastNote.duration
+      console.log(`🚨🚨🚨 [TIMING_DEBUG]    ✅ パターン: 通常時 → 動的計算`)
+      console.log(`🚨🚨🚨 [TIMING_DEBUG]    lastNote: ${lastNote ? JSON.stringify({time: lastNote.time, duration: lastNote.duration}) : 'null'}`)
+      console.log(`🚨🚨🚨 [TIMING_DEBUG]    計算式: nextTime = lastNote.time + lastNote.duration`)
+      console.log(`🚨🚨🚨 [TIMING_DEBUG]    計算式: nextTime = ${lastNote.time} + ${lastNote.duration} = ${nextTime}`)
+      console.log(`🚨🚨🚨 [TIMING_DEBUG]    🎯 フレーズ開始位置: ${nextTime} (動的計算)`)
+      console.log(`🔍 [BaseTime] 動的計算: nextTime=${nextTime} (通常時)`)
+      console.log('📍 Calculating nextTime from last note:', nextTime)
+    }
 
     // MusicRNNの場合は単一のシーケンスが返される
     if (this.modelType === 'musicRnn' || this.modelType === 'melodyRnn') {
@@ -1250,12 +1568,23 @@ class MagentaGhostTextEngine {
         }
 
         // ノートを追加
+        const relativeTiming = nextNote.startTime - nextTime;
+
+        // 📊 各予測ノート位置計算デバッグ
+        console.log(`🚨🚨🚨 [TIMING_DEBUG] 予測ノート${i + 1}の位置計算:`)
+        console.log(`🚨🚨🚨 [TIMING_DEBUG]    nextNote.startTime: ${nextNote.startTime} (Magentaからの絶対時刻)`)
+        console.log(`🚨🚨🚨 [TIMING_DEBUG]    nextTime: ${nextTime} (フレーズ開始基準位置)`)
+        console.log(`🚨🚨🚨 [TIMING_DEBUG]    計算式: timing = nextNote.startTime - nextTime`)
+        console.log(`🚨🚨🚨 [TIMING_DEBUG]    計算式: timing = ${nextNote.startTime} - ${nextTime} = ${relativeTiming}`)
+        console.log(`🚨🚨🚨 [TIMING_DEBUG]    🎯 予測ノート相対位置: ${relativeTiming}`)
+        console.log(`🚨🚨🚨 [TIMING_DEBUG]    最終絶対位置: ${nextTime} + ${relativeTiming} = ${nextTime + relativeTiming}`)
+
         predictions.push({
           pitch: nextNote.pitch,
           velocity: (nextNote.velocity || 80) / 127,
           duration: Math.max(0.25, nextNote.endTime - nextNote.startTime),
           confidence: 0.9 - (i * 0.1),
-          timing: nextNote.startTime - nextTime,
+          timing: relativeTiming,
           source: 'magenta',
           sequenceIndex: i,
           isRest: false
@@ -1530,6 +1859,16 @@ class MagentaGhostTextEngine {
 
   // 設定の更新
   updateSettings(settings) {
+    console.log('🎵 [DIVERSITY_DEBUG][SETTINGS_UPDATE] updateSettings呼び出し:', {
+      before: {
+        predictionCount: this.predictionCount,
+        displayCount: this.displayCount,
+        predictionThreshold: this.predictionThreshold,
+        phrasePredictionEnabled: this.phrasePredictionEnabled
+      },
+      newSettings: settings
+    })
+
     if (settings.predictionThreshold !== undefined) {
       this.predictionThreshold = settings.predictionThreshold
     }
@@ -1540,10 +1879,25 @@ class MagentaGhostTextEngine {
       this.contextWindow = settings.contextWindow
     }
     if (settings.predictionCount !== undefined) {
+      const oldPredictionCount = this.predictionCount
       this.predictionCount = Math.max(1, Math.min(10, settings.predictionCount)) // 1-10個の範囲
+      console.log('🎵 [DIVERSITY_DEBUG][SETTINGS_UPDATE] predictionCount更新:', {
+        requested: settings.predictionCount,
+        old: oldPredictionCount,
+        new: this.predictionCount,
+        clamped: settings.predictionCount !== this.predictionCount
+      })
     }
     if (settings.displayCount !== undefined) {
+      const oldDisplayCount = this.displayCount
       this.displayCount = Math.max(1, Math.min(this.predictionCount, settings.displayCount)) // 1-予測個数の範囲
+      console.log('🎵 [DIVERSITY_DEBUG][SETTINGS_UPDATE] displayCount更新:', {
+        requested: settings.displayCount,
+        old: oldDisplayCount,
+        new: this.displayCount,
+        clamped: settings.displayCount !== this.displayCount,
+        maxAllowed: this.predictionCount
+      })
     }
     if (settings.generateSequentialPredictions !== undefined) {
       this.generateSequentialPredictions = settings.generateSequentialPredictions
@@ -1782,15 +2136,52 @@ class MagentaGhostTextEngine {
    * @returns {Promise<Array>} フレーズノートの配列
    */
   async generateMagentaPhrase(barDuration) {
+    console.log('🎵 [DIVERSITY_DEBUG][PHRASE_ENGINE] フレーズ予測開始:', {
+      barDuration,
+      predictionCount: this.predictionCount,
+      displayCount: this.displayCount,
+      phrasePredictionEnabled: this.phrasePredictionEnabled,
+      modelType: this.modelType,
+      step: 'generation_start'
+    })
+
     try {
       // シードシーケンスを作成
       const seedSequence = this.createSeedSequence()
 
       // MusicVAEを使用してフレーズを生成
       if (this.modelType === 'musicVae' && this.model.sample) {
-        const samples = await this.model.sample(1)
+        // フレーズ予測モードの場合は predictionCount を使用
+        const sampleCount = this.phrasePredictionEnabled
+          ? Math.max(1, this.predictionCount || 5)  // デフォルト5、最小1
+          : 1  // 通常モードは1つのみ
+
+        console.log('🎵 [DIVERSITY_DEBUG][PHRASE_ENGINE] sample()呼び出し直前:', {
+          originalSampleCount: 1,  // 🔴 修正前の固定値
+          newSampleCount: sampleCount,  // ✅ 修正後の動的値
+          phrasePredictionEnabled: this.phrasePredictionEnabled,
+          predictionCount: this.predictionCount,
+          step: 'before_sample'
+        })
+
+        const samples = await this.model.sample(sampleCount)  // ✅ 修正済み
+
+        console.log('🎵 [PHRASE_DIVERSITY] sample()呼び出し結果:', {
+          samplesCount: samples?.length || 0,
+          samplesType: Array.isArray(samples) ? 'array' : typeof samples,
+          step: 'after_sample'
+        })
+
         if (samples && samples.length > 0) {
-          return this.convertPhraseToNotes(samples[0], barDuration)
+          const phraseNotes = this.convertPhraseToNotes(samples[0], barDuration)
+
+          console.log('🎵 [PHRASE_DIVERSITY] フレーズ予測完了:', {
+            generatedNotesCount: phraseNotes.length,
+            diversityApplied: phraseNotes.length > 1,
+            step: 'generation_complete'
+          })
+
+          return phraseNotes
         }
       }
 
@@ -2004,12 +2395,54 @@ class MagentaGhostTextEngine {
 
   // リスナーへの通知
   notifyListeners(eventType, data) {
-    this.listeners.forEach(listener => {
+    // 🎵 [DIVERSITY_DEBUG] 通知送信ログ
+    console.log('🔔 [DIVERSITY_DEBUG][NOTIFY_SEND] notifyListeners呼び出し:', {
+      eventType,
+      dataKeys: Object.keys(data || {}),
+      listenerCount: this.listeners.length,
+      timestamp: Date.now(),
+      step: 'notify_start'
+    })
+
+    // phrasePredictionイベントの詳細ログ
+    if (eventType === 'phrasePrediction') {
+      console.log('🎵 [DIVERSITY_DEBUG][PHRASE_NOTIFY] フレーズ通知データ:', {
+        sessionId: data?.sessionId,
+        phraseNotesLength: data?.phraseNotes?.length,
+        locked: data?.locked,
+        dataStructure: data,
+        step: 'phrase_notification_data'
+      })
+    }
+
+    this.listeners.forEach((listener, index) => {
       try {
+        console.log(`🔔 [DIVERSITY_DEBUG][LISTENER_${index}] リスナー実行:`, {
+          eventType,
+          listenerIndex: index,
+          step: 'listener_execution'
+        })
         listener(eventType, data)
+        console.log(`✅ [DIVERSITY_DEBUG][LISTENER_${index}] リスナー完了:`, {
+          eventType,
+          listenerIndex: index,
+          step: 'listener_success'
+        })
       } catch (error) {
+        console.error('❌ [DIVERSITY_DEBUG][LISTENER_ERROR] リスナーエラー:', {
+          eventType,
+          listenerIndex: index,
+          error: error.message,
+          step: 'listener_error'
+        })
         console.error('Error in listener:', error)
       }
+    })
+
+    console.log('🏁 [DIVERSITY_DEBUG][NOTIFY_COMPLETE] 全リスナー処理完了:', {
+      eventType,
+      processedCount: this.listeners.length,
+      step: 'notify_complete'
     })
   }
 

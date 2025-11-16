@@ -27,6 +27,7 @@ const MidiEditorCanvas = ({
   ghostPredictions = [],
   showGhostText = true,
   phrasePredictions = [], // 🎨 [Phase 3] フレーズ予測
+  phraseBaseTime,         // 🔧 [FIX] 固定baseTime for position consistency
   nextGhostIndex = 0,     // 🔴 [NEW] Issue #146: Next ghost note to approve
   nextPhraseIndex = 0,    // 🔴 [NEW] Issue #146: Next phrase note to approve
   approvalHistory = [],   // 🔴 [NEW] Issue #146: Approval history
@@ -993,14 +994,71 @@ const MidiEditorCanvas = ({
     if (showGhostText && hasPhrasePredictions) {
       console.log('🎨 [Phase 3] Drawing phrase predictions:', phrasePredictions.length)
 
-      phrasePredictions.forEach((prediction, index) => {
-        // 🔧 修正: 最後のノートの終端位置を基準に相対位置を計算
-        const lastNoteTime = state.notes.length > 0
-          ? Math.max(...state.notes.map(n => n.time + n.duration))
-          : 0
+      // 🔴 NEW: フレーズ背景の描画（フレーズ全体の範囲を視覚化）
+      if (phrasePredictions.length > 0) {
+        // 🔧 [FIX] 固定baseTimeを使用してフレーズ位置ずれを防止
+        const useFixedBaseTime = phraseBaseTime !== undefined
+        const baseTime = useFixedBaseTime
+          ? phraseBaseTime
+          : (state.notes.length > 0 ? Math.max(...state.notes.map(n => n.time + n.duration)) : 0)
 
-        // 相対タイミングを最後のノート終端から加算
-        const predictionTime = lastNoteTime + (prediction.timing || 0)
+        // 🚨🚨🚨 [UI_TIMING_DEBUG] フレーズ描画位置計算
+        console.log(`🚨🚨🚨 [UI_TIMING_DEBUG] Canvas描画時の計算:`)
+        console.log(`🚨🚨🚨 [UI_TIMING_DEBUG]    固定baseTime使用: ${useFixedBaseTime}`)
+        console.log(`🚨🚨🚨 [UI_TIMING_DEBUG]    baseTime: ${baseTime}`)
+        console.log(`🚨🚨🚨 [UI_TIMING_DEBUG]    phrasePredictions[0].timing: ${phrasePredictions[0]?.timing || 0}`)
+
+        // フレーズの開始時間と終了時間を計算
+        const phraseStartTime = baseTime + (phrasePredictions[0]?.timing || 0)
+
+        console.log(`🚨🚨🚨 [UI_TIMING_DEBUG]    計算式: phraseStartTime = baseTime + prediction.timing`)
+        console.log(`🚨🚨🚨 [UI_TIMING_DEBUG]    計算式: phraseStartTime = ${baseTime} + ${phrasePredictions[0]?.timing || 0} = ${phraseStartTime}`)
+        console.log(`🚨🚨🚨 [UI_TIMING_DEBUG]    🎨 UI描画フレーズ開始位置: ${phraseStartTime}`)
+        const phraseEndTime = baseTime + Math.max(
+          ...phrasePredictions.map(p => (p.timing || 0) + (p.duration || 0.25))
+        )
+
+        const phraseStartX = coordinateTransforms.timeToX(phraseStartTime)
+        const phraseEndX = coordinateTransforms.timeToX(phraseEndTime)
+        const phraseWidth = phraseEndX - phraseStartX
+
+        // フレーズ背景の描画（キャンバス全体の高さ）
+        ctx.save()
+        ctx.globalAlpha = 0.08
+        ctx.fillStyle = '#10b981' // フレーズカラー（薄い緑）
+        ctx.fillRect(phraseStartX, 0, phraseWidth, staticCanvasRef.current.height)
+
+        // フレーズ境界線の描画
+        ctx.globalAlpha = 0.2
+        ctx.strokeStyle = '#10b981'
+        ctx.lineWidth = 2
+        ctx.setLineDash([8, 4])
+        ctx.beginPath()
+        ctx.moveTo(phraseStartX, 0)
+        ctx.lineTo(phraseStartX, staticCanvasRef.current.height)
+        ctx.stroke()
+        ctx.setLineDash([])
+
+        // フレーズラベルの描画
+        ctx.globalAlpha = 0.7
+        ctx.fillStyle = '#065f46' // 濃い緑
+        ctx.font = 'bold 12px monospace'
+        ctx.textAlign = 'left'
+        const labelY = HEADER_HEIGHT - 5
+        ctx.fillText(`🎵 Phrase (${nextPhraseIndex + 1}/${phrasePredictions.length})`,
+                    phraseStartX + 8, labelY)
+        ctx.restore()
+      }
+
+      phrasePredictions.forEach((prediction, index) => {
+        // 🔧 [FIX] 固定baseTimeを使用してフレーズ位置ずれを防止
+        const useFixedBaseTime = phraseBaseTime !== undefined
+        const baseTime = useFixedBaseTime
+          ? phraseBaseTime
+          : (state.notes.length > 0 ? Math.max(...state.notes.map(n => n.time + n.duration)) : 0)
+
+        // 相対タイミングを固定baseTimeから加算
+        const predictionTime = baseTime + (prediction.timing || 0)
 
         const x = coordinateTransforms.timeToX(predictionTime)
         const y = coordinateTransforms.pitchToY(prediction.pitch)
@@ -1405,22 +1463,13 @@ const MidiEditorCanvas = ({
           console.log('🎹 Shift+Tab: 前の予測選択', newIndex)
         }
       } else {
-        // Tab: 一音ずつ予測を受け入れる（Issue #146対応）
-        console.log('🎹 Tab: 一音ずつ予測採用開始', {
-          hasPhrasePredictions,
-          hasGhostPredictions
-        })
+        // 🔴 REMOVED: TAB処理を EnhancedMidiEditor.jsx に統一
+        // MidiEditorCanvas での TAB 処理を無効化し、重複を排除
+        console.log('🎹 Tab: Processing delegated to EnhancedMidiEditor (avoiding duplication)')
 
-        if (onAcceptNextPrediction) {
-          // 🔴 修正: 一音ずつ承認に変更
-          onAcceptNextPrediction()
-          console.log('✅ Tab: onAcceptNextPrediction実行完了（一音ずつ承認）')
-        } else if (onAcceptPrediction) {
-          // フォールバック: 単一予測を受け入れる
-          onAcceptPrediction(state.selectedPredictionIndex)
-          console.log('✅ Tab: onAcceptPrediction実行完了')
-        }
-        state.setSelectedPredictionIndex(0) // 選択をリセット
+        // TAB キーイベントを上位コンポーネントに委譲
+        // EnhancedMidiEditor.jsx が適切に処理します
+        return
       }
     }
   }, [onAcceptNextPrediction, onAcceptPrediction, ghostPredictions, phrasePredictions, state.selectedPredictionIndex, state.setSelectedPredictionIndex])

@@ -17,7 +17,10 @@ import {
   Undo2,
   Redo2,
   Trash2,
-  Sliders
+  Sliders,
+  ThumbsUp,
+  RotateCcw,
+  RefreshCw
 } from 'lucide-react'
 
 const MidiEditorToolbar = ({
@@ -66,7 +69,13 @@ const MidiEditorToolbar = ({
   onToggleSettings,
 
   // 音色設定関連
-  onOpenSoundSettings
+  onOpenSoundSettings,
+
+  // 🆕 補完機能関連（オプショナル）
+  onAcceptPrediction,
+  onUndoApproval,
+  onCyclePhraseSet,
+  hasPredictions = false
 }) => {
   // BPM変更時のハイライト状態
   const [tempoHighlight, setTempoHighlight] = useState(false)
@@ -209,6 +218,59 @@ const MidiEditorToolbar = ({
         >
           <Sliders className="h-5 w-5" />
         </Button>
+
+        {/* 🆕 補完機能ボタン（Ghost Text有効時のみ表示） */}
+        {ghostTextEnabled && hasPredictions && (
+          <>
+            {/* 承認ボタン（TABキーの代替） */}
+            {onAcceptPrediction && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  console.log('✅ [TOOLBAR] 補完承認ボタンクリック')
+                  onAcceptPrediction()
+                }}
+                title="補完を承認 (TABキー)"
+                className="text-green-400 hover:text-green-300 hover:bg-green-900/30 h-10 w-10 p-0"
+              >
+                <ThumbsUp className="h-5 w-5" />
+              </Button>
+            )}
+
+            {/* 承認取り消しボタン（Shift+TABの代替） */}
+            {onUndoApproval && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  console.log('↩️ [TOOLBAR] 承認取り消しボタンクリック')
+                  onUndoApproval()
+                }}
+                title="承認を取り消し (Shift+TAB)"
+                className="text-yellow-400 hover:text-yellow-300 hover:bg-yellow-900/30 h-10 w-10 p-0"
+              >
+                <RotateCcw className="h-5 w-5" />
+              </Button>
+            )}
+
+            {/* フレーズ切り替えボタン（↑キーの代替） */}
+            {onCyclePhraseSet && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  console.log('🔄 [TOOLBAR] フレーズ切り替えボタンクリック')
+                  onCyclePhraseSet()
+                }}
+                title="フレーズ候補を切り替え (↑キー)"
+                className="text-purple-400 hover:text-purple-300 hover:bg-purple-900/30 h-10 w-10 p-0"
+              >
+                <RefreshCw className="h-5 w-5" />
+              </Button>
+            )}
+          </>
+        )}
       </div>
 
       <div className="flex items-center space-x-3">
@@ -329,7 +391,7 @@ const MidiEditorToolbar = ({
           <Slider
             value={[zoom]}
             onValueChange={([value]) => onZoomChange(value)}
-            min={0.5}
+            min={0.2}
             max={3}
             step={0.1}
             className="w-16"
@@ -338,7 +400,7 @@ const MidiEditorToolbar = ({
         </div>
 
         {/* AI Pending Indicator */}
-        <div className="flex items-center space-x-1">
+        <div className="flex items-center space-x-1" style={{ display: 'none' }}>
           <span className="text-xs text-gray-400">AI Pending:</span>
           <div className={`
             px-2 py-1 text-sm rounded text-center font-mono min-w-[2.5rem]
@@ -390,6 +452,7 @@ const MidiEditorToolbar = ({
             }}
             title={`Ghost Text表示: ${showGhostText ? 'ON' : 'OFF'} (クリックで切り替え)`}
             className={`${showGhostText ? 'text-purple-400' : 'text-gray-400'} h-10 w-10 p-0`}
+            style={{ display: 'none' }}
           >
             {showGhostText ? <Eye className="h-5 w-5" /> : <EyeOff className="h-5 w-5" />}
           </Button>

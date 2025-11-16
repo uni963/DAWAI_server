@@ -67,6 +67,14 @@ const useMidiAudio = () => {
         return false
       }
 
+      // ピアノトラックをシステムに追加（初期化時に必須）
+      if (!window.unifiedAudioSystem.tracks.has(trackIdRef.current)) {
+        window.unifiedAudioSystem.addTrack(trackIdRef.current, 'Piano Track', 'piano', '#4f46e5')
+        console.log('🎹 [useMidiAudio] Piano track added to unified audio system:', trackIdRef.current)
+      } else {
+        console.log('🎹 [useMidiAudio] Piano track already exists in unified audio system:', trackIdRef.current)
+      }
+
       isInitializedRef.current = true
       console.log('🎹 [useMidiAudio] Unified Audio System initialized successfully')
       return true
@@ -85,7 +93,7 @@ const useMidiAudio = () => {
       console.log('🎹 [useMidiAudio] Cleaning up on unmount')
       cleanup()
     }
-  }, [initializeAudio, cleanup])
+  }, []) // 依存関係を空にして重複初期化を防止
   
   /**
    * 音色の設定
@@ -332,57 +340,93 @@ const useMidiAudio = () => {
    * 単一ノートの再生（従来の方法、後方互換性のため）
    */
   const playNote = useCallback((note, velocity = 0.7, duration = 0.5) => {
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    console.log('🎹 [useMidiAudio.playNote] Function called with:', {
+      note,
+      velocity,
+      duration,
+      isInitialized: isInitializedRef.current,
+      trackMuted: trackMutedRef.current
+    })
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+
     if (!isInitializedRef.current) {
+      console.log('⚠️ [useMidiAudio.playNote] Not initialized, attempting initialization...')
       // 初期化が必要な場合は同期的に処理
       initializeAudio().then(initialized => {
         if (initialized) {
+          console.log('✅ [useMidiAudio.playNote] Initialization successful, retrying playNote')
           playNote(note, velocity, duration)
+        } else {
+          console.error('❌ [useMidiAudio.playNote] Initialization failed')
         }
       })
       return null
     }
-    
+
     // ミュート状態の場合は音を鳴らさない
     if (trackMutedRef.current) {
-      console.log('useMidiAudio: Track is muted, skipping playNote:', note)
+      console.log('🔇 [useMidiAudio.playNote] Track is muted, skipping playNote:', note)
       return null
     }
-    
+
     try {
       // 統一された音声システムを使用してノートを再生
-      console.log('🎹 [useMidiAudio] Playing note via Unified Audio System:', {
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+      console.log('🎹 [useMidiAudio.playNote] Calling Unified Audio System:', {
         note,
         velocity,
         duration,
-        instrument: instrumentRef.current
+        instrument: instrumentRef.current,
+        trackId: trackIdRef.current
       })
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
       
       // 楽器タイプに基づいて適切な音声メソッドを呼び出し
       const track = window.unifiedAudioSystem.tracks.get(trackIdRef.current)
       if (track && track.instrument && track.instrument.playNote) {
         // トラックの楽器オブジェクトを使用
+        console.log('🎹 [useMidiAudio.playNote] Using track instrument:', {
+          trackId: trackIdRef.current,
+          instrumentType: track.type
+        })
         track.instrument.playNote(note, velocity)
       } else {
         // フォールバック: 楽器タイプに基づいて適切なメソッドを直接呼び出し
         const instrumentType = instrumentRef.current || 'piano'
+        console.log('🎹 [useMidiAudio.playNote] Using fallback instrument method:', {
+          instrumentType,
+          method: instrumentType === 'bass' || instrumentType === 'electric_bass' || instrumentType === 'acoustic_bass' ? 'playBassNote' :
+                  instrumentType === 'drums' || instrumentType === 'drum' ? 'playDrumSound' :
+                  'playPianoNoteSync'
+        })
+
         if (instrumentType === 'bass' || instrumentType === 'electric_bass' || instrumentType === 'acoustic_bass') {
           window.unifiedAudioSystem.playBassNote(note, velocity)
         } else if (instrumentType === 'drums' || instrumentType === 'drum') {
           window.unifiedAudioSystem.playDrumSound(note.toString(), velocity)
         } else {
           // デフォルトはピアノ
+          console.log('🎹 [useMidiAudio.playNote] Calling playPianoNoteSync:', { note, velocity })
           window.unifiedAudioSystem.playPianoNoteSync(note, velocity)
         }
       }
-      
-      return { 
+
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+      console.log('✅ [useMidiAudio.playNote] Audio playback completed successfully')
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+
+      return {
         note,
         velocity,
         duration,
         engine: 'unified'
       }
     } catch (error) {
-      console.error('ノート再生エラー:', error)
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+      console.error('❌ [useMidiAudio.playNote] Audio playback error:', error)
+      console.error('❌ [useMidiAudio.playNote] Error stack:', error.stack)
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
       return null
     }
   }, [initializeAudio])

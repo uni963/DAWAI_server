@@ -78,8 +78,9 @@ export const useKeyboardHandler = () => {
             const acceptGhostTextEvent = new CustomEvent('accept-ghost-text-global', {
               detail: { shiftKey: event.shiftKey }
             })
-            window.dispatchEvent(acceptGhostTextEvent)
-            console.log('✅ Tab: Ghost Text補完イベント発行')
+            // 🔧 FIX: documentにイベントをディスパッチ（PR #157対応）
+            document.dispatchEvent(acceptGhostTextEvent)
+            console.log('✅ [useEventHandlers] Tab: Ghost Text補完イベント発行 (document)')
             return
           }
         }

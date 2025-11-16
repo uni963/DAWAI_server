@@ -926,7 +926,7 @@ const App = () => {
                       }
                       eventHandlersManager.updateTrackMidiData(currentTrack.id, updatedMidiData)
                     }}
-                    isActive={activeTab.startsWith('tab-') || activeTab.startsWith('instrument-') || activeTab.startsWith('voiceSynth-') || activeTab.startsWith('diffsinger-')}
+                    isActive={(currentTrack.subtype || 'piano') === 'piano' ? true : (activeTab.startsWith('tab-') || activeTab.startsWith('instrument-') || activeTab.startsWith('voiceSynth-') || activeTab.startsWith('diffsinger-'))}
                     onOpenSettings={() => {
                       setShowSettings(true)
                       setActiveSettingsSection('midiEditor')

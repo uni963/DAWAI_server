@@ -9,7 +9,18 @@ const MidiEditorStatusBar = ({
   // Ghost Text関連
   ghostTextStatus = { isActive: false },
   currentModel,
-  
+
+  // 🔴 [NEW] Issue #147: 候補情報
+  nextGhostIndex = 0,
+  totalGhostCandidates = 0,
+  nextPhraseIndex = 0,
+  totalPhraseCandidates = 0,
+
+  // 🆕 v2.0.0: フレーズセット情報
+  phraseSets = [],
+  selectedPhraseSetIndex = 0,
+  currentNoteIndex = 0,
+
   // ノート情報
   notesCount,
 
@@ -64,6 +75,24 @@ const MidiEditorStatusBar = ({
         <Badge variant={getModelBadgeVariant()} className="bg-purple-900 border-purple-500 text-xs">
           AI: {getModelDisplayName(currentModel)}
         </Badge>
+        {/* 🔴 [NEW] Issue #147: Ghost候補インジケーター */}
+        {totalGhostCandidates > 0 && (
+          <Badge variant="secondary" className="text-xs bg-purple-800 border-purple-400">
+            Ghost候補: {nextGhostIndex + 1}/{totalGhostCandidates}
+          </Badge>
+        )}
+        {/* 🔴 [NEW] Issue #147: フレーズ候補インジケーター（v1.0.0互換） */}
+        {totalPhraseCandidates > 0 && phraseSets.length === 0 && (
+          <Badge variant="secondary" className="text-xs bg-green-800 border-green-400">
+            フレーズ候補: {nextPhraseIndex + 1}/{totalPhraseCandidates}
+          </Badge>
+        )}
+        {/* 🆕 v2.0.0: フレーズセットインジケーター */}
+        {phraseSets.length > 0 && (
+          <Badge variant="secondary" className="text-xs bg-green-800 border-green-400">
+            フレーズセット: {selectedPhraseSetIndex + 1}/{phraseSets.length} (承認: {currentNoteIndex}/{phraseSets[selectedPhraseSetIndex]?.length || 0})
+          </Badge>
+        )}
         <Badge variant="outline" className="text-xs">
           Notes: {notesCount}
         </Badge>

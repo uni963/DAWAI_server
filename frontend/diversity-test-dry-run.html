@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>多様性機能 Dry Run テスト</title>
+  <style>
+    body {
+      font-family: 'Courier New', monospace;
+      background-color: #1e1e1e;
+      color: #d4d4d4;
+      padding: 20px;
+    }
+    h1 {
+      color: #4ec9b0;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .test-section {
+      background-color: #252526;
+      padding: 20px;
+      margin: 20px 0;
+      border-radius: 8px;
+      border: 1px solid #3c3c3c;
+    }
+    button {
+      background-color: #0e639c;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 5px;
+      font-size: 14px;
+    }
+    button:hover {
+      background-color: #1177bb;
+    }
+    button:active {
+      background-color: #0d5a8f;
+    }
+    .output {
+      background-color: #1e1e1e;
+      padding: 15px;
+      border-radius: 4px;
+      margin-top: 10px;
+      border: 1px solid #3c3c3c;
+      max-height: 400px;
+      overflow-y: auto;
+      font-size: 12px;
+    }
+    .log-line {
+      margin: 2px 0;
+      padding: 2px 0;
+    }
+    .log-line.info {
+      color: #4ec9b0;
+    }
+    .log-line.warn {
+      color: #ce9178;
+    }
+    .log-line.error {
+      color: #f48771;
+    }
+    .log-line.success {
+      color: #89d185;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .stat-box {
+      background-color: #1e1e1e;
+      padding: 10px;
+      border-radius: 4px;
+      border: 1px solid #3c3c3c;
+    }
+    .stat-label {
+      color: #858585;
+      font-size: 11px;
+    }
+    .stat-value {
+      color: #4ec9b0;
+      font-size: 24px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎲 多様性機能 Dry Run テスト</h1>
+
+    <div class="test-section">
+      <h2>📋 テスト説明</h2>
+      <p>
+        このDry Runテストは、確率的選択ロジックが正しく動作しているかを検証します。<br>
+        実際のアプリケーションを起動せずに、ロジックのみを実行して結果を確認できます。
+      </p>
+    </div>
+
+    <div class="test-section">
+      <h2>🎯 テストコントロール</h2>
+      <button onclick="runTest(10)">10回テスト実行</button>
+      <button onclick="runTest(50)">50回テスト実行</button>
+      <button onclick="runTest(100)">100回テスト実行</button>
+      <button onclick="clearOutput()">ログクリア</button>
+      <button onclick="resetMetrics()">メトリクスリセット</button>
+    </div>
+
+    <div class="test-section">
+      <h2>📊 統計</h2>
+      <div class="stats">
+        <div class="stat-box">
+          <div class="stat-label">フレーズ選択</div>
+          <div class="stat-value" id="phrase-count">0</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Ghost選択</div>
+          <div class="stat-value" id="ghost-count">0</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">フレーズ割合</div>
+          <div class="stat-value" id="phrase-percentage">0%</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Ghost割合</div>
+          <div class="stat-value" id="ghost-percentage">0%</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="test-section">
+      <h2>📝 実行ログ</h2>
+      <div class="output" id="output"></div>
+    </div>
+  </div>
+
+  <script>
+    // 多様性メトリクス（EnhancedMidiEditor.jsxと同じ構造）
+    const diversityMetrics = {
+      phraseCount: 0,
+      ghostCount: 0,
+      consecutivePhraseCount: 0,
+      consecutiveGhostCount: 0,
+      lastSource: null
+    };
+
+    // 重み付きランダム選択（EnhancedMidiEditor.jsxと同じロジック）
+    function weightedRandomSelect(items) {
+      const totalWeight = items.reduce((sum, item) => sum + (item.weight || 1), 0);
+      const randomValue = Math.random();
+      let random = randomValue * totalWeight;
+
+      log(`🎲 [WEIGHTED_RANDOM] Selection process: totalWeight=${totalWeight}, randomValue=${randomValue.toFixed(4)}`, 'info');
+
+      for (const item of items) {
+        random -= (item.weight || 1);
+        const selected = random <= 0;
+        log(`🎲 [WEIGHTED_RANDOM] Checking ${item.type}: random=${random.toFixed(4)} ${selected ? '✅ SELECTED' : '❌ continue'}`, 'info');
+        if (selected) {
+          return item;
+        }
+      }
+
+      return items[0];
+    }
+
+    // 確率的選択ロジック（EnhancedMidiEditor.jsxと同じ）
+    function simulateAcceptNextGhostNote() {
+      log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+      log('🎲 [DIVERSITY_DEBUG] acceptNextGhostNote simulation started', 'info');
+
+      // 両方の予測が利用可能と仮定
+      const hasPhraseNotes = true;
+      const hasGhostPredictions = true;
+
+      log(`🔍 [DIVERSITY_DEBUG] Availability: hasPhraseNotes=${hasPhraseNotes}, hasGhostPredictions=${hasGhostPredictions}`, 'info');
+
+      let selectedType = null;
+
+      if (hasPhraseNotes && hasGhostPredictions) {
+        log(`📊 [DIVERSITY_DEBUG] Current metrics: phraseCount=${diversityMetrics.phraseCount}, ghostCount=${diversityMetrics.ghostCount}, consecutivePhrase=${diversityMetrics.consecutivePhraseCount}, consecutiveGhost=${diversityMetrics.consecutiveGhostCount}`, 'info');
+
+        // 動的確率調整
+        let phraseWeight = 0.6;
+        let ghostWeight = 0.4;
+
+        if (diversityMetrics.consecutivePhraseCount >= 3) {
+          phraseWeight = 0.3;
+          ghostWeight = 0.7;
+          log(`🎲 [DIVERSITY_DEBUG] Diversity boost: Reducing phrase weight (consecutive=${diversityMetrics.consecutivePhraseCount})`, 'warn');
+        } else if (diversityMetrics.consecutiveGhostCount >= 3) {
+          phraseWeight = 0.7;
+          ghostWeight = 0.3;
+          log(`🎲 [DIVERSITY_DEBUG] Diversity boost: Reducing ghost weight (consecutive=${diversityMetrics.consecutiveGhostCount})`, 'warn');
+        }
+
+        const predictionTypes = [
+          { type: 'phrase', weight: phraseWeight },
+          { type: 'ghost', weight: ghostWeight }
+        ];
+
+        selectedType = weightedRandomSelect(predictionTypes).type;
+        log(`🎲 [DIVERSITY_DEBUG] Selection result: ${selectedType} (weights: phrase=${phraseWeight}, ghost=${ghostWeight})`, 'success');
+      }
+
+      // メトリクス更新
+      if (selectedType === 'phrase') {
+        diversityMetrics.phraseCount++;
+        diversityMetrics.consecutivePhraseCount++;
+        diversityMetrics.consecutiveGhostCount = 0;
+        diversityMetrics.lastSource = 'phrase';
+        log('✅ [DIVERSITY_DEBUG] Phrase note accepted', 'success');
+      } else {
+        diversityMetrics.ghostCount++;
+        diversityMetrics.consecutiveGhostCount++;
+        diversityMetrics.consecutivePhraseCount = 0;
+        diversityMetrics.lastSource = 'ghost';
+        log('✅ [DIVERSITY_DEBUG] Ghost note accepted', 'success');
+      }
+
+      const totalCount = diversityMetrics.phraseCount + diversityMetrics.ghostCount;
+      log(`📊 [DIVERSITY_DEBUG] Total count: ${totalCount}`, 'info');
+
+      // 10回ごとの統計
+      if (totalCount > 0 && totalCount % 10 === 0) {
+        const phrasePercentage = ((diversityMetrics.phraseCount / totalCount) * 100).toFixed(1);
+        const ghostPercentage = ((diversityMetrics.ghostCount / totalCount) * 100).toFixed(1);
+        log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'success');
+        log(`📊 [DIVERSITY_STATS] 10回ごとの統計レポート:`, 'success');
+        log(`   Phrase: ${phrasePercentage}% (${diversityMetrics.phraseCount}回)`, 'success');
+        log(`   Ghost: ${ghostPercentage}% (${diversityMetrics.ghostCount}回)`, 'success');
+        log(`   Total: ${totalCount}回`, 'success');
+        log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'success');
+
+        const samePatternRate = Math.max(diversityMetrics.consecutivePhraseCount, diversityMetrics.consecutiveGhostCount) / totalCount;
+        if (samePatternRate > 0.2) {
+          log('⚠️ [DIVERSITY_WARNING] 高い繰り返し率を検出:', 'warn');
+          log(`   繰り返し率: ${(samePatternRate * 100).toFixed(1)}%`, 'warn');
+        }
+      }
+
+      log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+
+      updateStats();
+    }
+
+    function runTest(iterations) {
+      log(`\n🚀 テスト開始: ${iterations}回実行\n`, 'info');
+      for (let i = 0; i < iterations; i++) {
+        simulateAcceptNextGhostNote();
+      }
+      log(`\n✅ テスト完了: ${iterations}回実行完了\n`, 'success');
+    }
+
+    function updateStats() {
+      const totalCount = diversityMetrics.phraseCount + diversityMetrics.ghostCount;
+      const phrasePercentage = totalCount > 0 ? ((diversityMetrics.phraseCount / totalCount) * 100).toFixed(1) : 0;
+      const ghostPercentage = totalCount > 0 ? ((diversityMetrics.ghostCount / totalCount) * 100).toFixed(1) : 0;
+
+      document.getElementById('phrase-count').textContent = diversityMetrics.phraseCount;
+      document.getElementById('ghost-count').textContent = diversityMetrics.ghostCount;
+      document.getElementById('phrase-percentage').textContent = phrasePercentage + '%';
+      document.getElementById('ghost-percentage').textContent = ghostPercentage + '%';
+    }
+
+    function resetMetrics() {
+      diversityMetrics.phraseCount = 0;
+      diversityMetrics.ghostCount = 0;
+      diversityMetrics.consecutivePhraseCount = 0;
+      diversityMetrics.consecutiveGhostCount = 0;
+      diversityMetrics.lastSource = null;
+      updateStats();
+      log('🔄 メトリクスをリセットしました', 'info');
+    }
+
+    function log(message, type = 'info') {
+      const output = document.getElementById('output');
+      const line = document.createElement('div');
+      line.className = `log-line ${type}`;
+      line.textContent = message;
+      output.appendChild(line);
+      output.scrollTop = output.scrollHeight;
+    }
+
+    function clearOutput() {
+      document.getElementById('output').innerHTML = '';
+    }
+
+    // 初期メッセージ
+    log('🎲 多様性機能 Dry Run テスト - 準備完了', 'success');
+    log('テストボタンをクリックして確率的選択ロジックを検証してください', 'info');
+  </script>
+</body>
+</html>

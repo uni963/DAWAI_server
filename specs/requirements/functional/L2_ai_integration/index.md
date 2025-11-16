@@ -350,9 +350,13 @@ const diffsingerSettings = {
 - **1音ずつ承認UI**: Spaceキーで次のノートを承認、Backspaceで取り消し
 
 **詳細ドキュメント**:
-- **[L3: Ghost Text機能強化要件仕様書](./L3_ghost_text_requirements.md)** - 🆕 最新の強化仕様（複数候補、フレーズベース予測）
+- **[L3: Ghost Text機能強化要件仕様書](./L3_ghost_text_requirements.md)** - 基本仕様（複数候補、フレーズベース予測）
 - **[L3: Ghost Text補完機能 - ユーザーガイド](./L3_ghost_text_user_guide.md)** - 初心者向けの詳しい使い方ガイド
 - **[L3: Ghost Textジャンル・スケール対応機能要件](./L3_ghost_text_enhancement.md)** - 音楽理論統合の技術仕様
+- **[L3: Ghost Textフレーズセット切り替え機能](./L3_ghost_text_candidate_selection.md)** - 🆕 v2.0.0 フレーズセット間切り替え仕様
+- **[L3: Ghost Text複数フレーズセット生成機能](./L3_ghost_text_phrase_sets.md)** - 🆕 v2.0.0 生成ロジック詳細仕様
+- **[実装チェックリスト - Ghost Text v2.0.0](./IMPLEMENTATION_CHECKLIST_GhostText_v2.md)** - 🆕 4週間実装計画・48タスク
+- **[変更サマリー - Ghost Text v2.0.0](./CHANGES_SUMMARY_GhostText_v2.md)** - 🆕 v1.0.0→v2.0.0変更点総合ガイド
 
 ### Ghost Text システム
 

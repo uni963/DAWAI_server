@@ -85,6 +85,33 @@ const EnhancedMidiEditor = ({
     })
     prevVolumeInfoRef.current = { trackVolume, trackMuted, masterVolume }
   }
+  // 🔧 [STABILITY_FIX] コンポーネントのマウント/アンマウント検出
+  // 🆕 Phase 0: マウント確認用詳細ログ
+  useEffect(() => {
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    console.log('[MODULE:MidiEditor] [PHASE:Init] EnhancedMidiEditor マウント開始', {
+      componentName: 'EnhancedMidiEditor',
+      mounted: true,
+      trackId: trackId,
+      trackName: trackName,
+      isActive: isActive,
+      timestamp: Date.now()
+    })
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+
+    return () => {
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+      console.log('[MODULE:MidiEditor] [PHASE:Cleanup] EnhancedMidiEditor アンマウント', {
+        componentName: 'EnhancedMidiEditor',
+        unmounted: true,
+        trackId: trackId,
+        timestamp: Date.now()
+      })
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    }
+  }, [trackId, trackName, isActive])
+
   // 状態管理フックの使用
   const state = useMidiEditorState(trackId)
 
@@ -223,7 +250,13 @@ const EnhancedMidiEditor = ({
   const noteOperations = useMidiNoteOperations(state.notes, state.setNotes, trackId, state.isInitialized, persistence, state.currentTime, state.selectedNotes, state.setSelectedNotes)
   
   // Ghost Textフックの使用
-  const ghostText = useGhostText(trackId, appSettings)
+  console.log('🚨 [GHOST_TEXT_HOOK_CALL] useGhostText フック呼び出し開始', { trackId, appSettingsExists: !!appSettings })
+  const ghostText = useGhostText(trackId, appSettings, state.notes)
+  console.log('🚨 [GHOST_TEXT_HOOK_CALL] useGhostText フック呼び出し完了', {
+    ghostTextReturned: !!ghostText,
+    ghostTextEnabled: ghostText?.ghostTextEnabled,
+    phraseSetsLength: ghostText?.phraseSets?.length || 0
+  })
   
   // 音色設定フックの使用
   const instrumentSettings = useInstrumentSettings(trackId)
@@ -421,9 +454,28 @@ const EnhancedMidiEditor = ({
     }
   }, [trackId, persistence])
 
+  // 🔧 [STABILITY_FIX] キーボードイベント処理用のRefを作成（安定した参照を保持）
+  const isActiveRef = useRef(isActive)
+  useEffect(() => {
+    isActiveRef.current = isActive
+    console.log('🔍 [STABILITY_DEBUG] isActive updated in ref:', isActive)
+  }, [isActive])
+
+  // 🔧 [KEYBOARD_FIX] handleKeyDown/handleKeyUpのRef化（安定した参照を保証）
+  const handleKeyDownRef = useRef(null)
+  const handleKeyUpRef = useRef(null)
+
   // シンプルなキーボードイベント処理
   const handleKeyDown = useCallback((event) => {
-    console.log(`🎹 KeyDown: ${event.code}`)
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    console.log(`🎹 [KEYDOWN_DEBUG] KeyDown detected: ${event.code}`)
+    console.log(`🎹 [KEYDOWN_DEBUG] isActiveRef.current: ${isActiveRef.current}`)
+    console.log(`🎹 [KEYDOWN_DEBUG] Event target:`, event.target)
+    console.log(`🎹 [KEYDOWN_DEBUG] audioRef.current exists:`, !!audioRef.current)
+    console.log(`🎹 [KEYDOWN_DEBUG] stateRef.current.audioEnabled:`, stateRef.current?.audioEnabled)
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+
+      // 🔴 TABキーは専用リスナー（L737-788）で処理するため除外
 
       // アンドゥ・リドゥのキーボードショートカット（最優先処理）
       if (event.ctrlKey && event.code === 'KeyZ' && !event.shiftKey) {
@@ -442,22 +494,103 @@ const EnhancedMidiEditor = ({
         return
       }
 
+      // 🔴 [NEW] Issue #147: ↑/↓キーによる候補切り替え処理
+      // Ghost Text有効時は↑/↓キーを候補切り替えに使用
+      // 🔍 [ARROW_KEY_DEBUG] Arrow key detection check
+      if ((event.code === 'ArrowUp' || event.key === 'ArrowUp' ||
+           event.code === 'ArrowDown' || event.key === 'ArrowDown')) {
+        console.log('🔍 [ARROW_KEY_DEBUG] Arrow key detected:', {
+          code: event.code,
+          key: event.key,
+          ghostTextEnabled: ghostText.ghostTextEnabled,
+          conditionWillPass: ghostText.ghostTextEnabled === true
+        })
+      }
+
+      if ((event.code === 'ArrowUp' || event.key === 'ArrowUp' ||
+           event.code === 'ArrowDown' || event.key === 'ArrowDown') &&
+          ghostText.ghostTextEnabled) {
+        // 入力フィールドフォーカス時はスキップ
+        const focusedElement = document.activeElement
+        if (focusedElement && (
+          focusedElement.tagName === 'INPUT' ||
+          focusedElement.tagName === 'TEXTAREA' ||
+          focusedElement.contentEditable === 'true'
+        )) {
+          console.log('🔄 [CANDIDATE_NAV_ISSUE147] 入力フィールドフォーカス中、候補切り替えをスキップ')
+          return
+        }
+
+        event.preventDefault()
+
+        // 🔍 [PHRASE_SET_DEBUG] デバッグ: phraseSetsの状態確認
+        console.log('🔍 [PHRASE_SET_DEBUG] Arrow key pressed:', {
+          key: event.code,
+          phraseSetsExists: !!ghostText.phraseSets,
+          phraseSetsLength: ghostText.phraseSets?.length || 0,
+          selectedPhraseSetIndex: ghostText.selectedPhraseSetIndex,
+          phraseLockedExists: !!ghostText.phraseLocked,
+          phraseNotesLength: ghostText.phraseNotes?.length || 0,
+          ghostPredictionsLength: ghostText.ghostPredictions?.length || 0,
+          allGhostTextKeys: Object.keys(ghostText)
+        })
+
+        // 🆕 v2.0.0: フレーズセットが利用可能な場合は優先的にセット切り替え
+        console.log('🔍 [PHRASE_FLOW] Phase 3 START: 上下キー処理開始', {
+          phraseSetsLength: ghostText.phraseSets?.length || 0,
+          phraseLocked: ghostText.phraseLocked,
+          phraseNotesLength: ghostText.phraseNotes?.length || 0
+        })
+        if (ghostText.phraseSets && ghostText.phraseSets.length > 0) {
+          console.log('🔍 [PHRASE_FLOW] Phase 3.1: v2.0.0モード - フレーズセット切り替え')
+          if (event.code === 'ArrowUp' || event.key === 'ArrowUp') {
+            console.log('⬆️ [KEYBOARD_PHRASE_SET] ArrowUp: フレーズセットを前に切り替え')
+            ghostText.selectPrevPhraseSet()
+          } else {
+            console.log('⬇️ [KEYBOARD_PHRASE_SET] ArrowDown: フレーズセットを次に切り替え')
+            ghostText.selectNextPhraseSet()
+          }
+        }
+        // フォールバック: v1.0.0互換 - フレーズロック中はフレーズ候補を優先
+        else if (ghostText.phraseLocked && ghostText.phraseNotes && ghostText.phraseNotes.length > 0) {
+          console.log('🔍 [PHRASE_FLOW] Phase 3.2: v1.0.0互換モード - フレーズ内ノート切り替え')
+          if (event.code === 'ArrowUp' || event.key === 'ArrowUp') {
+            console.log('⬆️ [KEYBOARD_ISSUE147] ArrowUp: フレーズ候補を前に切り替え（v1.0.0互換）')
+            ghostText.selectPrevPhraseCandidate()
+          } else {
+            console.log('⬇️ [KEYBOARD_ISSUE147] ArrowDown: フレーズ候補を次に切り替え（v1.0.0互換）')
+            ghostText.selectNextPhraseCandidate()
+          }
+        } else if (ghostText.ghostPredictions && ghostText.ghostPredictions.length > 0) {
+          if (event.code === 'ArrowUp' || event.key === 'ArrowUp') {
+            console.log('⬆️ [KEYBOARD_ISSUE147] ArrowUp: Ghost候補を前に切り替え')
+            ghostText.selectPrevGhostCandidate()
+          } else {
+            console.log('⬇️ [KEYBOARD_ISSUE147] ArrowDown: Ghost候補を次に切り替え')
+            ghostText.selectNextGhostCandidate()
+          }
+        } else {
+          console.log('🔄 [CANDIDATE_NAV_ISSUE147] 候補なし、切り替えスキップ')
+        }
+        return
+      }
+
       // システムキーと矢印キーの明示的ガード（最優先で処理）
-      if (event.code === 'Tab' || event.key === 'Tab' ||
-          event.code === 'Escape' || event.key === 'Escape' ||
+      // 🔴 TABキーはGhost Text承認処理（L2351-2378）で処理するため除外
+      // 🔴 [NEW] Issue #147: ↑/↓キーはGhost Text候補切り替え処理で処理するため除外
+      if (event.code === 'Escape' || event.key === 'Escape' ||
           event.code === 'F5' || event.key === 'F5' ||
           event.code === 'ArrowLeft' || event.key === 'ArrowLeft' ||
           event.code === 'ArrowRight' || event.key === 'ArrowRight' ||
-          event.code === 'ArrowUp' || event.key === 'ArrowUp' ||
-          event.code === 'ArrowDown' || event.key === 'ArrowDown' ||
           (event.ctrlKey && event.code === 'KeyR')) {
         console.log('🎹 システムキー/矢印キーを検出、MIDI処理をスキップ:', event.code)
         return; // 早期リターン、preventDefault/stopPropagationは絶対に実行しない
       }
 
       // MIDIエディタがアクティブでない場合は処理しない
-      if (!isActive) {
-        console.log('🎹 MIDIエディタが非アクティブのため、キーボード入力を無視');
+      if (!isActiveRef.current) {
+        console.log('🎹 [KEYDOWN_DEBUG] MIDIエディタが非アクティブのため、キーボード入力を無視');
+        console.log('🎹 [KEYDOWN_DEBUG] isActiveRef.current:', isActiveRef.current);
         return;
       }
 
@@ -469,9 +602,15 @@ const EnhancedMidiEditor = ({
                                    (midiEditorContainer.contains(focusedElement) ||
                                     focusedElement === midiEditorContainer)
 
-      if (!isFocusedInMidiEditor) {
-        console.log('🎹 フォーカスがMIDIエディター外のため、キーボード入力を無視')
+      // Piano Track viewがアクティブな時はフォーカスチェックを緩和
+      if (!isFocusedInMidiEditor && !isActiveRef.current) {
+        console.log('🎹 フォーカスがMIDIエディター外のため、キーボード入力を無視 (非アクティブタブ)')
         return;
+      }
+
+      // Piano Track viewがアクティブでフォーカスが外れている場合はログのみ（処理は続行）
+      if (!isFocusedInMidiEditor && isActiveRef.current) {
+        console.log('⚠️ 🎹 Piano Track view がアクティブですが、フォーカスは外れています - 処理は続行します')
       }
       
       // Q/Rキーでオクターブ調整
@@ -503,35 +642,33 @@ const EnhancedMidiEditor = ({
       )
       
       const midiNote = getMidiNoteFromKeyCode(event.code, octave)
-      if (event.code === 'Tab') {
-        console.warn('🚨🚨🚨 TAB DEBUG: getMidiNoteFromKeyCode result =', midiNote, '🚨🚨🚨')
-      }
 
       if (midiNote === null) {
         console.log(`🎹 キー ${event.code} はMIDIノートに対応していません`);
-        if (event.code === 'Tab') {
-          console.warn('🚨🚨🚨 TAB DEBUG: Tab key not mapped to MIDI note - should exit early WITHOUT preventDefault 🚨🚨🚨')
-        }
         return;
-      }
-
-      // Tab キーはここまで到達しないはず
-      if (event.code === 'Tab') {
-        console.error('🚨🚨🚨 TAB DEBUG: ERROR - Tab key reached preventDefault section! This should NOT happen! 🚨🚨🚨')
       }
 
       // イベントの伝播を停止（他のイベントリスナーとの競合を防ぐ）
       event.preventDefault();
       event.stopPropagation();
-      
-      console.log(`🎹 Playing note: ${midiNote}`)
-      
+
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+      console.log(`🎹 [AUDIO_PLAYBACK_DEBUG] Playing note: ${midiNote}`)
+      console.log(`🎹 [AUDIO_PLAYBACK_DEBUG] Event code: ${event.code}`)
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+
       // アクティブキーに追加
       setActiveKeys(prev => new Set([...prev, event.code]))
 
       // 音を再生（再生中でも常に音を鳴らす）（refから取得）
       if (stateRef.current.audioEnabled && audioRef.current) {
-        console.log(`🎹 Attempting to play note ${midiNote} with audio enabled: ${stateRef.current.audioEnabled}`)
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+        console.log(`🎹 [AUDIO_PLAYBACK_DEBUG] Audio system check PASSED`)
+        console.log(`🎹 [AUDIO_PLAYBACK_DEBUG] - audioEnabled: ${stateRef.current.audioEnabled}`)
+        console.log(`🎹 [AUDIO_PLAYBACK_DEBUG] - audioRef exists: ${!!audioRef.current}`)
+        console.log(`🎹 [AUDIO_PLAYBACK_DEBUG] - audioRef.playNote exists: ${!!(audioRef.current && audioRef.current.playNote)}`)
+        console.log(`🎹 [AUDIO_PLAYBACK_DEBUG] Calling audioRef.current.playNote(${midiNote}, 0.8, 0.25)...`)
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
 
         // キーボード入力の音を記録
         keyboardAudioRef.current.set(event.code, {
@@ -541,7 +678,12 @@ const EnhancedMidiEditor = ({
 
         // 音を再生（useMidiAudioを使用）
         const result = audioRef.current.playNote(midiNote, 0.8, 0.25); // useMidiAudioを使用
-        console.log(`🎹 NoteOn result for ${midiNote}:`, result)
+
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+        console.log(`🎹 [AUDIO_PLAYBACK_DEBUG] playNote() returned:`, result)
+        console.log(`🎹 [AUDIO_PLAYBACK_DEBUG] Result type:`, typeof result)
+        console.log(`🎹 [AUDIO_PLAYBACK_DEBUG] Result is null:`, result === null)
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
 
         // キーボード入力の音を記録（noteOffで確実に停止するため）
         if (result) {
@@ -601,9 +743,10 @@ const EnhancedMidiEditor = ({
       })
       stateRef.current.setNeedsRedraw(true)
   }, [
+    // 🔧 [STABILITY_FIX] 依存関係を最小化してイベントリスナーの安定性を確保
+    // isActive は isActiveRef.current 経由で参照
     undoLastAction,
     redoLastAction,
-    isActive,
     setManualOctaveOffset,
     manualOctaveOffset,
     setActiveKeys,
@@ -611,11 +754,12 @@ const EnhancedMidiEditor = ({
   ])
 
     const handleKeyUp = useCallback((event) => {
-      console.log(`🎹 KeyUp: ${event.code}`)
-      
+      console.log(`🎹 [KEYUP_DEBUG] KeyUp detected: ${event.code}`)
+
       // MIDIエディタがアクティブでない場合は処理しない
-      if (!isActive) {
-        console.log('🎹 MIDIエディタが非アクティブのため、キーボード入力を無視');
+      if (!isActiveRef.current) {
+        console.log('🎹 [KEYUP_DEBUG] MIDIエディタが非アクティブのため、キーボード入力を無視');
+        console.log('🎹 [KEYUP_DEBUG] isActiveRef.current:', isActiveRef.current);
         return;
       }
       
@@ -700,25 +844,183 @@ const EnhancedMidiEditor = ({
         stateRef.current.setNeedsRedraw(true)
       }
   }, [
-    isActive,
+    // 🔧 [STABILITY_FIX] 依存関係を最小化してイベントリスナーの安定性を確保
+    // isActive は isActiveRef.current 経由で参照
     setActiveKeys,
     manualOctaveOffset,
     setLiveRecordingNotes
   ])
 
-  // キーボードリスナーをセットアップ
+  // 🆕 Phase 0: 基本機能確認用 - TABキー検出詳細デバッグ
+  // 🚨 CRITICAL FIX: useEffect実行確認 + isActiveチェック削除 + 条件チェック簡素化
+  // 🔧 [FIX_TAB_APPROVAL] 依存配列を空にして初回マウント時のみ実行（再登録問題を完全回避）
   useEffect(() => {
-    console.log('🎹 Setting up keyboard listeners')
-    document.addEventListener('keydown', handleKeyDown)
-    document.addEventListener('keyup', handleKeyUp)
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    console.log('[MODULE:MidiEditor] [PHASE:Setup] TABリスナー useEffect 実行開始', {
+      useEffectExecuted: true,
+      dependencies: 'empty_array',
+      timestamp: Date.now()
+    })
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+
+    try {
+      const handleTabKey = (event) => {
+        console.log('🎯 [MODULE:MidiEditor] [PHASE:Trigger] TABキー検出 - ハンドラ呼び出し', {
+          eventCode: event.code,
+          eventKey: event.key,
+          eventType: event.type,
+          handlerCalled: true,
+          timestamp: Date.now()
+        })
+
+        if (event.code === 'Tab') {
+          console.log('✅ [MODULE:MidiEditor] [PHASE:Validate] TABイベント詳細解析', {
+            shiftKey: event.shiftKey,
+            ctrlKey: event.ctrlKey,
+            altKey: event.altKey,
+            target: event.target?.tagName || 'unknown',
+            preventDefault: 'about_to_execute',
+            timestamp: Date.now()
+          })
+
+          event.preventDefault()
+          event.stopPropagation()
+
+          console.log('🚀 [MODULE:MidiEditor] [PHASE:Dispatch] accept-ghost-text-global イベントディスパッチ準備', {
+            eventDetail: { shiftKey: event.shiftKey },
+            aboutToDispatch: true,
+            timestamp: Date.now()
+          })
+
+          window.dispatchEvent(new CustomEvent('accept-ghost-text-global', {
+            detail: {
+              shiftKey: event.shiftKey,
+              source: 'EnhancedMidiEditor_TAB_Handler',
+              timestamp: Date.now()
+            }
+          }))
+
+          console.log('✅ [MODULE:MidiEditor] [PHASE:Dispatch] accept-ghost-text-global イベントディスパッチ完了', {
+            dispatched: true,
+            eventType: 'accept-ghost-text-global',
+            timestamp: Date.now()
+          })
+        } else {
+          console.log('ℹ️ [MODULE:MidiEditor] [PHASE:Ignore] 非TABキー検出', {
+            eventCode: event.code,
+            ignored: true
+          })
+        }
+      }
+
+      console.log('📋 [MODULE:MidiEditor] [PHASE:Listen] TABイベントリスナー登録実行', {
+        listenerRegistered: 'starting',
+        eventType: 'keydown',
+        capture: true,
+        function: 'document.addEventListener',
+        timestamp: Date.now()
+      })
+
+      document.addEventListener('keydown', handleTabKey, { capture: true })
+
+      console.log('🎉 [MODULE:MidiEditor] [PHASE:Listen] TABリスナー登録完了', {
+        status: 'ready',
+        waitingForTab: true,
+        listenerActive: true,
+        timestamp: Date.now()
+      })
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+
+      return () => {
+        console.log('🧹 [MODULE:MidiEditor] [PHASE:Cleanup] TABリスナー解除実行', {
+          cleanupExecuted: true,
+          timestamp: Date.now()
+        })
+        document.removeEventListener('keydown', handleTabKey, { capture: true })
+      }
+    } catch (error) {
+      console.error('❌ [MODULE:MidiEditor] [PHASE:Error] TABリスナー設定エラー', {
+        error: error.message,
+        stack: error.stack,
+        timestamp: Date.now()
+      })
+      throw error
+    }
+  }, []) // 🔧 空配列で無条件実行
+
+  // 🔧 [FIX_TAB_APPROVAL] window.ghostTextHook同期確認用useEffect
+  useEffect(() => {
+    if (ghostText) {
+      console.log('🔍 [GHOST_TEXT_SYNC] ghostText更新検出:', {
+        phraseNotesLength: ghostText?.phraseNotes?.length || 0,
+        phraseSetsLength: ghostText?.phraseSets?.length || 0,
+        windowGhostTextHook: !!window.ghostTextHook,
+        timestamp: Date.now()
+      })
+
+      // window.ghostTextHookの存在確認
+      if (!window.ghostTextHook) {
+        console.warn('⚠️ [GHOST_TEXT_SYNC] window.ghostTextHookが未設定です')
+      } else {
+        console.log('✅ [GHOST_TEXT_SYNC] window.ghostTextHook存在確認OK:', {
+          hookDataKeys: Object.keys(window.ghostTextHook)
+        })
+      }
+    }
+  }, [ghostText]) // ghostText更新時に同期確認
+
+  // 🔧 [KEYBOARD_FIX] handleKeyDown/handleKeyUpのRef更新（常に最新の関数を参照）
+  useEffect(() => {
+    handleKeyDownRef.current = handleKeyDown
+    handleKeyUpRef.current = handleKeyUp
+  }, [handleKeyDown, handleKeyUp])
+
+  // 🔧 [KEYBOARD_FIX] キーボードリスナーをセットアップ（安定したラッパー関数を使用）
+  useEffect(() => {
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    console.log('🎹 [LISTENER_SETUP_DEBUG] Setting up STABLE keyboard listeners')
+    console.log('🎹 [LISTENER_SETUP_DEBUG] Component: EnhancedMidiEditor')
+    console.log('🎹 [LISTENER_SETUP_DEBUG] trackId:', trackId)
+    console.log('🎹 [LISTENER_SETUP_DEBUG] isActive (current):', isActive)
+    console.log('🎹 [LISTENER_SETUP_DEBUG] isActiveRef.current:', isActiveRef.current)
+    console.log('🎹 [LISTENER_SETUP_DEBUG] Using ref-based stable wrappers')
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+
+    // 🔧 [KEYBOARD_FIX] 安定したラッパー関数（Refを経由して常に最新のハンドラーを呼び出す）
+    const stableKeyDownWrapper = (event) => {
+      console.log('🎹 [WRAPPER_DEBUG] stableKeyDownWrapper called for:', event.code)
+      if (handleKeyDownRef.current) {
+        handleKeyDownRef.current(event)
+      } else {
+        console.warn('⚠️ [WRAPPER_DEBUG] handleKeyDownRef.current is null!')
+      }
+    }
+
+    const stableKeyUpWrapper = (event) => {
+      console.log('🎹 [WRAPPER_DEBUG] stableKeyUpWrapper called for:', event.code)
+      if (handleKeyUpRef.current) {
+        handleKeyUpRef.current(event)
+      } else {
+        console.warn('⚠️ [WRAPPER_DEBUG] handleKeyUpRef.current is null!')
+      }
+    }
+
+    document.addEventListener('keydown', stableKeyDownWrapper)
+    document.addEventListener('keyup', stableKeyUpWrapper)
+
+    console.log('✅ [LISTENER_SETUP_DEBUG] STABLE keyboard listeners registered successfully')
 
     return () => {
-      console.log('🎹 Keyboard useEffect cleanup triggered')
-      document.removeEventListener('keydown', handleKeyDown)
-      document.removeEventListener('keyup', handleKeyUp)
-      console.log('🎹 Keyboard listeners removed')
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+      console.log('🎹 [LISTENER_CLEANUP_DEBUG] Keyboard useEffect cleanup triggered')
+      console.log('🎹 [LISTENER_CLEANUP_DEBUG] trackId:', trackId)
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+      document.removeEventListener('keydown', stableKeyDownWrapper)
+      document.removeEventListener('keyup', stableKeyUpWrapper)
+      console.log('✅ [LISTENER_CLEANUP_DEBUG] STABLE keyboard listeners removed')
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
     }
-  }, [handleKeyDown, handleKeyUp])
+  }, [trackId]) // 🔧 [KEYBOARD_FIX] trackIdのみを依存配列に指定（handleKeyDown/handleKeyUpは除外）
 
   // オーディオ初期化
   useEffect(() => {
@@ -2088,7 +2390,7 @@ const EnhancedMidiEditor = ({
   }, [])
 
   // ノート追加関数
-  const addNote = useCallback(async (pitch, time, duration = 0.25, velocity = 0.8) => {
+  const addNote = useCallback(async (pitch, time, duration = 0.25, velocity = 0.8, options = {}) => {
     if (!trackId || !state.isInitialized) return
     
     const newNote = {
@@ -2162,9 +2464,24 @@ const EnhancedMidiEditor = ({
     }
     
     state.setLastInputTime(Date.now())
-    
-    // Ghost Text予測の処理
-    ghostText.processMidiInput(newNote)
+
+    // 🔴 CRITICAL FIX: フレーズロック中は全ての予測生成をブロック
+    const engine = window.magentaGhostTextEngine
+    const phraseSession = engine?.currentPhraseSession
+    const isPhraseLocked = phraseSession?.locked || false
+
+    // Ghost Text予測の処理（skipPredictionフラグまたはフレーズロック中はスキップ）
+    // 🚨 CRITICAL FIX: TAB承認時は予測生成をスキップ
+    if (!options.skipPrediction && !isPhraseLocked) {
+      ghostText.processMidiInput(newNote)
+      console.log('🎵 processMidiInput called (skipPrediction=false, phrase unlocked)')
+    } else {
+      console.log('⏭️ processMidiInput skipped', {
+        skipPrediction: options.skipPrediction || false,
+        isPhraseLocked,
+        reason: options.skipPrediction ? 'skipPrediction=true' : isPhraseLocked ? 'Phrase session locked' : 'unknown'
+      })
+    }
     
     // 親コンポーネントに即座に通知
     if (onNoteAdd) onNoteAdd(newNote)
@@ -2193,28 +2510,198 @@ const EnhancedMidiEditor = ({
     }, 0)
   }, [trackId, state.audioEnabled, onNoteAdd, persistence, ghostText, state.isPlaying, audio]) // 🔧 修正: state.notesを依存配列から削除（無限ループ防止）
 
-  // 🔴 [NEW] Wrapper function for acceptNextGhostNote (Issue #146)
+  // 🎲 [NEW] Weighted random selection utility (Issue #153)
+  const weightedRandomSelect = useCallback((items) => {
+    const totalWeight = items.reduce((sum, item) => sum + (item.weight || 1), 0)
+    const randomValue = Math.random()
+    let random = randomValue * totalWeight
+
+    console.log('🎲 [WEIGHTED_RANDOM] Selection process:', {
+      totalWeight,
+      randomValue: randomValue.toFixed(4),
+      randomWeighted: random.toFixed(4),
+      items: items.map(i => ({ type: i.type, weight: i.weight }))
+    })
+
+    for (const item of items) {
+      random -= (item.weight || 1)
+      console.log(`🎲 [WEIGHTED_RANDOM] Checking ${item.type}: random=${random.toFixed(4)} (${random <= 0 ? '✅ SELECTED' : '❌ continue'})`)
+      if (random <= 0) {
+        console.log(`🎲 [WEIGHTED_RANDOM] Final selection: ${item.type}`)
+        return item
+      }
+    }
+
+    console.log('🎲 [WEIGHTED_RANDOM] Fallback to first item:', items[0].type)
+    return items[0]
+  }, [])
+
+  // 📊 [NEW] Diversity metrics tracking (Issue #153)
+  const diversityMetricsRef = useRef({
+    phraseCount: 0,
+    ghostCount: 0,
+    consecutivePhraseCount: 0,
+    consecutiveGhostCount: 0,
+    lastSource: null
+  })
+
+  // 🔴 [ENHANCED] Wrapper function for acceptNextGhostNote with probabilistic selection (Issue #153)
   const acceptNextGhostNote = useCallback(() => {
-    // Try phrase predictions first, then ghost predictions
-    const hasPhraseNotes = ghostText.phraseNotes && ghostText.phraseNotes.length > 0 && ghostText.nextPhraseIndex < ghostText.phraseNotes.length
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    console.log('🎲 [DIVERSITY_DEBUG] acceptNextGhostNote called')
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+
+    // Check availability of both prediction types
+    const hasPhraseNotes = (ghostText.phraseNotes && ghostText.phraseNotes.length > 0 && ghostText.nextPhraseIndex < ghostText.phraseNotes.length) ||
+                           (ghostText.phraseSets && ghostText.phraseSets.length > 0 &&
+                            ghostText.phraseSets[ghostText.selectedPhraseSetIndex || 0] &&
+                            ghostText.nextPhraseIndex < ghostText.phraseSets[ghostText.selectedPhraseSetIndex || 0].length)
     const hasGhostPredictions = ghostText.ghostPredictions && ghostText.ghostPredictions.length > 0 && ghostText.nextGhostIndex < ghostText.ghostPredictions.length
 
-    if (hasPhraseNotes) {
-      console.log('🎯 Accepting next phrase note')
-      const result = ghostText.acceptNextPhraseNote(state.notes, addNote)
-      if (result.success) {
-        console.log('✅ Phrase note accepted')
+    console.log('🔍 [DIVERSITY_DEBUG] Availability check:', {
+      hasPhraseNotes,
+      hasGhostPredictions,
+      phraseNotesLength: ghostText.phraseNotes?.length || 0,
+      nextPhraseIndex: ghostText.nextPhraseIndex,
+      ghostPredictionsLength: ghostText.ghostPredictions?.length || 0,
+      nextGhostIndex: ghostText.nextGhostIndex
+    })
+
+    // If neither available, warn and exit
+    if (!hasPhraseNotes && !hasGhostPredictions) {
+      console.warn('⚠️ [DIVERSITY_DEBUG] No notes available to approve')
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+      return
+    }
+
+    let selectedType = null
+
+    // 🎲 Probabilistic selection when both are available
+    if (hasPhraseNotes && hasGhostPredictions) {
+      const metrics = diversityMetricsRef.current
+
+      console.log('📊 [DIVERSITY_DEBUG] Current metrics:', {
+        phraseCount: metrics.phraseCount,
+        ghostCount: metrics.ghostCount,
+        consecutivePhraseCount: metrics.consecutivePhraseCount,
+        consecutiveGhostCount: metrics.consecutiveGhostCount,
+        lastSource: metrics.lastSource
+      })
+
+      // 🔧 Dynamic probability adjustment to avoid monotony
+      let phraseWeight = 0.6
+      let ghostWeight = 0.4
+
+      // If same source used consecutively 3+ times, reduce its weight
+      if (metrics.consecutivePhraseCount >= 3) {
+        phraseWeight = 0.3
+        ghostWeight = 0.7
+        console.log('🎲 [DIVERSITY_DEBUG] Diversity boost: Reducing phrase weight due to consecutive use')
+        console.log('   Consecutive phrase count:', metrics.consecutivePhraseCount)
+      } else if (metrics.consecutiveGhostCount >= 3) {
+        phraseWeight = 0.7
+        ghostWeight = 0.3
+        console.log('🎲 [DIVERSITY_DEBUG] Diversity boost: Reducing ghost weight due to consecutive use')
+        console.log('   Consecutive ghost count:', metrics.consecutiveGhostCount)
       }
-    } else if (hasGhostPredictions) {
-      console.log('🎯 Accepting next ghost note')
-      const result = ghostText.acceptNextGhostNote(state.notes, addNote)
+
+      const predictionTypes = [
+        { type: 'phrase', weight: phraseWeight },
+        { type: 'ghost', weight: ghostWeight }
+      ]
+
+      selectedType = weightedRandomSelect(predictionTypes).type
+      console.log(`🎲 [DIVERSITY_DEBUG] Probabilistic selection result:`)
+      console.log(`   Selected: ${selectedType}`)
+      console.log(`   Weights: phrase=${phraseWeight}, ghost=${ghostWeight}`)
+    } else if (hasPhraseNotes) {
+      selectedType = 'phrase'
+      console.log('🎯 [DIVERSITY_DEBUG] Only phrase predictions available')
+    } else {
+      selectedType = 'ghost'
+      console.log('🎯 [DIVERSITY_DEBUG] Only ghost predictions available')
+    }
+
+    // Execute selected prediction type
+    let result = null
+    if (selectedType === 'phrase') {
+      console.log('🎯 [DIVERSITY_DEBUG] Accepting next phrase note')
+      result = ghostText.acceptNextPhraseNote(state.notes, addNote)
+      console.log('📋 [DIVERSITY_DEBUG] acceptNextPhraseNote result:', result)
+
       if (result.success) {
-        console.log('✅ Ghost note accepted')
+        console.log('✅ [DIVERSITY_DEBUG] Phrase note accepted successfully')
+
+        // Update diversity metrics
+        diversityMetricsRef.current.phraseCount++
+        diversityMetricsRef.current.consecutivePhraseCount++
+        diversityMetricsRef.current.consecutiveGhostCount = 0
+        diversityMetricsRef.current.lastSource = 'phrase'
+
+        console.log('📊 [DIVERSITY_DEBUG] Updated metrics after phrase:', {
+          phraseCount: diversityMetricsRef.current.phraseCount,
+          consecutivePhraseCount: diversityMetricsRef.current.consecutivePhraseCount,
+          consecutiveGhostCount: diversityMetricsRef.current.consecutiveGhostCount
+        })
+      } else {
+        console.warn('⚠️ [DIVERSITY_DEBUG] Phrase note acceptance failed:', result.message)
       }
     } else {
-      console.warn('⚠️ No notes available to approve')
+      console.log('🎯 [DIVERSITY_DEBUG] Accepting next ghost note')
+      result = ghostText.acceptNextGhostNote(state.notes, addNote)
+      console.log('📋 [DIVERSITY_DEBUG] acceptNextGhostNote result:', result)
+
+      if (result.success) {
+        console.log('✅ [DIVERSITY_DEBUG] Ghost note accepted successfully')
+
+        // Update diversity metrics
+        diversityMetricsRef.current.ghostCount++
+        diversityMetricsRef.current.consecutiveGhostCount++
+        diversityMetricsRef.current.consecutivePhraseCount = 0
+        diversityMetricsRef.current.lastSource = 'ghost'
+
+        console.log('📊 [DIVERSITY_DEBUG] Updated metrics after ghost:', {
+          ghostCount: diversityMetricsRef.current.ghostCount,
+          consecutiveGhostCount: diversityMetricsRef.current.consecutiveGhostCount,
+          consecutivePhraseCount: diversityMetricsRef.current.consecutivePhraseCount
+        })
+      } else {
+        console.warn('⚠️ [DIVERSITY_DEBUG] Ghost note acceptance failed:', result.message)
+      }
     }
-  }, [ghostText, state.notes, addNote])
+
+    // Log diversity statistics periodically
+    const metrics = diversityMetricsRef.current
+    const totalCount = metrics.phraseCount + metrics.ghostCount
+
+    console.log('📊 [DIVERSITY_DEBUG] Current total count:', totalCount)
+
+    if (totalCount > 0 && totalCount % 10 === 0) {
+      const phrasePercentage = ((metrics.phraseCount / totalCount) * 100).toFixed(1)
+      const ghostPercentage = ((metrics.ghostCount / totalCount) * 100).toFixed(1)
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+      console.log(`📊 [DIVERSITY_STATS] 10回ごとの統計レポート:`)
+      console.log(`   Phrase: ${phrasePercentage}% (${metrics.phraseCount}回)`)
+      console.log(`   Ghost: ${ghostPercentage}% (${metrics.ghostCount}回)`)
+      console.log(`   Total: ${totalCount}回`)
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+
+      // Check if same phrase pattern repeating too much
+      const samePatternRate = Math.max(metrics.consecutivePhraseCount, metrics.consecutiveGhostCount) / totalCount
+      if (samePatternRate > 0.2) {
+        console.warn('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+        console.warn(`⚠️ [DIVERSITY_WARNING] 高い繰り返し率を検出:`)
+        console.warn(`   繰り返し率: ${(samePatternRate * 100).toFixed(1)}%`)
+        console.warn(`   連続Phrase: ${metrics.consecutivePhraseCount}回`)
+        console.warn(`   連続Ghost: ${metrics.consecutiveGhostCount}回`)
+        console.warn('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+      }
+    }
+
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    console.log('🎲 [DIVERSITY_DEBUG] acceptNextGhostNote completed')
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+  }, [ghostText, state.notes, addNote, weightedRandomSelect])
 
   // ノート削除関数
   const removeNote = useCallback((noteId) => {
@@ -2309,7 +2796,8 @@ const EnhancedMidiEditor = ({
 
   // Keep acceptAllGhostPredictions for backward compatibility or fallback
   const acceptAllGhostPredictions = useCallback(() => {
-    const hasPhrasePredictions = ghostText.phraseNotes && ghostText.phraseNotes.length > 0
+    const hasPhrasePredictions = (ghostText.phraseNotes && ghostText.phraseNotes.length > 0) ||
+                                 (ghostText.phraseSets && ghostText.phraseSets.length > 0)
     const hasGhostPredictions = ghostText.ghostPredictions && ghostText.ghostPredictions.length > 0
 
     console.log('🎹 acceptAllGhostPredictions (fallback): 実行開始', {
@@ -2336,12 +2824,31 @@ const EnhancedMidiEditor = ({
   // グローバルGhost Text補完イベントのリスナー (Issue #146: 1音ずつ承認に変更)
   useEffect(() => {
     const handleGlobalAcceptGhostText = (event) => {
-      if (!isActive) return // アクティブなタブのみ処理
+      console.log('🔍 [DEBUG] accept-ghost-text-global listener triggered', {
+        isActive,
+        shiftKey: event.detail.shiftKey
+      })
 
-      console.log('🎹 Global Ghost Text accept event received', {
+      if (!isActive) {
+        console.log('⚠️ Not active, ignoring event')
+        return // アクティブなタブのみ処理
+      }
+
+      const executionId = `exec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+
+      console.log('🔍 [DIVERSITY_DEBUG][EVENT_LISTENER] EnhancedMidiEditor リスナー開始:', {
+        executionId,
+        eventDetail: event.detail,
+        dispatchSource: event.detail?.dispatchSource,
+        dispatchTime: event.detail?.dispatchTime,
+        currentTime: Date.now(),
+        delay: Date.now() - (event.detail?.dispatchTime || Date.now()),
         shiftKey: event.detail.shiftKey,
-        hasPhrasePredictions: ghostText.phraseNotes?.length > 0,
-        hasGhostPredictions: ghostText.ghostPredictions?.length > 0
+        hasPhrasePredictions: (ghostText.phraseNotes?.length > 0) || (ghostText.phraseSets?.length > 0),
+        hasGhostPredictions: ghostText.ghostPredictions?.length > 0,
+        nextPhraseIndex: ghostText.nextPhraseIndex,
+        nextGhostIndex: ghostText.nextGhostIndex,
+        step: 'listener_entry'
       })
 
       if (event.detail.shiftKey) {
@@ -2349,9 +2856,72 @@ const EnhancedMidiEditor = ({
         console.log('↩️ Shift+Tab: Undoing last approval')
         undoLastGhostApproval()
       } else {
-        // 🔴 [CHANGED] Tab: Accept next note one-by-one
-        acceptNextGhostNote()
-        console.log('✅ Tab: Next note approved (one-by-one)')
+        // 🔴 [FIXED] Tab: Direct acceptance without wrapper function
+        const hasPhrasePredictions = (ghostText.phraseNotes?.length > 0) || (ghostText.phraseSets?.length > 0)
+        const hasGhostPredictions = ghostText.ghostPredictions?.length > 0
+
+        if (hasPhrasePredictions) {
+          console.log('🔍 [DIVERSITY_DEBUG][EVENT_LISTENER] フレーズ承認実行:', {
+            executionId,
+            phraseNotesCount: (ghostText.phraseNotes?.length || 0) + (ghostText.phraseSets?.[ghostText.selectedPhraseSetIndex || 0]?.length || 0),
+            nextPhraseIndex: ghostText.nextPhraseIndex,
+            step: 'phrase_approval'
+          })
+
+          // 🔍 DEEP DEBUG: ghostText構造全体の確認
+          console.log('🔍 [DIVERSITY_DEBUG][DEEP_DEBUG] ghostText object keys:', Object.keys(ghostText))
+          console.log('🔍 [DIVERSITY_DEBUG][DEEP_DEBUG] ghostText.engine exists:', !!ghostText.engine)
+          console.log('🔍 [DIVERSITY_DEBUG][DEEP_DEBUG] ghostText.phraseNotes structure:', ghostText.phraseNotes?.map(note => ({
+            time: note.time,
+            pitch: note.pitch,
+            hasTimeProperty: 'time' in note
+          })))
+          console.log('🔍 [DIVERSITY_DEBUG][DEEP_DEBUG] ghostText.phraseSets structure:', {
+            phraseSetsLength: ghostText.phraseSets?.length,
+            selectedIndex: ghostText.selectedPhraseSetIndex,
+            currentSetLength: ghostText.phraseSets?.[ghostText.selectedPhraseSetIndex || 0]?.length,
+            firstSetPreview: ghostText.phraseSets?.[0]?.slice(0, 3)
+          })
+          console.log('🔍 [DIVERSITY_DEBUG][DEEP_DEBUG] Current phrase session:', ghostText.engine?.currentPhraseSession)
+          console.log('🔍 [DIVERSITY_DEBUG][DEEP_DEBUG] Phrase notes before approval:', ghostText.phraseNotes?.length)
+          console.log('🔍 [DIVERSITY_DEBUG][DEEP_DEBUG] Phrase sets before approval:', ghostText.phraseSets?.length)
+
+          // 🔍 DEEP DEBUG: acceptNextPhraseNote結果の詳細
+          const result = ghostText.acceptNextPhraseNote(state.notes, addNote)
+          console.log('🔍 [DIVERSITY_DEBUG][DEEP_DEBUG] acceptNextPhraseNote result:', result)
+          console.log('🔍 [DIVERSITY_DEBUG][DEEP_DEBUG] acceptNextPhraseNote result type:', typeof result)
+          console.log('🔍 [DIVERSITY_DEBUG][DEEP_DEBUG] Phrase notes after approval:', ghostText.phraseNotes?.length)
+          console.log('🔍 [DIVERSITY_DEBUG][DEEP_DEBUG] New phrase session:', ghostText.engine?.currentPhraseSession?.id)
+
+          if (result && result.success) {
+            console.log('🎯 Phrase note approved successfully')
+          } else {
+            console.log('⚠️ Failed to approve phrase note:', result)
+          }
+        } else if (hasGhostPredictions) {
+          console.log('🔍 [LISTENER_2] Ghost承認実行:', {
+            executionId,
+            ghostPredictionsCount: ghostText.ghostPredictions.length,
+            nextGhostIndex: ghostText.nextGhostIndex,
+            step: 'ghost_approval'
+          })
+          const result = ghostText.acceptNextGhostNote(state.notes, addNote)
+          if (result && result.success) {
+            console.log('🎯 Ghost note approved successfully')
+          } else {
+            console.log('⚠️ Failed to approve ghost note:', result)
+          }
+        } else {
+          console.warn('🔍 [LISTENER_2] 承認可能な予測なし:', {
+            executionId,
+            step: 'no_predictions'
+          })
+        }
+
+      console.log('🔍 [LISTENER_2] リスナー処理完了:', {
+        executionId,
+        timestamp: Date.now()
+      })
       }
     }
 
@@ -2360,7 +2930,7 @@ const EnhancedMidiEditor = ({
     return () => {
       window.removeEventListener('accept-ghost-text-global', handleGlobalAcceptGhostText)
     }
-  }, [isActive, acceptNextGhostNote, undoLastGhostApproval])
+  }, [isActive, ghostText, state.notes, addNote, undoLastGhostApproval])
 
   // ノート編集関数
   const editNote = useCallback((noteId, changes) => {
@@ -2728,7 +3298,13 @@ const EnhancedMidiEditor = ({
         onToggleShowGhostText={ghostText.toggleShowGhostText}
 
         // 承認待ちノート数 (ghostPredictions + phraseNotesの合計)
-        pendingNotesCount={(ghostText.ghostPredictions?.length || 0) + (ghostText.phraseNotes?.length || 0)}
+        pendingNotesCount={(() => {
+          const ghostCount = ghostText.ghostPredictions?.length || 0
+          const phraseCount = ghostText.phraseSets?.length > 0
+            ? (ghostText.phraseSets[ghostText.selectedPhraseSetIndex || 0]?.length || 0)
+            : 0
+          return ghostCount + phraseCount
+        })()}
 
         // 設定関連
         showSettings={false}
@@ -2736,6 +3312,89 @@ const EnhancedMidiEditor = ({
 
         // 音色設定関連
         onOpenSoundSettings={instrumentSettings.openSettingsPanel}
+
+        // 🆕 補完機能関連
+        onAcceptPrediction={() => {
+          console.log('✅ [TOOLBAR] 補完承認ボタン - TABキーエミュレーション実行')
+
+          // 🚨 [TAB_EMULATION] TABキーイベントを作成・発火してTABキーと同じ動作を実現
+          const tabEvent = new KeyboardEvent('keydown', {
+            key: 'Tab',
+            code: 'Tab',
+            which: 9,
+            keyCode: 9,
+            bubbles: true,
+            cancelable: true
+          });
+
+          console.log('🔧 [TAB_EMULATION] TABキーイベント発火中:', tabEvent)
+          document.dispatchEvent(tabEvent);
+
+          console.log('✅ [TAB_EMULATION] TABキーエミュレーション完了')
+        }}
+        onUndoApproval={() => {
+          console.log('↩️ [TOOLBAR] 承認取り消しボタン - Shift+TABキーエミュレーション実行')
+
+          // 🚨 [SHIFT_TAB_EMULATION] Shift+TABキーイベントを作成・発火してShift+TABキーと同じ動作を実現
+          const shiftTabEvent = new KeyboardEvent('keydown', {
+            key: 'Tab',
+            code: 'Tab',
+            which: 9,
+            keyCode: 9,
+            shiftKey: true,  // Shift修飾キーを追加
+            bubbles: true,
+            cancelable: true
+          });
+
+          console.log('🔧 [SHIFT_TAB_EMULATION] Shift+TABキーイベント発火中:', shiftTabEvent)
+          document.dispatchEvent(shiftTabEvent);
+          console.log('✅ [SHIFT_TAB_EMULATION] Shift+TABキーエミュレーション完了')
+        }}
+        onCyclePhraseSet={() => {
+          console.log('🔄 [TOOLBAR] フレーズ切り替えボタン - 上矢印キーイベントをトリガー')
+          // 上矢印キーと同じフレーズセット切り替えを実行
+          if (ghostText.selectNextPhraseSet) {
+            ghostText.selectNextPhraseSet()
+          }
+        }}
+        hasPredictions={(() => {
+          // 🚨 [CRITICAL_FIX] useGhostTextフックの同期問題を回避し、window.ghostTextHookを直接参照
+
+          // フォールバック: window.ghostTextHookのデータを使用
+          const windowHook = window.ghostTextHook;
+
+          let hasGhost = false;
+          let hasPhrase = false;
+
+          if (windowHook) {
+            // window.ghostTextHookのデータを使用
+            hasGhost = (windowHook.ghostPredictions?.length || 0) > 0;
+            hasPhrase = (windowHook.phraseSets?.length || 0) > 0 &&
+                       (windowHook.phraseSets[windowHook.selectedPhraseSetIndex || 0]?.length || 0) > 0;
+          } else {
+            // フォールバック: ghostTextフックのデータを使用
+            hasGhost = (ghostText.ghostPredictions?.length || 0) > 0;
+            hasPhrase = (ghostText.phraseSets?.length || 0) > 0 &&
+                       (ghostText.phraseSets[ghostText.selectedPhraseSetIndex || 0]?.length || 0) > 0;
+          }
+
+          const finalResult = hasGhost || hasPhrase;
+
+          // 🔧 [DEBUG] 同期状況確認（window.ghostTextHook優先版）
+          console.log('🔍 [SYNC_DEBUG_FIXED] EnhancedMidiEditor hasPredictions 計算 (window.ghostTextHook優先):', {
+            'windowHook_exists': !!windowHook,
+            'windowHook.ghostPredictions?.length': windowHook?.ghostPredictions?.length || 0,
+            'windowHook.phraseSets?.length': windowHook?.phraseSets?.length || 0,
+            'windowHook.selectedPhraseSetIndex': windowHook?.selectedPhraseSetIndex,
+            'ghostText.ghostPredictions?.length': ghostText.ghostPredictions?.length || 0,
+            'ghostText.phraseSets?.length': ghostText.phraseSets?.length || 0,
+            hasGhost,
+            hasPhrase,
+            'final_result': finalResult
+          })
+
+          return finalResult;
+        })()}
       />
       )}
 
@@ -2755,6 +3414,22 @@ const EnhancedMidiEditor = ({
           // Ghost Text関連
           ghostTextStatus={ghostText.ghostTextStatus}
           currentModel={ghostText.currentModel}
+
+          // 🔴 [NEW] Issue #147: 候補情報
+          nextGhostIndex={ghostText.nextGhostIndex || 0}
+          totalGhostCandidates={ghostText.ghostPredictions?.length || 0}
+          nextPhraseIndex={ghostText.nextPhraseIndex || 0}
+          totalPhraseCandidates={(() => {
+            if (ghostText.phraseSets?.length > 0) {
+              return ghostText.phraseSets[ghostText.selectedPhraseSetIndex || 0]?.length || 0
+            }
+            return 0
+          })()}
+
+          // 🆕 v2.0.0: フレーズセット情報
+          phraseSets={ghostText.phraseSets || []}
+          selectedPhraseSetIndex={ghostText.selectedPhraseSetIndex || 0}
+          currentNoteIndex={ghostText.currentNoteIndex || 0}
 
           // ノート情報
           notesCount={state.notes.length}
@@ -2807,7 +3482,25 @@ const EnhancedMidiEditor = ({
         // Ghost Text関連
         ghostPredictions={ghostText.ghostPredictions}
         showGhostText={ghostText.showGhostText}
-        phrasePredictions={ghostText.phraseNotes || []} // 🎨 [Phase 3] フレーズ予測
+        phrasePredictions={(() => {
+          if (ghostText.phraseSets?.length > 0) {
+            const selectedSet = ghostText.phraseSets[ghostText.selectedPhraseSetIndex || 0]
+            return selectedSet || []
+          }
+          return []
+        })()} // 🎨 [Phase 3] フレーズ予測 (phraseSets対応)
+        phraseBaseTime={(() => {
+          const baseTime = ghostText.phraseSession?.baseTime
+          if (ghostText.phraseSets?.length > 0 &&
+              ghostText.phraseSets[ghostText.selectedPhraseSetIndex || 0]?.length > 0 &&
+              !baseTime) {
+            console.log('🔍 [2ND_PHRASE_DEBUG] phraseBaseTime未定義:', {
+              hasSession: !!ghostText.phraseSession,
+              step: 'basetime_missing'
+            })
+          }
+          return baseTime
+        })()} // 🔧 [FIX] 固定baseTime for position consistency
         nextGhostIndex={ghostText.nextGhostIndex}       // 🔴 [NEW] Issue #146: Next ghost note index
         nextPhraseIndex={ghostText.nextPhraseIndex}     // 🔴 [NEW] Issue #146: Next phrase note index
         approvalHistory={ghostText.approvalHistory}     // 🔴 [NEW] Issue #146: Approval history
