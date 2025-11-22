@@ -11,6 +11,7 @@ import Mixer from './components/Mixer.jsx'
 import ProjectMenu from './components/ProjectMenu.jsx'
 import GenreSelector from './components/GenreSelector.jsx'
 import SmartSuggestionOverlay from './components/SmartSuggestionOverlay.jsx'
+import SimpleTutorial from './components/UserGuide/SimpleTutorial.jsx'
 import audioExportEngine from './utils/audioExportEngine.js'
 import cacheManager from './utils/cacheManager.js'
 import frameRateMonitor from './utils/frameRateMonitor.js'
@@ -37,6 +38,7 @@ import EventHandlersManager from './classes/EventHandlersManager.js'
 // カスタムフックのインポート
 import useDevTools from './hooks/useDevTools.js'
 import useSystemInitialization from './hooks/useSystemInitialization.js'
+import useBackgroundAudioPreload from './hooks/useBackgroundAudioPreload.js'
 import useEventHandlers from './hooks/useEventHandlers.js'
 import useAudioTrackEffects from './hooks/useAudioTrackEffects.js'
 // Phase 1 - Step 2: 大型イベントハンドラーのカスタムフック
@@ -272,6 +274,13 @@ const App = () => {
   const [showProjectMenu, setShowProjectMenu] = useState(false)
   const [isMixerCollapsed, setIsMixerCollapsed] = useState(false)
 
+  // チュートリアル状態管理
+  const [showTutorial, setShowTutorial] = useState(() => {
+    // 初回起動時のみチュートリアルを表示
+    const completed = localStorage.getItem('dawai_tutorial_completed')
+    return !completed
+  })
+
   // === カスタムフック呼び出し ===
   // 開発・デバッグツール管理
   useDevTools({
@@ -286,6 +295,9 @@ const App = () => {
     hasErrors,
     initializationErrors
   } = useSystemInitialization(projectManager)
+
+  // バックグラウンド音声プリロード管理（ユーザーインタラクション後）
+  const { preloadInitiated, userInteractionDetected } = useBackgroundAudioPreload()
 
   // イベントハンドラー管理
   useEventHandlers({
@@ -506,7 +518,10 @@ const App = () => {
     // トラックタイプのマッピング
     const trackTypeMap = {
       'midi': { type: TRACK_TYPES.MIDI, subtype: TRACK_SUBTYPES.PIANO },
+      'piano': { type: TRACK_TYPES.MIDI, subtype: TRACK_SUBTYPES.PIANO },     // 追加：明示的なpianoマッピング
+      'bass': { type: TRACK_TYPES.MIDI, subtype: TRACK_SUBTYPES.BASS },       // 🔧 FIX: Bassトラック追加バグ修正
       'drum': { type: TRACK_TYPES.DRUMS, subtype: TRACK_SUBTYPES.DRUMS },
+      'drums': { type: TRACK_TYPES.DRUMS, subtype: TRACK_SUBTYPES.DRUMS },    // 追加：統一性のため
       'diffsinger': { type: TRACK_TYPES.DIFFSINGER, subtype: TRACK_SUBTYPES.DIFFSINGER }
     }
 
@@ -684,6 +699,21 @@ const App = () => {
     }
   }, [projectManager])
 
+  // チュートリアルハンドラー
+  const handleStartTutorial = useCallback(() => {
+    setShowTutorial(true)
+  }, [])
+
+  const handleCompleteTutorial = useCallback(() => {
+    setShowTutorial(false)
+    console.log('✅ チュートリアル完了')
+  }, [])
+
+  const handleSkipTutorial = useCallback(() => {
+    setShowTutorial(false)
+    console.log('⏭️ チュートリアルスキップ')
+  }, [])
+
   // プロジェクト情報をメモ化
   const projectInfo = useMemo(() => ({
     name: projectManager?.getProject()?.name || 'Current Project',
@@ -808,6 +838,7 @@ const App = () => {
         onToggleSmartSuggestions={(enabled) => setSmartSuggestionsEnabled(enabled)}
         suggestionAggressiveness={suggestionAggressiveness}
         onSuggestionAggressivenessChange={(value) => setSuggestionAggressiveness(value)}
+        onStartTutorial={handleStartTutorial}
       />
 
       {/* メインコンテンツ */}
@@ -890,7 +921,7 @@ const App = () => {
 
                 return (
                   <EnhancedMidiEditor
-                    key={`midi-editor-${currentTrack.id}`}
+                    key={`midi-editor-${currentTrack.subtype || 'piano'}`}
                     trackId={currentTrack.id}
                     trackType={currentTrack.subtype || 'piano'}
                     trackName={currentTrack.name || 'Unknown Track'}
@@ -1121,6 +1152,14 @@ const App = () => {
         appSettings={appSettings}
         updateAppSettings={updateAppSettings}
       />
+
+      {/* チュートリアル */}
+      {showTutorial && (
+        <SimpleTutorial
+          onComplete={handleCompleteTutorial}
+          onSkip={handleSkipTutorial}
+        />
+      )}
     </div>
   )
 }

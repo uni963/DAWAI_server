@@ -27,7 +27,8 @@ const Header = ({
   onToggleSmartSuggestions,
   suggestionAggressiveness,
   onSuggestionAggressivenessChange,
-  currentProjectName = 'Untitled Project'  // ⭐ プロジェクト名prop追加
+  currentProjectName = 'Untitled Project',  // ⭐ プロジェクト名prop追加
+  onStartTutorial  // 🆕 チュートリアル開始ハンドラー
 }) => {
   const [showFileMenu, setShowFileMenu] = useState(false)
   const [showExportMenu, setShowExportMenu] = useState(false)
@@ -275,12 +276,23 @@ const Header = ({
                     <Save className="h-4 w-4 text-green-400" />
                     Save
                   </button>
-                  <button 
+                  <button
                     className="w-full text-left px-4 py-2 text-sm text-white hover:bg-gray-700 flex items-center gap-2"
                     onClick={handleSaveAs}
                   >
                     <Save className="h-4 w-4 text-blue-400" />
                     Save As...
+                  </button>
+                  <div className="border-t border-gray-600 my-1"></div>
+                  <button
+                    className="w-full text-left px-4 py-2 text-sm text-white hover:bg-gray-700 flex items-center gap-2"
+                    onClick={() => {
+                      if (onStartTutorial) onStartTutorial()
+                      setShowFileMenu(false)
+                    }}
+                  >
+                    <Sparkles className="h-4 w-4 text-yellow-400" />
+                    チュートリアル
                   </button>
                 </div>
               </div>
@@ -342,7 +354,12 @@ const Header = ({
             variant="ghost"
             size="sm"
             className="text-white hover:bg-gray-700 flex items-center gap-2 h-9 px-3 font-medium"
-            onClick={onOpenGenreSelector}
+            data-tutorial="demo-songs-button"
+            onClick={() => {
+              onOpenGenreSelector()
+              // チュートリアル用イベント発火
+              window.dispatchEvent(new CustomEvent('tutorial:demo-loaded'))
+            }}
             title={genreContext ? `現在のジャンル: ${genreContext.genre.name.ja}` : 'Demo Songsを選択'}
           >
             <Music className="h-4 w-4" />

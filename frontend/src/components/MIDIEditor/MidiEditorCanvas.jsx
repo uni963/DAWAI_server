@@ -206,7 +206,8 @@ const MidiEditorCanvas = ({
         console.log(`Key ${i}: pitch ${pitch} (C${Math.floor(pitch / 12)})`)
       }
       const isBlackKey = [1, 3, 6, 8, 10].includes(pitch % 12)
-      const isPressed = state.pressedKey === pitch || (Array.isArray(state.pressedKey) && state.pressedKey.includes(pitch))
+      const isTutorialHighlighted = window.tutorialHighlightKeys?.includes(pitch)
+      const isPressed = state.pressedKey === pitch || (Array.isArray(state.pressedKey) && state.pressedKey.includes(pitch)) || isTutorialHighlighted
       
       // 白鍵の背景（すべてのキーに共通）
       if (isPressed) {
@@ -1518,6 +1519,7 @@ const MidiEditorCanvas = ({
       <canvas
         ref={dynamicCanvasRef}
         className="absolute inset-0 w-full h-full"
+        data-tutorial="ghost-notes"
         style={{ zIndex: 3 }}
         onMouseDown={(e) => {
           // 右クリックの場合は処理しない（右クリック専用ハンドラーで処理）

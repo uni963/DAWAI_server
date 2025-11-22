@@ -68,16 +68,16 @@ export const pianoKeyMapping = {
   65: { note: 'F4', sample: 'Piano MF F5(R).wav', pitch: -12 }, // F5を1オクターブ下げる
   66: { note: 'F#4', sample: 'Piano MF F5(R).wav', pitch: -11 },
   67: { note: 'G4', sample: 'Piano MF G4(R).wav', pitch: 0 },
-  68: { note: 'G#4', sample: 'Piano MF G#4(R).wav', pitch: 0 },
+  68: { note: 'G#4', sample: 'Piano MF G4(R).wav', pitch: 1 }, // 特殊文字問題回避: G4+1半音
   69: { note: 'A4', sample: 'Piano MF G4(R).wav', pitch: 2 },
   70: { note: 'A#4', sample: 'Piano MF G4(R).wav', pitch: 3 },
   71: { note: 'B4', sample: 'Piano MF B4(R).wav', pitch: 0 },
   
   // 超高音域
   72: { note: 'C5', sample: 'Piano MF C4(R).wav', pitch: 12 },
-  73: { note: 'C#5', sample: 'Piano MF C#5(R).wav', pitch: 0 }, // 実際のC#5ファイルを使用
+  73: { note: 'C#5', sample: 'Piano MF C4(R).wav', pitch: 13 }, // 特殊文字問題回避: C4+13半音
   74: { note: 'D5', sample: 'Piano MF C4(R).wav', pitch: 14 },
-  75: { note: 'D#5', sample: 'Piano MF D#5(R).wav', pitch: 0 }, // 実際のD#5ファイルを使用
+  75: { note: 'D#5', sample: 'Piano MF E4(R).wav', pitch: 11 }, // 特殊文字問題回避: E4+11半音
   76: { note: 'E5', sample: 'Piano MF C4(R).wav', pitch: 16 },
   77: { note: 'F5', sample: 'Piano MF F5(R).wav', pitch: 0 },
   78: { note: 'F#5', sample: 'Piano MF F5(R).wav', pitch: 1 },
@@ -113,7 +113,21 @@ export const pianoKeyMapping = {
   104: { note: 'G#7', sample: 'Piano MF G6(R).wav', pitch: 13 },
   105: { note: 'A7', sample: 'Piano MF A6(R).wav', pitch: 12 },
   106: { note: 'A#7', sample: 'Piano MF A6(R).wav', pitch: 13 },
-  107: { note: 'B7', sample: 'Piano MF B6(R).wav', pitch: 12 }
+  107: { note: 'B7', sample: 'Piano MF B6(R).wav', pitch: 12 },
+
+  // オクターブ8（最高音域）- オクターブ6ファイルからピッチシフト
+  108: { note: 'C8', sample: 'Piano MF C#6(R).wav', pitch: 23 }, // C#6を23半音上げる
+  109: { note: 'C#8', sample: 'Piano MF C#6(R).wav', pitch: 24 }, // C#6を2オクターブ上げる
+  110: { note: 'D8', sample: 'Piano MF D#6(R).wav', pitch: 22 },
+  111: { note: 'D#8', sample: 'Piano MF D#6(R).wav', pitch: 24 }, // D#6を2オクターブ上げる
+  112: { note: 'E8', sample: 'Piano MF F6(R).wav', pitch: 22 },
+  113: { note: 'F8', sample: 'Piano MF F6(R).wav', pitch: 24 }, // F6を2オクターブ上げる
+  114: { note: 'F#8', sample: 'Piano MF F6(R).wav', pitch: 25 },
+  115: { note: 'G8', sample: 'Piano MF G6(R).wav', pitch: 24 }, // G6を2オクターブ上げる
+  116: { note: 'G#8', sample: 'Piano MF G6(R).wav', pitch: 25 },
+  117: { note: 'A8', sample: 'Piano MF A6(R).wav', pitch: 24 }, // A6を2オクターブ上げる
+  118: { note: 'A#8', sample: 'Piano MF A6(R).wav', pitch: 25 },
+  119: { note: 'B8', sample: 'Piano MF B6(R).wav', pitch: 24 }  // B6を2オクターブ上げる
 };
 
 // 音声コンテキスト

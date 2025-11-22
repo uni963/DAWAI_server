@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import MagentaGhostTextEngine from '../utils/magentaGhostTextEngine.js'
 // 緊急修復: structuredDebugSystemファイルが存在しないためコメントアウト
 // import { debugSystem, tabApprovalDebug } from '../utils/structuredDebugSystem.js'
@@ -83,21 +83,53 @@ const useGhostText = (trackId, appSettings, notes) => {
       return
     }
 
-    console.log('⏱️ [PERF] Ghost Text Engine 初期化開始')
-    const initStartTime = performance.now()
-    setIsInitializing(true)
-
-    if (!window.magentaGhostTextEngine) {
-      window.magentaGhostTextEngine = new MagentaGhostTextEngine()
+    // 🚨 [CRITICAL_FIX] 初期化完了チェック - 既に初期化済みならスキップ
+    if (isInitialized) {
+      console.log('✅ useGhostText: Already initialized - skipping')
+      return
     }
 
-    const engine = window.magentaGhostTextEngine
+    // 💾 CRITICAL FIX: localStorage からphraseSetsを復元（タブ切り替え対応）
+    try {
+      const savedData = localStorage.getItem(`ghostText_phraseSets_${trackId}`)
+      if (savedData) {
+        const persistenceData = JSON.parse(savedData)
+        const age = Date.now() - persistenceData.timestamp
 
-    // モデルタイプを明示的に設定
-    engine.modelType = currentModel
-    console.log('🎵 useGhostText: Set engine.modelType to:', currentModel)
+        // 5分以内のデータのみ復元（古いデータは破棄）
+        if (age < 300000 && persistenceData.phraseSets?.length > 0) {
+          console.log('💾 [RESTORATION] localStorage からphraseSets復元:', {
+            phraseSetsCount: persistenceData.phraseSets.length,
+            selectedIndex: persistenceData.selectedPhraseSetIndex,
+            age: `${Math.round(age / 1000)}秒前`,
+            trackId
+          })
 
-    // イベントリスナーの設定
+          setPhraseSets(persistenceData.phraseSets)
+          setSelectedPhraseSetIndex(persistenceData.selectedPhraseSetIndex || 0)
+          setPhraseSessionId(persistenceData.phraseSessionId)
+          setPhraseLocked(persistenceData.phraseLocked || false)
+
+          // window.ghostTextHook即座同期（遅延削除）
+          if (window.ghostTextHook) {
+            window.ghostTextHook.phraseSets = persistenceData.phraseSets
+            window.ghostTextHook.selectedPhraseSetIndex = persistenceData.selectedPhraseSetIndex || 0
+            window.ghostTextHook.ghostPredictions = persistenceData.phraseSets[0] || []
+            console.log('💾 [RESTORATION_SYNC] window.ghostTextHook同期完了（即座実行）')
+          }
+        } else {
+          console.log('💾 [RESTORATION] 古いデータを破棄:', { age: `${Math.round(age / 1000)}秒前` })
+          localStorage.removeItem(`ghostText_phraseSets_${trackId}`)
+        }
+      }
+    } catch (error) {
+      console.error('💾 [RESTORATION_ERROR] localStorage復元エラー:', error)
+    }
+
+    // 🚨 [CRITICAL_FIX] シンプルな遅延初期化（500ms）- 背景音声競合回避
+    console.log('⏳ [SIMPLE_DELAY] Ghost Text初期化を500ms遅延実行')
+
+    // イベントリスナーの設定（遅延しない）
     const handleStatusChange = (eventType, data) => {
       if (eventType === 'status') {
         setGhostTextStatus(data)
@@ -105,71 +137,71 @@ const useGhostText = (trackId, appSettings, notes) => {
     }
 
     const handlePrediction = (eventType, data) => {
-      if (eventType === 'prediction') {
-        // data.predictionsが配列であることを確認
-        if (Array.isArray(data.predictions)) {
-          setGhostPredictions(data.predictions)
-          // 🔴 [NEW] Reset index when new predictions are generated
-          if (data.predictions.length > 0) {
-            setNextGhostIndex(0)
-            console.log('🎯 Ghost predictions reset: nextGhostIndex → 0, count:', data.predictions.length)
-          } else {
-            setNextGhostIndex(0)
+          if (eventType === 'prediction') {
+            // data.predictionsが配列であることを確認
+            if (Array.isArray(data.predictions)) {
+              setGhostPredictions(data.predictions)
+              // 🔴 [NEW] Reset index when new predictions are generated
+              if (data.predictions.length > 0) {
+                setNextGhostIndex(0)
+                console.log('🎯 Ghost predictions reset: nextGhostIndex → 0, count:', data.predictions.length)
+              } else {
+                setNextGhostIndex(0)
+              }
+            } else {
+              console.warn('Ghost Text: predictions is not an array:', data.predictions)
+              setGhostPredictions([])
+              setNextGhostIndex(0)
+            }
           }
-        } else {
-          console.warn('Ghost Text: predictions is not an array:', data.predictions)
-          setGhostPredictions([])
-          setNextGhostIndex(0)
-        }
-      }
-      // 🔧 Problem 3修正: フレーズ予測イベントリスナー
-      if (eventType === 'phrasePrediction') {
-        // 🎵 [DIVERSITY_DEBUG] イベント受信詳細ログ
-        console.log('📥 [DIVERSITY_DEBUG][PHRASE_RECEIVED] useGhostText phrasePrediction受信:', {
-          eventType,
-          phraseNotesLength: data.phraseNotes?.length || 0,
-          locked: data.locked,
-          sessionId: data.sessionId,
-          timestamp: Date.now(),
-          rawData: data,
-          step: 'phrase_receive_start'
-        })
-
-        console.log('🎵 useGhostText: Received phrasePrediction event:', data.phraseNotes?.length || 0, 'locked:', data.locked, 'sessionId:', data.sessionId)
-        if (Array.isArray(data.phraseNotes)) {
-          console.log('✅ [DIVERSITY_DEBUG][PHRASE_ARRAY_OK] phraseNotesは配列:', {
-            length: data.phraseNotes.length,
-            firstNote: data.phraseNotes[0] || null,
-            step: 'phrase_array_validation'
-          })
-
-          setPhraseNotes(data.phraseNotes)
-          console.log('🔄 [DIVERSITY_DEBUG][PHRASE_SET] setPhraseNotes実行完了:', {
-            newLength: data.phraseNotes.length,
-            step: 'phrase_notes_updated'
-          })
-
-          // 🔴 [NEW] Reset phrase index when new phrase predictions are generated
-          if (data.phraseNotes.length > 0) {
-            console.log('🎯 [DIVERSITY_DEBUG][PHRASE_RESET] フレーズ状態リセット開始:', {
-              newIndex: 0,
+          // 🔧 Problem 3修正: フレーズ予測イベントリスナー
+          if (eventType === 'phrasePrediction') {
+            // 🎵 [DIVERSITY_DEBUG] イベント受信詳細ログ
+            console.log('📥 [DIVERSITY_DEBUG][PHRASE_RECEIVED] useGhostText phrasePrediction受信:', {
+              eventType,
+              phraseNotesLength: data.phraseNotes?.length || 0,
               locked: data.locked,
               sessionId: data.sessionId,
-              step: 'phrase_state_reset_start'
+              timestamp: Date.now(),
+              rawData: data,
+              step: 'phrase_receive_start'
             })
 
-            setNextPhraseIndex(0)
-            // 🔴 NEW: フレーズロック状態を設定
-            setPhraseLocked(data.locked !== undefined ? data.locked : true)
-            setPhraseSessionId(data.sessionId || `session-${Date.now()}`)
+            console.log('🎵 useGhostText: Received phrasePrediction event:', data.phraseNotes?.length || 0, 'locked:', data.locked, 'sessionId:', data.sessionId)
+            if (Array.isArray(data.phraseNotes)) {
+              console.log('✅ [DIVERSITY_DEBUG][PHRASE_ARRAY_OK] phraseNotesは配列:', {
+                length: data.phraseNotes.length,
+                firstNote: data.phraseNotes[0] || null,
+                step: 'phrase_array_validation'
+              })
 
-            console.log('✅ [DIVERSITY_DEBUG][PHRASE_STATE_UPDATED] フレーズ状態更新完了:', {
-              nextPhraseIndex: 0,
-              phraseLocked: data.locked !== undefined ? data.locked : true,
-              phraseSessionId: data.sessionId || `session-${Date.now()}`,
-              phraseNotesCount: data.phraseNotes.length,
-              step: 'phrase_state_update_complete'
-            })
+              setPhraseNotes(data.phraseNotes)
+              console.log('🔄 [DIVERSITY_DEBUG][PHRASE_SET] setPhraseNotes実行完了:', {
+                newLength: data.phraseNotes.length,
+                step: 'phrase_notes_updated'
+              })
+
+              // 🔴 [NEW] Reset phrase index when new phrase predictions are generated
+              if (data.phraseNotes.length > 0) {
+                console.log('🎯 [DIVERSITY_DEBUG][PHRASE_RESET] フレーズ状態リセット開始:', {
+                  newIndex: 0,
+                  locked: data.locked,
+                  sessionId: data.sessionId,
+                  step: 'phrase_state_reset_start'
+                })
+
+                setNextPhraseIndex(0)
+                // 🔴 NEW: フレーズロック状態を設定
+                setPhraseLocked(data.locked !== undefined ? data.locked : true)
+                setPhraseSessionId(data.sessionId || `session-${Date.now()}`)
+
+                console.log('✅ [DIVERSITY_DEBUG][PHRASE_STATE_UPDATED] フレーズ状態更新完了:', {
+                  nextPhraseIndex: 0,
+                  phraseLocked: data.locked !== undefined ? data.locked : true,
+                  phraseSessionId: data.sessionId || `session-${Date.now()}`,
+                  phraseNotesCount: data.phraseNotes.length,
+                  step: 'phrase_state_update_complete'
+                })
 
             console.log('🎯 Phrase predictions reset: nextPhraseIndex → 0, count:', data.phraseNotes.length, 'locked:', data.locked, 'sessionId:', data.sessionId)
           } else {
@@ -223,6 +255,33 @@ const useGhostText = (trackId, appSettings, notes) => {
           setPhraseSets(data.phraseSets)
           setSelectedPhraseSetIndex(data.selectedSetIndex || 0)
           setCurrentNoteIndex(0)  // セット切り替え時にリセット
+
+          // ⚡ [INSTANT_SYNC] window.ghostTextHookを遅延なしで即座に同期更新
+          // setTimeoutを削除し、受信と同時に直接更新
+          const instantHookData = {
+            ghostTextEnabled,
+            ghostPredictions,
+            phraseNotes,
+            phraseSets: data.phraseSets,  // 最新のフレーズセット
+            selectedPhraseSetIndex: data.selectedSetIndex || 0,
+            phraseLocked: true,  // フレーズセット受信時は承認可能状態
+            phraseSessionId: data.sessionId || `session-${Date.now()}`,
+            acceptNextPhraseNote,
+            selectNextPhraseSet,
+            selectPrevPhraseSet
+          }
+
+          // 遅延なしで即座に更新
+          window.ghostTextHook = instantHookData
+          window.phrasePredictions = data.phraseSets
+
+          console.log('⚡ [INSTANT_SYNC] window.ghostTextHook遅延なし同期完了:', {
+            phraseSetsCount: data.phraseSets?.length || 0,
+            selectedSetLength: (data.phraseSets[data.selectedSetIndex || 0]?.length || 0),
+            windowHookSet: !!window.ghostTextHook,
+            timestamp: Date.now(),
+            step: 'instant_sync_complete'
+          })
 
           // 🔴 FIX: TAB承認に必要な変数を初期化（4つ）+ baseTime設定
           const selectedSet = data.phraseSets[data.selectedSetIndex || 0]
@@ -278,18 +337,17 @@ const useGhostText = (trackId, appSettings, notes) => {
             phraseSessionId: data.sessionId || `session-${Date.now()}`
           })
         } else {
-          console.error('❌ [PHRASE_SETS_INVALID] phraseSetsが配列ではない:', {
+          console.warn('⚠️ [PHRASE_SETS_INVALID] phraseSetsが配列ではない（保持）:', {
             receivedType: typeof data.phraseSets,
-            receivedValue: data.phraseSets
+            receivedValue: data.phraseSets,
+            keepingExistingPhraseSets: true
           })
-          setPhraseSets([])
-          setSelectedPhraseSetIndex(0)
-          setCurrentNoteIndex(0)
-          // 🔴 FIX: エラー時は変数をクリア（4つ）
-          setNextPhraseIndex(0)
-          setNextGhostIndex(0)
-          setPhraseLocked(false)
-          setPhraseSessionId(null)
+          // 🔧 CRITICAL FIX: エラー時でもphraseSetsを保持し、リセットしない
+          // setPhraseSets([])  ← この行をコメントアウトしてphraseSets保持
+          console.log('🔧 [PHRASE_PRESERVE] 既存phraseSetsを保持:', {
+            currentPhraseSetsLength: phraseSets.length,
+            preserveReason: 'avoid_data_loss'
+          })
         }
 
         console.log('🏁 [PHRASE_SETS_PROCESS_COMPLETE] phrase-sets-generated処理完了')
@@ -302,62 +360,164 @@ const useGhostText = (trackId, appSettings, notes) => {
       }
     }
 
-    engine.addListener(handleStatusChange)
-    engine.addListener(handlePrediction)
-    engine.addListener(handlePerformanceUpdate)
+    // 🚨 [SIMPLE_DELAY] シンプルな遅延初期化
+    const delayedInitialization = setTimeout(async () => {
+      console.log('⏱️ [PERF] Ghost Text Engine 初期化開始')
+      const initStartTime = performance.now()
+      setIsInitializing(true)
 
-    // 初期化
-    engine.initialize().then((success) => {
-      const initEndTime = performance.now()
-      const initDuration = ((initEndTime - initStartTime) / 1000).toFixed(2)
-      console.log(`⏱️ [PERF] Ghost Text Engine 初期化完了: ${initDuration}秒`)
-      console.log('✅ 初期化結果:', { success, isInitialized: engine.isInitialized })
-
-      setGhostTextStatus({
-        isInitialized: true,
-        isActive: engine.isActive,
-        modelType: engine.modelType
-      })
-      setIsInitialized(true)
-      setIsInitializing(false)
-
-      // ghostTextEnabledの初期値を初期化完了後に確実に反映
-      console.log('🎵 Ghost Text有効化チェック:', {
-        ghostTextEnabledSetting: appSettings?.midiEditor?.ghostTextEnabled,
-        engineIsActive: engine.isActive
-      })
-
-      if (appSettings?.midiEditor?.ghostTextEnabled !== undefined) {
-        const shouldBeActive = appSettings.midiEditor.ghostTextEnabled
-        console.log('🎵 Ghost Text設定値に基づいて状態を設定:', shouldBeActive)
-        engine.setActive(shouldBeActive)
-
-        // 状態を確実に同期
-        const finalStatus = engine.getStatus()
-        console.log('🎵 最終状態:', finalStatus)
-        setGhostTextStatus(finalStatus)
-
-        if (shouldBeActive) {
-          console.log('🤖 Ghost Text機能を有効化完了')
-        } else {
-          console.log('🔒 Ghost Text機能を無効化状態で維持')
+      try {
+        if (!window.magentaGhostTextEngine) {
+          window.magentaGhostTextEngine = new MagentaGhostTextEngine()
         }
-      } else {
-        console.log('⚠️ Ghost Text設定が未定義のため、デフォルト状態を維持')
+
+        const engine = window.magentaGhostTextEngine
+        engine.modelType = currentModel
+
+        // イベントリスナー登録
+        engine.addListener(handleStatusChange)
+        engine.addListener(handlePrediction)
+        engine.addListener(handlePerformanceUpdate)
+
+        // 初期化実行
+        const success = await engine.initialize()
+
+        const initEndTime = performance.now()
+        const initDuration = ((initEndTime - initStartTime) / 1000).toFixed(2)
+        console.log(`⏱️ [PERF] Ghost Text Engine 初期化完了: ${initDuration}秒`)
+
+        if (success) {
+          setGhostTextStatus({
+            isInitialized: true,
+            isActive: engine.isActive,
+            modelType: engine.modelType
+          })
+          setIsInitialized(true)
+          setIsInitializing(false)
+
+          // 設定の反映
+          if (appSettings?.midiEditor?.ghostTextEnabled !== undefined) {
+            const shouldBeActive = appSettings.midiEditor.ghostTextEnabled
+            engine.setActive(shouldBeActive)
+            const finalStatus = engine.getStatus()
+            setGhostTextStatus(finalStatus)
+            console.log('🤖 Ghost Text設定適用完了:', shouldBeActive)
+          }
+
+          // 🔧 [CRITICAL_FIX] 初期化成功時にwindow.ghostTextHookを完全なhookDataで設定
+          window.ghostTextHook = {
+            ghostTextEnabled,
+            ghostPredictions: ghostPredictions || [],
+            phraseNotes: phraseNotes || [],
+            phraseSets: phraseSets || [],
+            selectedPhraseSetIndex: selectedPhraseSetIndex || -1,
+            phraseLocked: phraseLocked || false,
+            phraseSessionId: phraseSessionId || '',
+            acceptNextPhraseNote,
+            selectNextPhraseSet,
+            selectPrevPhraseSet,
+            initialized: true,
+            timestamp: Date.now(),
+            hasGhostNotes: (phraseNotes?.length || 0) > 0
+          }
+          console.log('✅ [GHOST_TEXT_SYNC] 初期化成功時にwindow.ghostTextHook設定完了', {
+            windowGhostTextHookSet: !!window.ghostTextHook,
+            initialized: window.ghostTextHook.initialized,
+            ghostTextEnabled: window.ghostTextHook.ghostTextEnabled,
+            phraseSetsCount: window.ghostTextHook.phraseSets?.length || 0,
+            phraseNotesCount: window.ghostTextHook.phraseNotes?.length || 0,
+            hasGhostNotes: window.ghostTextHook.hasGhostNotes
+          })
+
+          // 🆕 [EXISTING_NOTES_PREDICTION] 既存ノートがある場合は予測生成を実行
+          if (notes && notes.length > 0 && engine.isActive) {
+            console.log('🎵 [EXISTING_NOTES_PREDICTION] 既存ノート検出 - 予測生成実行中', {
+              notesCount: notes.length,
+              firstNote: notes[0],
+              timestamp: Date.now()
+            })
+
+            // 既存ノートを使って予測生成（正しいメソッド名を使用）
+            try {
+              engine.generatePrediction(notes)
+            } catch (error) {
+              console.error('❌ 既存ノート予測生成エラー:', error)
+            }
+          } else {
+            console.log('🎵 [EXISTING_NOTES_PREDICTION] 既存ノートなし - 予測生成スキップ', {
+              hasNotes: !!(notes && notes.length > 0),
+              notesCount: notes?.length || 0,
+              engineActive: engine.isActive
+            })
+          }
+        } else {
+          setIsInitializing(false)
+          console.error('❌ Ghost Text Engine 初期化失敗')
+        }
+      } catch (error) {
+        setIsInitializing(false)
+        setIsInitialized(false)
+        console.error('❌ Ghost Text 初期化エラー:', error)
       }
-    }).catch(error => {
-      console.error('❌ Ghost Text Engine 初期化エラー:', error)
-      console.error('❌ Error stack:', error.stack)
-      setIsInitializing(false)
-    })
+    }, 500) // 500ms遅延実行
 
     // クリーンアップ
     return () => {
-      engine.removeListener(handleStatusChange)
-      engine.removeListener(handlePrediction)
-      engine.removeListener(handlePerformanceUpdate)
+      // 🚨 [CRITICAL_FIX] クリーンアップ時に遅延初期化をキャンセル
+      clearTimeout(delayedInitialization)
+
+      // エンジンが存在する場合のみイベントリスナーを削除
+      if (window.magentaGhostTextEngine) {
+        const engine = window.magentaGhostTextEngine
+        engine.removeListener(handleStatusChange)
+        engine.removeListener(handlePrediction)
+        engine.removeListener(handlePerformanceUpdate)
+
+        // 🆕 [DEMO_SONG_FIX] プロジェクト切り替え時のエンジン状態リセット
+        console.log('🔄 [PROJECT_SWITCH] MagentaGhostTextEngine状態リセット: trackId変更検出')
+
+        // 安全なメソッド呼び出し - メソッドの存在確認
+        if (engine && typeof engine.reset === 'function') {
+          try {
+            engine.reset() // 予測状態をクリア
+            console.log('✅ [PROJECT_SWITCH] engine.reset() 成功')
+          } catch (error) {
+            console.log('⚠️ [PROJECT_SWITCH] engine.reset() エラー:', error.message)
+          }
+        } else {
+          console.log('ℹ️ [PROJECT_SWITCH] engine.reset() メソッドが存在しません')
+        }
+
+        if (engine && typeof engine.clearSession === 'function') {
+          try {
+            engine.clearSession() // セッション状態をクリア
+            console.log('✅ [PROJECT_SWITCH] engine.clearSession() 成功')
+          } catch (error) {
+            console.log('⚠️ [PROJECT_SWITCH] engine.clearSession() エラー:', error.message)
+          }
+        } else {
+          console.log('ℹ️ [PROJECT_SWITCH] engine.clearSession() メソッドが存在しません')
+        }
+      }
+
+      // window.ghostTextHook状態もリセット
+      window.ghostTextHook = {
+        ghostTextEnabled: false,
+        ghostPredictions: [],
+        phraseNotes: [],
+        phraseSets: [],
+        selectedPhraseSetIndex: -1,
+        phraseLocked: false,
+        phraseSessionId: null,
+        acceptNextPhraseNote: null,
+        selectNextPhraseSet: null,
+        selectPrevPhraseSet: null,
+        initialized: false,
+        timestamp: Date.now(),
+        hasGhostNotes: false
+      }
     }
-  }, []) // 🔧 Phase 2修正: 依存配列を空にして一度だけ実行
+  }, [trackId]) // 🔧 [LISTENER_FIX] trackId変更時のみ再初期化（notesの長さ変更では再初期化しない）
 
   // 🔧 Phase 2修正: 設定更新用の別useEffect（初期化なし）
   useEffect(() => {
@@ -377,6 +537,34 @@ const useGhostText = (trackId, appSettings, notes) => {
       currentModel: currentModel
     })
   }, [currentModel, ghostTextSettings, isInitialized])
+
+  // 🆕 [NEW_NOTE_PREDICTION] 新規ノート追加時の予測生成を監視
+  useEffect(() => {
+    if (!isInitialized || !ghostTextEnabled || !notes || notes.length === 0) {
+      return
+    }
+
+    const engine = window.magentaGhostTextEngine
+    if (!engine || !engine.isActive) {
+      return
+    }
+
+    console.log('🎵 [NEW_NOTE_PREDICTION] 新規ノート追加検出 - 予測生成実行', {
+      notesCount: notes.length,
+      isInitialized,
+      ghostTextEnabled,
+      engineActive: engine.isActive,
+      timestamp: Date.now()
+    })
+
+    // 新規ノートを使って予測生成
+    try {
+      engine.generatePrediction(notes)
+      console.log('✅ [NEW_NOTE_PREDICTION] 予測生成成功')
+    } catch (error) {
+      console.error('❌ [NEW_NOTE_PREDICTION] 予測生成エラー:', error)
+    }
+  }, [notes, isInitialized, ghostTextEnabled]) // notesの変更を監視
 
   // ghostTextEnabledの変更を監視してアクティブ状態を更新
   useEffect(() => {
@@ -490,6 +678,27 @@ const useGhostText = (trackId, appSettings, notes) => {
       updateModel()
     }
   }, [appSettings?.midiEditor, currentModel, isInitialized]) // 🔧 Phase 2修正: isInitializedを追加
+
+  // 🔧 [CRITICAL_FIX] ghostTextEnabled変更時のwindow.ghostTextHook同期
+  useEffect(() => {
+    if (isInitialized && window.magentaGhostTextEngine) {
+      console.log('🔄 [SYNC_FIX] ghostTextEnabled変更検出:', ghostTextEnabled)
+
+      // window.ghostTextHookの状態を同期更新
+      if (window.ghostTextHook) {
+        window.ghostTextHook = {
+          ...window.ghostTextHook,
+          isEnabled: ghostTextEnabled,
+          isInitialized: isInitialized,
+          ghostTextEnabled: ghostTextEnabled
+        }
+        console.log('✅ [SYNC_FIX] window.ghostTextHook同期完了:', {
+          isEnabled: window.ghostTextHook.isEnabled,
+          isInitialized: window.ghostTextHook.isInitialized
+        })
+      }
+    }
+  }, [ghostTextEnabled, isInitialized]) // ghostTextEnabled変更を監視
 
   // 🔧 修正: Ghost Text有効化/無効化の切り替え
   // 問題: 依存配列にghostTextEnabledが含まれていたため、古いクロージャー値を参照していた
@@ -1189,41 +1398,75 @@ const useGhostText = (trackId, appSettings, notes) => {
 
   // 🔴 [NEW] Issue #147: 候補切り替え機能 - フレーズ候補を次に切り替え
   const selectNextPhraseCandidate = useCallback(() => {
-    if (phraseNotes.length === 0) {
+    const currentPhraseSet = phraseSets[selectedPhraseSetIndex || 0] || []
+    if (currentPhraseSet.length === 0) {
       console.warn('⚠️ [CANDIDATE_SELECT_ISSUE147] No phrase predictions available')
       return
     }
 
     setNextPhraseIndex(prev => {
-      const nextIndex = (prev + 1) % phraseNotes.length
+      const nextIndex = (prev + 1) % currentPhraseSet.length
       console.log('🔄 [PHRASE_CANDIDATE_NEXT_ISSUE147] フレーズ候補切り替え:', {
         from: prev,
         to: nextIndex,
-        totalCandidates: phraseNotes.length,
-        newCandidate: phraseNotes[nextIndex]
+        totalCandidates: currentPhraseSet.length,
+        newCandidate: currentPhraseSet[nextIndex]
       })
+
+      // 🔔 チュートリアルイベント発火: Step 7用
+      try {
+        const tutorialEvent = new CustomEvent('tutorial:phrase-switched', {
+          detail: {
+            phraseIndex: nextIndex,
+            totalCandidates: currentPhraseSet.length,
+            source: 'phrase-candidate-switch'
+          }
+        })
+        console.log('🎓 [TUTORIAL] フレーズ切り替えイベント発火:', tutorialEvent.type)
+        window.dispatchEvent(tutorialEvent)
+      } catch (error) {
+        console.warn('⚠️ [TUTORIAL] フレーズ切り替えイベント発火失敗:', error)
+      }
+
       return nextIndex
     })
-  }, [phraseNotes])
+  }, [phraseSets, selectedPhraseSetIndex])
 
   // 🔴 [NEW] Issue #147: 候補切り替え機能 - フレーズ候補を前に切り替え
   const selectPrevPhraseCandidate = useCallback(() => {
-    if (phraseNotes.length === 0) {
+    const currentPhraseSet = phraseSets[selectedPhraseSetIndex || 0] || []
+    if (currentPhraseSet.length === 0) {
       console.warn('⚠️ [CANDIDATE_SELECT_ISSUE147] No phrase predictions available')
       return
     }
 
     setNextPhraseIndex(prev => {
-      const prevIndex = (prev - 1 + phraseNotes.length) % phraseNotes.length
+      const prevIndex = (prev - 1 + currentPhraseSet.length) % currentPhraseSet.length
       console.log('🔄 [PHRASE_CANDIDATE_PREV_ISSUE147] フレーズ候補切り替え:', {
         from: prev,
         to: prevIndex,
-        totalCandidates: phraseNotes.length,
-        newCandidate: phraseNotes[prevIndex]
+        totalCandidates: currentPhraseSet.length,
+        newCandidate: currentPhraseSet[prevIndex]
       })
+
+      // 🔔 チュートリアルイベント発火: Step 7用
+      try {
+        const tutorialEvent = new CustomEvent('tutorial:phrase-switched', {
+          detail: {
+            phraseIndex: prevIndex,
+            totalCandidates: currentPhraseSet.length,
+            source: 'phrase-candidate-switch'
+          }
+        })
+        console.log('🎓 [TUTORIAL] フレーズ切り替えイベント発火:', tutorialEvent.type)
+        window.dispatchEvent(tutorialEvent)
+      } catch (error) {
+        console.warn('⚠️ [TUTORIAL] フレーズ切り替えイベント発火失敗:', error)
+      }
+
       return prevIndex
     })
-  }, [phraseNotes])
+  }, [phraseSets, selectedPhraseSetIndex])
 
   // 🆕 v2.0.0: フレーズセット切り替え関数
   const selectNextPhraseSet = useCallback(() => {
@@ -1617,6 +1860,13 @@ const useGhostText = (trackId, appSettings, notes) => {
         }
       }
 
+      // 🎓 [TUTORIAL_FIX] チュートリアル実行中は承認イベントを発火
+      const isTutorialActive = !localStorage.getItem('dawai_tutorial_completed')
+      if (isTutorialActive && result && result.success) {
+        console.log('🎓 [TUTORIAL_FIX] チュートリアル実行中 - tutorial:completion-acceptedイベントを発火')
+        window.dispatchEvent(new CustomEvent('tutorial:completion-accepted'))
+      }
+
       // 📊 メトリクス更新
       diversityMetricsRef.totalApprovals++
 
@@ -1661,6 +1911,24 @@ const useGhostText = (trackId, appSettings, notes) => {
     console.log('🎯 [DIVERSITY_DEBUG] Target: document')
     console.log('🎯 [DIVERSITY_DEBUG] trackId:', trackId)
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+
+    // 🔧 CRITICAL FIX: phraseSets状態をlocalStorageに保存（タブ切り替え対応）
+    if (phraseSets.length > 0) {
+      const persistenceData = {
+        phraseSets,
+        selectedPhraseSetIndex,
+        phraseSessionId,
+        phraseLocked,
+        timestamp: Date.now(),
+        trackId
+      }
+      localStorage.setItem(`ghostText_phraseSets_${trackId}`, JSON.stringify(persistenceData))
+      console.log('💾 [PERSISTENCE] phraseSets状態をlocalStorageに保存:', {
+        phraseSetsCount: phraseSets.length,
+        selectedIndex: selectedPhraseSetIndex,
+        trackId
+      })
+    }
 
     // クリーンアップ関数
     return () => {
@@ -1739,10 +2007,63 @@ const useGhostText = (trackId, appSettings, notes) => {
   }
 
   // 🔧 [CRITICAL_FIX] windowオブジェクトへのエクスポート（デバッグ用）
+  // 🚀 [FORCE RELOAD] 強制HMR更新実行中...
+
+  // 🎯 [EXISTING_NOTES_FIX] phraseSets → ghostPredictions 変換処理
+  const convertedGhostPredictions = useMemo(() => {
+    console.log('🔧 [USEMEMO_DEBUG] 変換処理開始:', {
+      phraseSetsLength: phraseSets?.length || 0,
+      selectedPhraseSetIndex: selectedPhraseSetIndex,
+      phraseSetsType: Array.isArray(phraseSets),
+      indexValid: selectedPhraseSetIndex >= 0 && selectedPhraseSetIndex < (phraseSets?.length || 0)
+    })
+
+    if (phraseSets?.length > 0 && selectedPhraseSetIndex >= 0 && selectedPhraseSetIndex < phraseSets.length) {
+      const currentPhraseSet = phraseSets[selectedPhraseSetIndex]
+      console.log('🎯 [EXISTING_NOTES_FIX] phraseSets → ghostPredictions 変換:', {
+        phraseSetsLength: phraseSets.length,
+        selectedPhraseSetIndex: selectedPhraseSetIndex,
+        currentPhraseSetLength: currentPhraseSet?.length || 0,
+        currentPhraseSetType: Array.isArray(currentPhraseSet),
+        firstNote: currentPhraseSet?.[0],
+        convertedType: 'phraseSet_to_ghostPredictions'
+      })
+      return currentPhraseSet || []
+    } else {
+      console.log('🎯 [EXISTING_NOTES_FIX] ghostPredictions フォールバック使用:', {
+        phraseSetsLength: phraseSets?.length || 0,
+        selectedPhraseSetIndex: selectedPhraseSetIndex,
+        ghostPredictionsLength: ghostPredictions?.length || 0,
+        convertedType: 'original_ghostPredictions'
+      })
+      return ghostPredictions || []
+    }
+  }, [phraseSets, selectedPhraseSetIndex, ghostPredictions])
+
   const hookData = {
-    ghostTextEnabled, ghostPredictions, phraseNotes, phraseSets,
+    ghostTextEnabled,
+    ghostPredictions: convertedGhostPredictions,
+    phraseNotes,
+    phraseSets,
     selectedPhraseSetIndex, phraseLocked, phraseSessionId,
-    acceptNextPhraseNote, selectNextPhraseSet, selectPrevPhraseSet
+    acceptNextPhraseNote, selectNextPhraseSet, selectPrevPhraseSet,
+    // 🔧 [FIX] Ghost Text表示機能を追加 (実際に実装されている関数のみ)
+    showGhostText: showGhostText,                    // state変数
+    toggleShowGhostText: toggleShowGhostText,        // function (695行)
+    acceptGhostPrediction: acceptGhostPrediction,    // function (758行)
+    acceptAllGhostPredictions: acceptAllGhostPredictions,  // function (789行)
+    acceptAllPhrasePredictions: acceptAllPhrasePredictions, // function (824行)
+    clearGhostPredictions: clearGhostPredictions,    // function (1568行)
+    selectNextPhraseCandidate: selectNextPhraseCandidate,  // function (1364行)
+    selectPrevPhraseCandidate: selectPrevPhraseCandidate,  // function (1383行)
+    getCurrentPhraseSet: getCurrentPhraseSet,        // function (1507行)
+    getCurrentNote: getCurrentNote,                  // function (1527行)
+    getNextNote: getNextNote,                       // function (1548行)
+    toggleGhostText: toggleGhostText,               // function (670行)
+    updateGhostTextSettings: updateGhostTextSettings, // function (705行)
+    changeModel: changeModel,                       // function (713行)
+    processMidiInput: processMidiInput,             // function (1576行)
+    generateTestPrediction: generateTestPrediction   // function (1583行)
   }
 
   // 🔧 [FIX_TAB_APPROVAL] 初回マウント時のwindow.ghostTextHook設定（空配列で確実に実行）
@@ -1835,7 +2156,7 @@ const useGhostText = (trackId, appSettings, notes) => {
       hookExported: true
     })
     */
-  }, [phraseSets, phraseNotes, ghostPredictions, ghostTextEnabled, selectedPhraseSetIndex, phraseLocked, phraseSessionId]) // 🔧 主要データに依存（hookData除外で循環依存回避）
+  }, [phraseSets, ghostPredictions]) // 🔧 最小限の依存（タブ切り替え時の頻繁な実行を防止）
 
   // 元のuseEffect（依存配列をログ出力）
   useEffect(() => {

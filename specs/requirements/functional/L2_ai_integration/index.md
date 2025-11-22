@@ -350,6 +350,7 @@ const diffsingerSettings = {
 - **1音ずつ承認UI**: Spaceキーで次のノートを承認、Backspaceで取り消し
 
 **詳細ドキュメント**:
+- **[L3: Ghost Textシステム全体像](./L3_ghost_text_system_overview.md)** - 🆕 **システム全体像・機能構成・処理フロー・強み（プレゼンテーション向け）**
 - **[L3: Ghost Text機能強化要件仕様書](./L3_ghost_text_requirements.md)** - 基本仕様（複数候補、フレーズベース予測）
 - **[L3: Ghost Text補完機能 - ユーザーガイド](./L3_ghost_text_user_guide.md)** - 初心者向けの詳しい使い方ガイド
 - **[L3: Ghost Textジャンル・スケール対応機能要件](./L3_ghost_text_enhancement.md)** - 音楽理論統合の技術仕様

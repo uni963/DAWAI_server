@@ -36,6 +36,10 @@ class UnifiedAudioSystem {
     // 🎹 Piano Track最適化: よく使う音域のプリロード状態
     this.preloadedSamples = new Set();
     this.isPreloading = false;
+
+    // Priority 1 修正: Promiseベース重複読み込み防止
+    // 現在読み込み中のファイルのPromiseを管理（重複fetch防止）
+    this.loadingPromises = new Map();
   }
 
   // 初期化
@@ -235,66 +239,200 @@ class UnifiedAudioSystem {
   }
 
   // 音声ファイルを読み込む（デバッグコンソールと同じ方法）
+  // 音声ファイルを読み込む（Priority 1修正: 重複読み込み防止機能追加）
   async loadAudioFile(filename, isPiano = false) {
+    // キャッシュチェック: 既にデコード済みの場合は即座に返す
     if (this.audioBuffers[filename]) {
       return this.audioBuffers[filename];
     }
 
-    try {
-      let filePath;
-
-      // DiffSinger音声: 完全URLはそのまま使用
-      if (filename.startsWith('http://') || filename.startsWith('https://')) {
-        filePath = filename;
-        console.log(`🎤 [UnifiedAudio] DiffSinger音声読み込み: ${filePath}`);
-      } else {
-        // ピアノ/ドラム音: 既存のパス構築ロジック
-        filePath = isPiano
-          ? `/sounds/MuseScore_General/samples/piano/${filename}`
-          : `/sounds/MuseScore_General/samples/${filename}`;
-        console.log(`📁 [UnifiedAudio] 楽器サンプル読み込み: ${filePath} (${isPiano ? 'ピアノ' : 'ドラム'})`);
-      }
-
-      const response = await fetch(filePath);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const arrayBuffer = await response.arrayBuffer();
-      const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
-      this.audioBuffers[filename] = audioBuffer;
-
-      console.log(`✅ 音声デコード成功: ${audioBuffer.duration}s, ${audioBuffer.numberOfChannels}ch, ${audioBuffer.sampleRate}Hz`);
-      return audioBuffer;
-    } catch (error) {
-      console.error(`❌ 音声ファイルの読み込みに失敗: ${filename}`, error);
-      return null;
+    // 重複読み込み防止: 同じファイルの読み込み中Promiseを再利用
+    if (this.loadingPromises.has(filename)) {
+      console.log(`[LOAD_OPTIMIZE] 既存の読み込みPromiseを再利用: ${filename}`);
+      return this.loadingPromises.get(filename);
     }
+
+    // 新規読み込みPromiseを作成
+    const loadPromise = (async () => {
+      try {
+        let filePath;
+
+        // DiffSinger音声: 完全URLはそのまま使用
+        if (filename.startsWith('http://') || filename.startsWith('https://')) {
+          filePath = filename;
+          console.log(`[UnifiedAudio] DiffSinger音声読み込み: ${filePath}`);
+        } else {
+          // ピアノ/ドラム音: 特殊文字を適切にエンコードしてパス構築
+          const encodedFilename = encodeURIComponent(filename);
+          filePath = isPiano
+            ? `/sounds/MuseScore_General/samples/piano/${encodedFilename}`
+            : `/sounds/MuseScore_General/samples/${encodedFilename}`;
+          console.log(`[UnifiedAudio] 楽器サンプル読み込み: ${filePath} (${isPiano ? 'ピアノ' : 'ドラム'})`);
+
+          console.log('[PATH_DEBUG] =================================');
+          console.log('[PATH_DEBUG] ファイルパス詳細情報（URL修正版）');
+          console.log('[PATH_DEBUG] =================================');
+          console.log('[PATH_DEBUG] 元ファイル名:', filename);
+          console.log('[PATH_DEBUG] エンコード後ファイル名:', encodedFilename);
+          console.log('[PATH_DEBUG] isPiano:', isPiano);
+          console.log('[PATH_DEBUG] 構築されたパス:', filePath);
+          console.log('[PATH_DEBUG] 完全URL:', `${window.location.origin}${filePath}`);
+          console.log('[PATH_DEBUG] =================================');
+        }
+
+        console.log('[FETCH_DEBUG] fetch開始:', filePath);
+        const response = await fetch(filePath);
+        console.log('[FETCH_DEBUG] fetch応答:', {
+          status: response.status,
+          statusText: response.statusText,
+          ok: response.ok,
+          url: response.url,
+          headers: {
+            'content-type': response.headers.get('content-type'),
+            'content-length': response.headers.get('content-length')
+          }
+        });
+
+        if (!response.ok) {
+          console.error('[FETCH_DEBUG] fetch失敗詳細:', {
+            requestedUrl: filePath,
+            actualUrl: response.url,
+            status: response.status,
+            statusText: response.statusText
+          });
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        console.log('[DECODE_DEBUG] arrayBuffer取得開始');
+
+        // 小さいファイルサイズ（＜10KB）の場合はテキストとして内容を確認
+        const contentLength = response.headers.get('content-length');
+        console.log('[DECODE_DEBUG] Content-Length:', contentLength);
+
+        if (contentLength && parseInt(contentLength) < 10000) {
+          console.warn('[DECODE_DEBUG] ファイルサイズが小さすぎます（10KB未満）- テキスト内容を確認');
+          const textClone = response.clone();
+          const textContent = await textClone.text();
+          console.log('[DECODE_DEBUG] ===== レスポンス詳細情報 =====');
+          console.log('[DECODE_DEBUG] レスポンス状態:', response.status, response.statusText);
+          console.log('[DECODE_DEBUG] レスポンスURL:', response.url);
+          console.log('[DECODE_DEBUG] Content-Type:', response.headers.get('content-type'));
+          console.log('[DECODE_DEBUG] Content-Length:', response.headers.get('content-length'));
+          console.log('[DECODE_DEBUG] テキスト長:', textContent.length);
+          console.log('[DECODE_DEBUG] テキスト型:', typeof textContent);
+          console.log('[DECODE_DEBUG] レスポンス内容（先頭500文字）:');
+          if (textContent.length === 0) {
+            console.log('[DECODE_DEBUG] *** レスポンス内容が完全に空です ***');
+          } else {
+            console.log(`"${textContent.substring(0, 500)}"`);
+          }
+          console.log('[DECODE_DEBUG] ===============================');
+        }
+
+        const arrayBuffer = await response.arrayBuffer();
+        console.log('[DECODE_DEBUG] arrayBuffer取得成功:', {
+          byteLength: arrayBuffer.byteLength,
+          type: arrayBuffer.constructor.name,
+          hasData: arrayBuffer.byteLength > 0,
+          isLikelyAudio: arrayBuffer.byteLength > 10000
+        });
+
+        console.log('[DECODE_DEBUG] decodeAudioData開始');
+        const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+        console.log('[DECODE_DEBUG] decodeAudioData成功:', {
+          duration: audioBuffer.duration,
+          numberOfChannels: audioBuffer.numberOfChannels,
+          sampleRate: audioBuffer.sampleRate,
+          length: audioBuffer.length
+        });
+
+        // キャッシュに保存
+        this.audioBuffers[filename] = audioBuffer;
+
+        console.log(`音声デコード成功: ${audioBuffer.duration}s, ${audioBuffer.numberOfChannels}ch, ${audioBuffer.sampleRate}Hz`);
+        return audioBuffer;
+      } catch (error) {
+        console.error('[DECODE_DEBUG] =================================');
+        console.error('[DECODE_DEBUG] 音声処理エラー詳細');
+        console.error('[DECODE_DEBUG] =================================');
+        console.error('[DECODE_DEBUG] ファイル名:', filename);
+        console.error('[DECODE_DEBUG] エラー種別:', error.name);
+        console.error('[DECODE_DEBUG] エラーメッセージ:', error.message);
+        console.error('[DECODE_DEBUG] エラー詳細:', error);
+        console.error('[DECODE_DEBUG] AudioContext状態:', this.audioContext.state);
+        console.error('[DECODE_DEBUG] =================================');
+        return null;
+      } finally {
+        // 読み込み完了後、Promiseマップから削除
+        this.loadingPromises.delete(filename);
+      }
+    })();
+
+    // 読み込み中Promiseを保存（重複fetch防止）
+    this.loadingPromises.set(filename, loadPromise);
+    return loadPromise;
   }
 
   // ピアノ音を再生（デバッグコンソールと同じ方法）
   async playPianoNote(key, velocity = 0.8) {
+    console.log('🎹 [PIANO_ENGINE_DEBUG] =================================');
+    console.log('🎹 [PIANO_ENGINE_DEBUG] playPianoNote開始');
+    console.log('🎹 [PIANO_ENGINE_DEBUG] =================================');
+    console.log('🎹 [PIANO_ENGINE_DEBUG] 入力MIDI note:', key);
+    console.log('🎹 [PIANO_ENGINE_DEBUG] velocity:', velocity);
+
     if (!this.isInitialized) {
+      console.log('🎹 [PIANO_ENGINE_DEBUG] 音声システム未初期化、初期化実行中...');
       const success = await this.initialize();
-      if (!success) return null;
+      if (!success) {
+        console.log('🎹 [PIANO_ENGINE_DEBUG] 初期化失敗');
+        return null;
+      }
+      console.log('🎹 [PIANO_ENGINE_DEBUG] 初期化成功');
     }
 
     const keyInfo = pianoKeyMapping[key];
+    console.log('🎹 [PIANO_ENGINE_DEBUG] pianoKeyMapping結果:', keyInfo);
+
     if (!keyInfo) {
-      console.warn(`⚠️ ピアノキーが見つかりません: ${key}`);
+      console.warn(`⚠️ [PIANO_ENGINE_DEBUG] ピアノキーが見つかりません: ${key}`);
+      console.log('🎹 [PIANO_ENGINE_DEBUG] 利用可能なキー:', Object.keys(pianoKeyMapping));
       return null;
     }
 
+    console.log('🎹 [PIANO_ENGINE_DEBUG] キー情報詳細:', {
+      sample: keyInfo.sample,
+      note: keyInfo.note,
+      octave: keyInfo.octave,
+      type: keyInfo.type
+    });
+
     try {
+      console.log('🎹 [PIANO_ENGINE_DEBUG] 音声ファイルロード開始:', keyInfo.sample);
       const audioBuffer = await this.loadAudioFile(keyInfo.sample, true);
+
+      console.log('🎹 [PIANO_ENGINE_DEBUG] ロード結果:', {
+        success: !!audioBuffer,
+        bufferLength: audioBuffer?.length,
+        bufferDuration: audioBuffer?.duration,
+        bufferSampleRate: audioBuffer?.sampleRate
+      });
+
       if (!audioBuffer) {
-        console.warn(`⚠️ ピアノ音ファイルが見つかりません: ${keyInfo.sample}`);
+        console.warn(`⚠️ [PIANO_ENGINE_DEBUG] ピアノ音ファイルが見つかりません: ${keyInfo.sample}`);
         return null;
       }
 
-      return await this.playAudioBuffer(audioBuffer, keyInfo, velocity, 'piano');
+      console.log('🎹 [PIANO_ENGINE_DEBUG] playAudioBuffer呼び出し開始');
+      const result = await this.playAudioBuffer(audioBuffer, keyInfo, velocity, 'piano');
+      console.log('🎹 [PIANO_ENGINE_DEBUG] playAudioBuffer結果:', result);
+      console.log('🎹 [PIANO_ENGINE_DEBUG] =================================');
+
+      return result;
     } catch (error) {
-      console.error(`❌ ピアノ音の再生に失敗: ${error.message}`);
+      console.error(`❌ [PIANO_ENGINE_DEBUG] ピアノ音の再生に失敗: ${error.message}`);
+      console.error('❌ [PIANO_ENGINE_DEBUG] エラー詳細:', error);
+      console.log('🎹 [PIANO_ENGINE_DEBUG] =================================');
       return null;
     }
   }
@@ -754,11 +892,38 @@ class UnifiedAudioSystem {
     
     // ミュート状態の場合は音量を0にする
     if (isMuted) {
+      console.log('🔍 [VOLUME_DEBUG] ミュート状態により音量を0に設定');
       trackVolume = 0;
     }
-    
+
+    console.log('🔍 [VOLUME_DEBUG] =================================');
+    console.log('🔍 [VOLUME_DEBUG] 最終音量計算');
+    console.log('🔍 [VOLUME_DEBUG] =================================');
+    console.log('🔍 [VOLUME_DEBUG] baseVolume:', baseVolume);
+    console.log('🔍 [VOLUME_DEBUG] trackVolume:', trackVolume);
+    console.log('🔍 [VOLUME_DEBUG] this.masterVolume:', this.masterVolume);
+
     // 最終音量計算：ベース音量 × トラック音量 × マスターボリューム（velocityは除外）
     const finalVolume = baseVolume * trackVolume * this.masterVolume;
+
+    console.log('🔍 [VOLUME_DEBUG] 計算式:', `${baseVolume} × ${trackVolume} × ${this.masterVolume} = ${finalVolume}`);
+    console.log('🔍 [VOLUME_DEBUG] 最終音量:', finalVolume);
+
+    if (finalVolume === 0) {
+      console.error('🚨 [VOLUME_DEBUG] !!!!! 最終音量が0です - 音が聞こえません !!!!');
+      console.error('🚨 [VOLUME_DEBUG] 原因分析:');
+      if (baseVolume === 0) {
+        console.error('🚨 [VOLUME_DEBUG] - baseVolume が 0');
+      }
+      if (trackVolume === 0) {
+        console.error('🚨 [VOLUME_DEBUG] - trackVolume が 0 (トラック未発見またはミュート)');
+      }
+      if (this.masterVolume === 0) {
+        console.error('🚨 [VOLUME_DEBUG] - masterVolume が 0');
+      }
+    }
+    console.log('🔍 [VOLUME_DEBUG] =================================');
+
     gainNode.gain.value = finalVolume;
     
     // 接続（マスターボリュームを経由）
@@ -1111,6 +1276,8 @@ class UnifiedAudioSystem {
   }
 
   // 同期的なピアノ音再生（クリック・キーボード用）
+  // 同期的なピアノ音再生（クリック・キーボード用）
+  // Priority 1修正: プリロード済みファイルは即座再生（<10ms）
   playPianoNoteSync(pitch, velocity = 0.8) {
     if (!this.isInitialized) {
       console.warn('音声システムが初期化されていません');
@@ -1118,8 +1285,8 @@ class UnifiedAudioSystem {
     }
 
     try {
-      console.log(`🎹 同期的ピアノ音再生: ${pitch}, velocity: ${velocity}`);
-      
+      console.log(`同期的ピアノ音再生: ${pitch}, velocity: ${velocity}`);
+
       // ピアノキーマッピングから音ファイル情報を取得
       const keyInfo = pianoKeyMapping[pitch];
       if (!keyInfo) {
@@ -1127,25 +1294,50 @@ class UnifiedAudioSystem {
         return null;
       }
 
-      // 音ファイルを読み込んで再生（Promiseチェーンで非同期処理対応）
-      this.loadAudioFile(keyInfo.sample, true).then(async audioBuffer => {
-        if (audioBuffer) {
-          try {
-            const result = await this.playAudioBuffer(audioBuffer, keyInfo, velocity, 'piano');
-            if (result && result.soundId) {
-              console.log(`🎹 同期的ピアノ音再生完了: ${result.soundId}`);
-            } else {
-              console.log(`🎹 ピアノ音再生実行済み (soundId=${result?.soundId})`);
-            }
-          } catch (audioError) {
-            console.error('🎹 playAudioBuffer実行エラー:', audioError);
-          }
-        }
-      }).catch(error => {
-        console.error('同期的ピアノ音再生エラー:', error);
-      });
+      // キャッシュチェック: プリロード済みの場合は即座再生（真の同期処理）
+      const cachedBuffer = this.audioBuffers[keyInfo.sample];
 
-      return { pitch, velocity, type: 'piano' };
+      if (cachedBuffer) {
+        // プリロード済み: 即座に再生（<10ms）
+        console.log(`[SYNC_PLAY] プリロード済みファイルを即座再生: ${keyInfo.sample}`);
+
+        // playAudioBuffer は async だが、await せずに fire-and-forget で実行
+        // （音声再生の開始自体は同期的に行われ、完了を待つ必要はない）
+        this.playAudioBuffer(cachedBuffer, keyInfo, velocity, 'piano')
+          .then(result => {
+            if (result && result.soundId) {
+              console.log(`即座再生完了: ${result.soundId}`);
+            }
+          })
+          .catch(error => {
+            console.error('即座再生エラー:', error);
+          });
+
+        return { pitch, velocity, type: 'piano', cached: true };
+
+      } else {
+        // 未読み込み: バックグラウンドで読み込み + 次回から即座再生
+        console.log(`[SYNC_PLAY] バックグラウンド読み込み開始: ${keyInfo.sample}`);
+
+        // 非同期でロード + 再生（ユーザーには待たせない）
+        this.loadAudioFile(keyInfo.sample, true).then(async audioBuffer => {
+          if (audioBuffer) {
+            try {
+              const result = await this.playAudioBuffer(audioBuffer, keyInfo, velocity, 'piano');
+              if (result && result.soundId) {
+                console.log(`バックグラウンド再生完了: ${result.soundId}`);
+              }
+            } catch (audioError) {
+              console.error('playAudioBuffer実行エラー:', audioError);
+            }
+          }
+        }).catch(error => {
+          console.error('同期的ピアノ音再生エラー:', error);
+        });
+
+        // バックグラウンド処理を開始したことを返す（次回はキャッシュから即座再生）
+        return { pitch, velocity, type: 'piano', cached: false, loading: true };
+      }
     } catch (error) {
       console.error('同期的ピアノ音再生エラー:', error);
       return null;

@@ -258,6 +258,10 @@ const TabBar = ({
                   : 'text-gray-300 hover:text-white hover:bg-gray-700'
               }`}
               data-tab-id={tab.id}
+              data-tutorial={
+                tab.id === 'arrangement' ? 'arrangement-tab' :
+                tab.title.includes('Piano') ? 'piano-track-tab' : undefined
+              }
               onClick={(e) => {
                 console.log('🚀🚀🚀 TABBAR ONCLICK HANDLER CALLED!!! Tab:', tab.id, 'current active:', activeTab)
                 console.log('🔧 TAB CLICK: ', tab.id, 'current active:', activeTab)
@@ -274,6 +278,13 @@ const TabBar = ({
                 console.log('🔥🔥🔥 TABBAR: Current activeTab before setActiveTab:', activeTab)
 
                 setActiveTab(tab.id)
+
+                // チュートリアル用イベント発火
+                if (tab.id === 'arrangement') {
+                  window.dispatchEvent(new CustomEvent('tutorial:arrangement-view'))
+                } else {
+                  window.dispatchEvent(new CustomEvent('tutorial:tab-switch'))
+                }
 
                 // クリック後、ボタンに確実にフォーカスを設定（複数回試行）
                 if (e.currentTarget) {
@@ -380,8 +391,8 @@ const TabBar = ({
                     key={trackType.id}
                     className="block w-full text-left px-4 py-3 text-sm text-gray-800 dark:text-white hover:bg-gray-100/80 dark:hover:bg-gray-800/80 transition-all duration-200 flex items-center group"
                     onClick={() => {
-                      // 統一トラックタイプのIDを使用してタブを追加
-                      addNewTab(trackType.tabType, trackType.id)
+                      // 🔧 FIX: 正しい引数順序でトラックタイプIDを渡す
+                      addNewTab(trackType.id, false)
                       setShowTrackMenu(false)
                     }}
                   >

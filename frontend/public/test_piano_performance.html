@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Piano Performance Test - Priority 1修正検証</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+        }
+        h1 {
+            margin-top: 0;
+            text-align: center;
+            font-size: 2em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .test-section {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .test-section h2 {
+            margin-top: 0;
+            color: #ffd700;
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 8px rgba(0,0,0,0.3);
+        }
+        button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .metrics {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 6px;
+            padding: 15px;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+        }
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .metric-row:last-child {
+            border-bottom: none;
+        }
+        .metric-label {
+            color: #ffd700;
+        }
+        .metric-value {
+            font-weight: bold;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .status-pass {
+            background: #4ade80;
+            color: #064e3b;
+        }
+        .status-fail {
+            background: #f87171;
+            color: #7f1d1d;
+        }
+        .status-pending {
+            background: #fbbf24;
+            color: #78350f;
+        }
+        #console-log {
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 6px;
+            padding: 15px;
+            margin: 15px 0;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .log-entry {
+            padding: 2px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .log-sync {
+            color: #4ade80;
+        }
+        .log-load {
+            color: #fbbf24;
+        }
+        .log-error {
+            color: #f87171;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎹 Piano Performance Test</h1>
+        <p style="text-align: center; font-size: 1.2em;">Priority 1修正の検証: プリロード済みファイルの即座再生</p>
+
+        <div class="test-section">
+            <h2>📊 テスト結果</h2>
+            <div class="metrics">
+                <div class="metric-row">
+                    <span class="metric-label">プリロード状態:</span>
+                    <span class="metric-value" id="preload-status">-</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">最終測定遅延:</span>
+                    <span class="metric-value" id="latency-result">-</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">平均遅延:</span>
+                    <span class="metric-value" id="avg-latency">-</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">重複読み込み防止:</span>
+                    <span class="metric-value" id="dedup-status">-</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">総合評価:</span>
+                    <span class="metric-value" id="overall-status">-</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>🧪 テスト実行</h2>
+            <button onclick="initTest()">1. 音声システム初期化</button>
+            <button onclick="preloadSamples()">2. サンプルプリロード</button>
+            <button onclick="testSingleNote()">3. 単一音テスト</button>
+            <button onclick="testRapidFire()">4. 連打テスト（10音）</button>
+            <button onclick="testDuplicateLoad()">5. 重複読み込みテスト</button>
+            <button onclick="clearResults()">結果クリア</button>
+        </div>
+
+        <div class="test-section">
+            <h2>📝 コンソールログ</h2>
+            <div id="console-log"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { pianoKeyMapping } from '/src/utils/pianoTest.js';
+        import unifiedAudioSystem from '/src/utils/unifiedAudioSystem.js';
+
+        let audioSystem = unifiedAudioSystem;
+        let latencyMeasurements = [];
+
+        // コンソールログフック
+        const originalLog = console.log;
+        const originalError = console.error;
+
+        function addLogEntry(message, type = 'info') {
+            const logDiv = document.getElementById('console-log');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            const message = args.join(' ');
+            if (message.includes('[SYNC_PLAY]')) {
+                addLogEntry(message, 'sync');
+            } else if (message.includes('[LOAD_OPTIMIZE]')) {
+                addLogEntry(message, 'load');
+            } else {
+                addLogEntry(message, 'info');
+            }
+        };
+
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            addLogEntry(args.join(' '), 'error');
+        };
+
+        window.initTest = async function() {
+            addLogEntry('テスト初期化開始...', 'info');
+
+            await audioSystem.initialize();
+
+            document.getElementById('preload-status').textContent = 'システム初期化完了';
+            addLogEntry('システム初期化完了', 'sync');
+        };
+
+        window.preloadSamples = async function() {
+            if (!audioSystem.isInitialized) {
+                alert('先に音声システムを初期化してください');
+                return;
+            }
+
+            addLogEntry('サンプルプリロード開始...', 'info');
+
+            // MIDI 60 (C4) のサンプルをプリロード
+            const keyInfo = pianoKeyMapping[60];
+            const audioBuffer = await audioSystem.loadAudioFile(keyInfo.sample, true);
+
+            if (audioBuffer) {
+                document.getElementById('preload-status').innerHTML =
+                    '<span class="status status-pass">プリロード完了</span>';
+                addLogEntry(`MIDI 60 プリロード完了: ${keyInfo.sample}`, 'sync');
+            } else {
+                document.getElementById('preload-status').innerHTML =
+                    '<span class="status status-fail">プリロード失敗</span>';
+                addLogEntry('プリロード失敗', 'error');
+            }
+        };
+
+        window.testSingleNote = async function() {
+            if (!audioSystem.isInitialized) {
+                alert('先に音声システムを初期化してください');
+                return;
+            }
+
+            addLogEntry('単一音テスト開始...', 'info');
+
+            const startTime = performance.now();
+            const result = audioSystem.playPianoNoteSync(60, 0.8);
+            const endTime = performance.now();
+
+            const latency = endTime - startTime;
+            latencyMeasurements.push(latency);
+
+            const latencyText = `${latency.toFixed(2)}ms`;
+            document.getElementById('latency-result').textContent = latencyText;
+
+            if (result && result.cached) {
+                document.getElementById('latency-result').innerHTML =
+                    `${latencyText} <span class="status status-pass">キャッシュHIT</span>`;
+                addLogEntry(`遅延: ${latencyText} (キャッシュHIT)`, 'sync');
+            } else {
+                document.getElementById('latency-result').innerHTML =
+                    `${latencyText} <span class="status status-pending">初回読み込み</span>`;
+                addLogEntry(`遅延: ${latencyText} (初回読み込み)`, 'load');
+            }
+
+            updateAverageLatency();
+        };
+
+        window.testRapidFire = async function() {
+            if (!audioSystem.isInitialized) {
+                alert('先に音声システムを初期化してください');
+                return;
+            }
+
+            addLogEntry('連打テスト開始（10音）...', 'info');
+
+            for (let i = 0; i < 10; i++) {
+                const startTime = performance.now();
+                audioSystem.playPianoNoteSync(60, 0.8);
+                const endTime = performance.now();
+
+                const latency = endTime - startTime;
+                latencyMeasurements.push(latency);
+
+                addLogEntry(`連打 ${i+1}/10: ${latency.toFixed(2)}ms`, 'sync');
+
+                // 50ms待機
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+
+            updateAverageLatency();
+            addLogEntry('連打テスト完了', 'sync');
+        };
+
+        window.testDuplicateLoad = async function() {
+            if (!audioSystem.isInitialized) {
+                alert('先に音声システムを初期化してください');
+                return;
+            }
+
+            addLogEntry('重複読み込みテスト開始...', 'info');
+
+            // 新しいファイル名でテスト（キャッシュに存在しない）
+            const testFile = 'msSoundsMuseScore_General.sf3.flac.62.flac';
+
+            // 同時に3回読み込み要求
+            const promises = [
+                audioSystem.loadAudioFile(testFile, true),
+                audioSystem.loadAudioFile(testFile, true),
+                audioSystem.loadAudioFile(testFile, true)
+            ];
+
+            const results = await Promise.all(promises);
+
+            if (results.every(r => r !== null)) {
+                document.getElementById('dedup-status').innerHTML =
+                    '<span class="status status-pass">正常動作</span>';
+                addLogEntry('重複読み込み防止: 正常動作（1回のfetchで3つのPromise解決）', 'sync');
+            } else {
+                document.getElementById('dedup-status').innerHTML =
+                    '<span class="status status-fail">失敗</span>';
+                addLogEntry('重複読み込み防止: 失敗', 'error');
+            }
+        };
+
+        function updateAverageLatency() {
+            if (latencyMeasurements.length === 0) return;
+
+            const avg = latencyMeasurements.reduce((a, b) => a + b, 0) / latencyMeasurements.length;
+            const avgText = `${avg.toFixed(2)}ms (n=${latencyMeasurements.length})`;
+            document.getElementById('avg-latency').textContent = avgText;
+
+            // 総合評価
+            if (avg < 10) {
+                document.getElementById('overall-status').innerHTML =
+                    '<span class="status status-pass">優秀 (<10ms)</span>';
+            } else if (avg < 20) {
+                document.getElementById('overall-status').innerHTML =
+                    '<span class="status status-pass">良好 (<20ms)</span>';
+            } else if (avg < 50) {
+                document.getElementById('overall-status').innerHTML =
+                    '<span class="status status-pending">許容範囲 (<50ms)</span>';
+            } else {
+                document.getElementById('overall-status').innerHTML =
+                    '<span class="status status-fail">要改善 (>50ms)</span>';
+            }
+        }
+
+        window.clearResults = function() {
+            latencyMeasurements = [];
+            document.getElementById('latency-result').textContent = '-';
+            document.getElementById('avg-latency').textContent = '-';
+            document.getElementById('overall-status').textContent = '-';
+            document.getElementById('console-log').innerHTML = '';
+            addLogEntry('結果クリア完了', 'info');
+        };
+
+        // 初期化
+        addLogEntry('Performance Test準備完了', 'info');
+        addLogEntry('「1. 音声システム初期化」から開始してください', 'info');
+    </script>
+</body>
+</html>

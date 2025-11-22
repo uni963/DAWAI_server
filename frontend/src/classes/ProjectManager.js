@@ -762,6 +762,40 @@ class ProjectManager {
     return true
   }
 
+  /**
+   * タブを閉じる (トラックは削除せず、タブのみクローズ)
+   * @param {string} tabId - 閉じるタブのID
+   * @returns {boolean} 成功/失敗
+   */
+  closeTab(tabId) {
+    if (!this.currentProject) return false
+
+    // Arrangementタブは閉じられない
+    if (tabId === 'arrangement') {
+      console.log('⚠️ Arrangementタブは閉じられません')
+      return false
+    }
+
+    // タブが存在するか確認
+    const tabIndex = this.currentProject.tabs.findIndex(tab => tab.id === tabId)
+    if (tabIndex === -1) {
+      console.log('⚠️ タブが見つかりません:', tabId)
+      return false
+    }
+
+    // タブを削除
+    this.currentProject.tabs = this.currentProject.tabs.filter(tab => tab.id !== tabId)
+
+    // アクティブタブが閉じられた場合、Arrangementタブに切り替え
+    if (this.currentProject.activeTab === tabId) {
+      this.currentProject.activeTab = 'arrangement'
+      console.log('🔄 アクティブタブをArrangementに切り替えました')
+    }
+
+    console.log('✅ タブクローズ成功:', tabId)
+    return true
+  }
+
   // タブを削除
   removeTab(tabId) {
     if (!this.currentProject) return false

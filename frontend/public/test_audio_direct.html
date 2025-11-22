@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>音声ファイル直接アクセステスト</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-result { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .success { background-color: #d4edda; }
+        .error { background-color: #f8d7da; }
+        .warning { background-color: #fff3cd; }
+    </style>
+</head>
+<body>
+    <h1>🔍 音声ファイル直接アクセステスト</h1>
+    <p>問題のあるピアノサンプルファイルの直接URL確認</p>
+
+    <div id="results"></div>
+    <button onclick="runTests()">テスト実行</button>
+
+    <script>
+        const problemFiles = [
+            'Piano MF G#4(R).wav',
+            'Piano MF C#5(R).wav',
+            'Piano MF D#5(R).wav'
+        ];
+
+        const workingFiles = [
+            'Piano MF G#4(L).wav',
+            'Piano MF C#5(L).wav',
+            'Piano MF D#5(L).wav'
+        ];
+
+        async function testFile(filename) {
+            const baseUrl = '/sounds/MuseScore_General/samples/piano/';
+            const encodedUrl = baseUrl + encodeURIComponent(filename);
+            const directUrl = baseUrl + filename;
+
+            const result = {
+                filename: filename,
+                encodedUrl: encodedUrl,
+                directUrl: directUrl,
+                encodedStatus: null,
+                directStatus: null,
+                encodedContentType: null,
+                directContentType: null,
+                encodedSize: null,
+                directSize: null
+            };
+
+            // エンコードされたURL
+            try {
+                const response1 = await fetch(encodedUrl);
+                result.encodedStatus = response1.status;
+                result.encodedContentType = response1.headers.get('content-type');
+                result.encodedSize = response1.headers.get('content-length');
+                console.log(`🔍 [ENCODED] ${filename} -> Status: ${response1.status}, Type: ${result.encodedContentType}, Size: ${result.encodedSize}`);
+            } catch (error) {
+                result.encodedStatus = `Error: ${error.message}`;
+                console.error(`❌ [ENCODED] ${filename} -> ${error.message}`);
+            }
+
+            // 直接URL
+            try {
+                const response2 = await fetch(directUrl);
+                result.directStatus = response2.status;
+                result.directContentType = response2.headers.get('content-type');
+                result.directSize = response2.headers.get('content-length');
+                console.log(`🔍 [DIRECT] ${filename} -> Status: ${response2.status}, Type: ${result.directContentType}, Size: ${result.directSize}`);
+            } catch (error) {
+                result.directStatus = `Error: ${error.message}`;
+                console.error(`❌ [DIRECT] ${filename} -> ${error.message}`);
+            }
+
+            return result;
+        }
+
+        async function runTests() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<p>テスト実行中...</p>';
+
+            console.log('🎹 [AUDIO_TEST] =================================');
+            console.log('🎹 [AUDIO_TEST] 音声ファイル直接アクセステスト開始');
+            console.log('🎹 [AUDIO_TEST] =================================');
+
+            const allFiles = [...problemFiles, ...workingFiles];
+            const results = [];
+
+            for (const file of allFiles) {
+                const result = await testFile(file);
+                results.push(result);
+            }
+
+            // 結果表示
+            let html = '<h2>テスト結果</h2>';
+
+            html += '<h3>❌ 問題のあるファイル</h3>';
+            problemFiles.forEach(file => {
+                const result = results.find(r => r.filename === file);
+                const cssClass = (result.encodedStatus === 200 && result.encodedContentType?.includes('audio')) ? 'success' : 'error';
+                html += `<div class="test-result ${cssClass}">
+                    <strong>${file}</strong><br>
+                    エンコード URL: ${result.encodedStatus} | ${result.encodedContentType} | ${result.encodedSize} bytes<br>
+                    直接 URL: ${result.directStatus} | ${result.directContentType} | ${result.directSize} bytes<br>
+                    <small>エンコード: ${result.encodedUrl}</small><br>
+                    <small>直接: ${result.directUrl}</small>
+                </div>`;
+            });
+
+            html += '<h3>✅ 正常なファイル（比較用）</h3>';
+            workingFiles.forEach(file => {
+                const result = results.find(r => r.filename === file);
+                const cssClass = (result.encodedStatus === 200 && result.encodedContentType?.includes('audio')) ? 'success' : 'warning';
+                html += `<div class="test-result ${cssClass}">
+                    <strong>${file}</strong><br>
+                    エンコード URL: ${result.encodedStatus} | ${result.encodedContentType} | ${result.encodedSize} bytes<br>
+                    直接 URL: ${result.directStatus} | ${result.directContentType} | ${result.directSize} bytes
+                </div>`;
+            });
+
+            resultsDiv.innerHTML = html;
+
+            console.log('🎹 [AUDIO_TEST] =================================');
+            console.log('🎹 [AUDIO_TEST] テスト完了 - 結果をブラウザで確認');
+            console.log('🎹 [AUDIO_TEST] =================================');
+        }
+
+        // ページ読み込み時にも確認
+        window.addEventListener('load', () => {
+            console.log('🎹 [AUDIO_TEST] テストページが読み込まれました');
+            console.log('🎹 [AUDIO_TEST] ブラウザで http://localhost:5173/test_audio_direct.html にアクセス');
+            console.log('🎹 [AUDIO_TEST] 「テスト実行」ボタンを押してください');
+        });
+    </script>
+</body>
+</html>

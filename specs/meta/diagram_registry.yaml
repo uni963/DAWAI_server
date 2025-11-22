@@ -99,6 +99,20 @@ diagrams:
           - frontend/src/components/AIassistant/
         sync_status: ✅
 
+      development_tools_detail:
+        path: requirements/functional/L2_development_tools/index.md
+        title: "構造化デバッグシステム"
+        type: architecture
+        parent: functional_requirements/L1/requirements_overview
+        implementation_refs:
+          - frontend/src/hooks/useDevTools.js
+          - frontend/src/utils/performanceMonitor.js
+          - frontend/src/utils/logger.js
+          - frontend/src/utils/frameRateMonitor.js
+          - frontend/src/utils/virtualization.js
+          - frontend/src/utils/cacheManager.js
+        sync_status: ✅
+
   # データフロー図
   data_flows:
     L1:

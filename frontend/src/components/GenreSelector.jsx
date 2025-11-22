@@ -306,18 +306,6 @@ const GenreSelector = ({
                     </div>
                   )}
 
-                  {/* 新規作成ボタン */}
-                  <div className="pt-2 border-t border-gray-100">
-                    <button
-                      onClick={() => {
-                        handleGenreSelect(genre);
-                        if (onClose) onClose();
-                      }}
-                      className="w-full px-4 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition-colors"
-                    >
-                      🎵 このジャンルで新規作成
-                    </button>
-                  </div>
                 </div>
               </div>
             )}

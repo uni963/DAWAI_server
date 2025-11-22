@@ -46,6 +46,7 @@ const PlaybackControls = ({
           <SkipBack className="h-4 w-4" />
         </Button>
         <Button
+          data-tutorial="play-button"
           onClick={() => {
             console.log('🎵 PlaybackControls: Play/Pause button clicked, isPlaying:', isPlaying)
 
@@ -66,6 +67,8 @@ const PlaybackControls = ({
             } else {
               console.log('🎸 [Bass Track Debug] → Calling onPlay()')
               onPlay()
+              // チュートリアル用イベント発火
+              window.dispatchEvent(new CustomEvent('tutorial:play'))
             }
           }}
           variant="ghost"

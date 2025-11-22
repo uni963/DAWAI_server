@@ -760,12 +760,34 @@ class MagentaGhostTextEngine {
       })
     }
 
+    // 🔧 CRITICAL FIX: フレーズセット生成後にセッション作成（アンロック状態）
+    this.currentPhraseSession = {
+      id: `phrase-sets-${Date.now()}`,
+      notes: phraseSets[0] || [],  // 最初のセットをデフォルトに設定
+      startTime: Date.now(),
+      baseTime: baseTime,
+      locked: false,  // 🔓 v2.0.0では即座にアンロック状態で作成
+      approvedCount: 0,
+      nextPhraseIndex: 0,
+      totalCount: (phraseSets[0] || []).length,
+      phraseSets: phraseSets,  // 🆕 v2.0.0: 全フレーズセットを保持
+      selectedSetIndex: 0,
+      createdAt: Date.now()
+    }
+
+    console.log('✅ [PHRASE_SESSION_UNLOCKED] v2.0.0セッション作成（アンロック）:', {
+      sessionId: this.currentPhraseSession.id,
+      locked: this.currentPhraseSession.locked,
+      phraseSetsCount: phraseSets.length,
+      defaultSetLength: this.currentPhraseSession.notes.length
+    })
+
     // イベント送信: 'phrase-sets-generated'
     const notificationData = {
       phraseSets: phraseSets,
       selectedSetIndex: 0,  // デフォルトで最初のセットを選択
       baseTime: baseTime,
-      sessionId: `phrase-sets-${Date.now()}`
+      sessionId: this.currentPhraseSession.id
     }
 
     console.log('📤 [PHRASE_SETS_SEND] phrase-sets-generatedイベント送信:', notificationData)

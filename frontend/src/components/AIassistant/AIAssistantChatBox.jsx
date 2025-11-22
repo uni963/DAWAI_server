@@ -204,11 +204,14 @@ const AIAssistantChatBox = ({
       timestamp: new Date().toISOString()
     };
     addMessageToCurrentSection(userMessage);
-    
+
+    // チュートリアル用イベント発火: AIにメッセージを送信した
+    window.dispatchEvent(new CustomEvent('tutorial:ai-message-sent'));
+
     // ストリーミング状態をリセット
     setStreamingMessage(null);
     setStreamingPhase(null);
-    
+
     const currentMessage = newMessage;
     setNewMessage("");
 

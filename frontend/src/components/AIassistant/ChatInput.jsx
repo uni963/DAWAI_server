@@ -43,7 +43,8 @@ const ChatInput = ({
           autoCorrect="off"
           autoCapitalize="off"
           data-testid="chat-input"
-          style={{ 
+          data-tutorial="ai-chat-input"
+          style={{
             fontFamily: 'inherit',
             lineHeight: '1.4',
             wordBreak: 'break-word'

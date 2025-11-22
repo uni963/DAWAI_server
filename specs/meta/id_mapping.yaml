@@ -220,6 +220,49 @@ functional_requirements:
     status: "implemented"
     priority: "medium"
 
+  # 開発支援機能
+  FR-DEBUG-001:
+    title: "統合デバッグツール初期化 (useDevTools)"
+    description: "開発環境でのデバッグツール一括初期化・グローバル公開"
+    implementation: "frontend/src/hooks/useDevTools.js"
+    status: "implemented"
+    priority: "high"
+
+  FR-DEBUG-002:
+    title: "パフォーマンス監視 (PerformanceMonitor)"
+    description: "処理時間計測・メトリクス収集・遅延検出"
+    implementation: "frontend/src/utils/performanceMonitor.js"
+    status: "implemented"
+    priority: "high"
+
+  FR-DEBUG-003:
+    title: "構造化ロガー (Logger)"
+    description: "環境適応型構造化ロギングシステム"
+    implementation: "frontend/src/utils/logger.js"
+    status: "implemented"
+    priority: "high"
+
+  FR-DEBUG-004:
+    title: "フレームレート監視 (FrameRateMonitor)"
+    description: "リアルタイムFPS監視・低FPS検出"
+    implementation: "frontend/src/utils/frameRateMonitor.js"
+    status: "implemented"
+    priority: "medium"
+
+  FR-DEBUG-005:
+    title: "UI仮想化管理 (VirtualizationManager)"
+    description: "大規模データセット表示時の最適化"
+    implementation: "frontend/src/utils/virtualization.js"
+    status: "implemented"
+    priority: "high"
+
+  FR-DEBUG-006:
+    title: "キャッシュ管理 (CacheManager)"
+    description: "ブラウザストレージの効率的管理・自動クリーンアップ"
+    implementation: "frontend/src/utils/cacheManager.js"
+    status: "implemented"
+    priority: "medium"
+
 # 非機能要件ID定義
 non_functional_requirements:
   NFR-PERF-001:
@@ -373,6 +416,43 @@ traceability:
     implementation: ["backend/ai_agent/main.py"]
     tests: [TC-SEC-001]
 
+  # デバッグシステムのトレーサビリティ
+  FR-DEBUG-001:
+    architecture: [LA-L2-FRONTEND-001]
+    design: [DG-ARCH-L2-DEBUG-SYSTEM]
+    implementation: ["frontend/src/hooks/useDevTools.js"]
+    tests: []
+
+  FR-DEBUG-002:
+    architecture: [LA-L2-FRONTEND-001]
+    design: [DG-ARCH-L2-DEBUG-SYSTEM]
+    implementation: ["frontend/src/utils/performanceMonitor.js"]
+    tests: []
+
+  FR-DEBUG-003:
+    architecture: [LA-L2-FRONTEND-001]
+    design: [DG-ARCH-L2-DEBUG-SYSTEM]
+    implementation: ["frontend/src/utils/logger.js"]
+    tests: []
+
+  FR-DEBUG-004:
+    architecture: [LA-L2-FRONTEND-001]
+    design: [DG-ARCH-L2-DEBUG-SYSTEM]
+    implementation: ["frontend/src/utils/frameRateMonitor.js"]
+    tests: []
+
+  FR-DEBUG-005:
+    architecture: [LA-L2-FRONTEND-001]
+    design: [DG-ARCH-L2-DEBUG-SYSTEM]
+    implementation: ["frontend/src/utils/virtualization.js"]
+    tests: []
+
+  FR-DEBUG-006:
+    architecture: [LA-L2-FRONTEND-001]
+    design: [DG-ARCH-L2-DEBUG-SYSTEM]
+    implementation: ["frontend/src/utils/cacheManager.js"]
+    tests: []
+
 # 実装同期ステータス
 implementation_sync:
   last_sync_check: "2025-01-22T10:00:00Z"
@@ -428,16 +508,16 @@ implementation_sync:
 
 # メタデータ
 metadata:
-  total_requirements: 20
-  implemented_requirements: 20
+  total_requirements: 26
+  implemented_requirements: 26
   implementation_rate: "100%"
 
   critical_requirements: 4
-  high_requirements: 10
-  medium_requirements: 6
+  high_requirements: 14
+  medium_requirements: 8
 
-  last_major_update: "2025-10-11"
-  next_review_date: "2025-11-10"
+  last_major_update: "2025-11-17"
+  next_review_date: "2025-12-17"
 
   refactoring_status:
     pr_6_completed: true

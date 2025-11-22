@@ -629,3 +629,122 @@ body {
   }
 }
 
+/* ===================================== */
+/* チュートリアルスタイル */
+/* ===================================== */
+
+/* 半透明背景オーバーレイ（非ブロッキング） */
+.tutorial-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.1);
+  z-index: 9998;
+  pointer-events: none; /* 背景クリック可能 */
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+/* チュートリアルポップアップ */
+.tutorial-popup {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  padding: 20px;
+  max-width: 320px;
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.15),
+    0 0 0 1px rgba(0, 0, 0, 0.05);
+  animation: slideIn 0.3s ease-out;
+  pointer-events: auto; /* ポップアップはクリック可能 */
+}
+
+/* ハイライト効果 */
+.tutorial-highlight {
+  position: relative;
+  z-index: 9999;
+  box-shadow:
+    0 0 0 4px rgba(255, 215, 0, 0.5),
+    0 4px 12px rgba(255, 215, 0, 0.3);
+  border-radius: 8px;
+  animation: pulse 1.5s ease-in-out infinite;
+  pointer-events: auto; /* ハイライト要素はクリック可能 */
+}
+
+/* 矢印（ターゲット要素への接続線） */
+.tutorial-arrow-top,
+.tutorial-arrow-bottom,
+.tutorial-arrow-left,
+.tutorial-arrow-right {
+  position: absolute;
+  width: 0;
+  height: 0;
+  border-style: solid;
+}
+
+.tutorial-arrow-top {
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 10px 10px 0 10px;
+  border-color: rgba(255, 255, 255, 0.95) transparent transparent transparent;
+}
+
+.tutorial-arrow-bottom {
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 0 10px 10px 10px;
+  border-color: transparent transparent rgba(255, 255, 255, 0.95) transparent;
+}
+
+.tutorial-arrow-left {
+  right: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-width: 10px 0 10px 10px;
+  border-color: transparent transparent transparent rgba(255, 255, 255, 0.95);
+}
+
+.tutorial-arrow-right {
+  left: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-width: 10px 10px 10px 0;
+  border-color: transparent rgba(255, 255, 255, 0.95) transparent transparent;
+}
+
+/* アニメーション */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 4px rgba(255, 215, 0, 0.5),
+      0 4px 12px rgba(255, 215, 0, 0.3);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow:
+      0 0 0 8px rgba(255, 215, 0, 0.3),
+      0 6px 16px rgba(255, 215, 0, 0.4);
+    transform: scale(1.02);
+  }
+}
+

@@ -35,6 +35,7 @@ import useMidiEditorState from '../hooks/useMidiEditorState.js'
 import useGhostText from '../hooks/useGhostText.js'
 import useInstrumentSettings from '../hooks/useInstrumentSettings.js'
 import InstrumentSettingsPanel from './MIDIEditor/InstrumentSettingsPanel.jsx'
+import AudioInitializationProgress from './ui/AudioInitializationProgress.jsx'
 import { getMidiNoteFromKeyCode, calculateOptimalOctave } from '../utils/keyboardShortcuts.js'
 
 
@@ -111,6 +112,7 @@ const EnhancedMidiEditor = ({
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
     }
   }, [trackId, trackName, isActive])
+
 
   // 状態管理フックの使用
   const state = useMidiEditorState(trackId)
@@ -257,7 +259,52 @@ const EnhancedMidiEditor = ({
     ghostTextEnabled: ghostText?.ghostTextEnabled,
     phraseSetsLength: ghostText?.phraseSets?.length || 0
   })
-  
+
+  // 🔧 [FIX] hasPredictionsの計算をuseMemoで安定化 - window.ghostTextHook変更対応
+  const hasPredictions = useMemo(() => {
+    // useGhostTextフックの同期問題を回避し、window.ghostTextHookを直接参照
+    const windowHook = window.ghostTextHook;
+
+    let hasGhost = false;
+    let hasPhrase = false;
+
+    if (windowHook) {
+      // window.ghostTextHookのデータを使用
+      hasGhost = (windowHook.ghostPredictions?.length || 0) > 0;
+      hasPhrase = (windowHook.phraseSets?.length || 0) > 0 &&
+                 (windowHook.phraseSets[windowHook.selectedPhraseSetIndex || 0]?.length || 0) > 0;
+    } else {
+      // フォールバック: ghostTextフックのデータを使用
+      hasGhost = (ghostText.ghostPredictions?.length || 0) > 0;
+      hasPhrase = (ghostText.phraseSets?.length || 0) > 0 &&
+                 (ghostText.phraseSets[ghostText.selectedPhraseSetIndex || 0]?.length || 0) > 0;
+    }
+
+    const finalResult = hasGhost || hasPhrase;
+
+    // デバッグログ
+    console.log('🔍 [MEMO_FIXED] hasPredictions計算（フレーズ切り替え対応版）:', {
+      'windowHook_exists': !!windowHook,
+      'windowHook.ghostPredictions?.length': windowHook?.ghostPredictions?.length || 0,
+      'windowHook.phraseSets?.length': windowHook?.phraseSets?.length || 0,
+      'windowHook.selectedPhraseSetIndex': windowHook?.selectedPhraseSetIndex || 0,
+      hasGhost,
+      hasPhrase,
+      'final_result': finalResult
+    })
+
+    return finalResult;
+  }, [
+    ghostText.ghostPredictions,
+    ghostText.phraseSets,
+    ghostText.selectedPhraseSetIndex,
+    // 🔧 [CRITICAL_FIX] フレーズ切り替えボタンバグ修正
+    // window.ghostTextHookの変更も検知するため、
+    // ghostTextの更新をトリガーとして使用
+    ghostText.phraseLocked,  // フレーズ切り替え時に変更される
+    ghostText.phraseSessionId  // フレーズセッション変更時に変更される
+  ])
+
   // 音色設定フックの使用
   const instrumentSettings = useInstrumentSettings(trackId)
 
@@ -550,6 +597,8 @@ const EnhancedMidiEditor = ({
             console.log('⬇️ [KEYBOARD_PHRASE_SET] ArrowDown: フレーズセットを次に切り替え')
             ghostText.selectNextPhraseSet()
           }
+          // チュートリアル用イベント発火: フレーズが切り替えられた
+          window.dispatchEvent(new CustomEvent('tutorial:phrase-switched'))
         }
         // フォールバック: v1.0.0互換 - フレーズロック中はフレーズ候補を優先
         else if (ghostText.phraseLocked && ghostText.phraseNotes && ghostText.phraseNotes.length > 0) {
@@ -616,12 +665,40 @@ const EnhancedMidiEditor = ({
       // Q/Rキーでオクターブ調整
       if (event.code === 'KeyQ') {
         event.preventDefault(); // デフォルトの動作を防ぐ
-        setManualOctaveOffset(prev => Math.max(-2, prev - 1))
+        console.log('🔍 [DEBUG_SYSTEM] =================================');
+        console.log('🔍 [DEBUG_SYSTEM] Qキー（オクターブ下げる）検出');
+        console.log('🔍 [DEBUG_SYSTEM] 現在のmanualOctaveOffset:', manualOctaveOffset);
+        console.log('🔍 [DEBUG_SYSTEM] =================================');
+        setManualOctaveOffset(prev => {
+          const newValue = Math.max(-3, prev - 1);
+          console.log('🔍 [DEBUG_SYSTEM] オクターブ調整結果:', {
+            old: prev,
+            new: newValue,
+            direction: 'down',
+            limit: '[-3, +4]',
+            resultingOctave: 4 + newValue
+          });
+          return newValue;
+        }); // オクターブ1まで対応（-3拡張）
         return
       }
       if (event.code === 'KeyR') {
         event.preventDefault(); // デフォルトの動作を防ぐ
-        setManualOctaveOffset(prev => Math.min(2, prev + 1))
+        console.log('🔍 [DEBUG_SYSTEM] =================================');
+        console.log('🔍 [DEBUG_SYSTEM] Rキー（オクターブ上げる）検出');
+        console.log('🔍 [DEBUG_SYSTEM] 現在のmanualOctaveOffset:', manualOctaveOffset);
+        console.log('🔍 [DEBUG_SYSTEM] =================================');
+        setManualOctaveOffset(prev => {
+          const newValue = Math.min(4, prev + 1);
+          console.log('🔍 [DEBUG_SYSTEM] オクターブ調整結果:', {
+            old: prev,
+            new: newValue,
+            direction: 'up',
+            limit: '[-3, +4]',
+            resultingOctave: 4 + newValue
+          });
+          return newValue;
+        }); // オクターブ8まで対応（+4拡張）
         return
       }
       
@@ -632,6 +709,12 @@ const EnhancedMidiEditor = ({
       if (activeKeysRef.current.has(event.code)) return
 
       // MIDIノートに対応するキーの場合のみ処理（refから取得）
+      console.log('🔍 [DEBUG_SYSTEM] =================================');
+      console.log('🔍 [DEBUG_SYSTEM] キーボード入力詳細デバッグ開始');
+      console.log('🔍 [DEBUG_SYSTEM] =================================');
+      console.log('🔍 [DEBUG_SYSTEM] 入力キー:', event.code);
+      console.log('🔍 [DEBUG_SYSTEM] 現在のmanualOctaveOffset:', manualOctaveOffset);
+
       const octave = calculateOptimalOctave(
         stateRef.current.scrollY,
         stateRef.current.currentTime,
@@ -640,8 +723,24 @@ const EnhancedMidiEditor = ({
         20,
         manualOctaveOffset
       )
-      
+
+      console.log('🔍 [DEBUG_SYSTEM] calculateOptimalOctave結果:', octave);
+      console.log('🔍 [DEBUG_SYSTEM] calculateOptimalOctave引数詳細:', {
+        scrollY: stateRef.current.scrollY,
+        currentTime: stateRef.current.currentTime,
+        octaveRange: [0, 9],
+        totalKeys: 120,
+        gridHeight: 20,
+        manualOctaveOffset: manualOctaveOffset
+      });
+
       const midiNote = getMidiNoteFromKeyCode(event.code, octave)
+
+      console.log('🔍 [DEBUG_SYSTEM] getMidiNoteFromKeyCode結果:', midiNote);
+      console.log('🔍 [DEBUG_SYSTEM] getMidiNoteFromKeyCode引数:', {
+        keyCode: event.code,
+        octave: octave
+      });
 
       if (midiNote === null) {
         console.log(`🎹 キー ${event.code} はMIDIノートに対応していません`);
@@ -659,6 +758,17 @@ const EnhancedMidiEditor = ({
 
       // アクティブキーに追加
       setActiveKeys(prev => new Set([...prev, event.code]))
+
+      // 🔍 [ENHANCED_DEBUG] 音声システム詳細チェック
+      console.log('🔍 [ENHANCED_DEBUG] =================================');
+      console.log('🔍 [ENHANCED_DEBUG] 音声システム状態詳細チェック');
+      console.log('🔍 [ENHANCED_DEBUG] =================================');
+      console.log('🔍 [ENHANCED_DEBUG] stateRef.current:', !!stateRef.current);
+      console.log('🔍 [ENHANCED_DEBUG] stateRef.current.audioEnabled:', stateRef.current?.audioEnabled);
+      console.log('🔍 [ENHANCED_DEBUG] audioRef.current:', !!audioRef.current);
+      console.log('🔍 [ENHANCED_DEBUG] audioRef.current type:', typeof audioRef.current);
+      console.log('🔍 [ENHANCED_DEBUG] audioRef.current.playNote:', !!(audioRef.current?.playNote));
+      console.log('🔍 [ENHANCED_DEBUG] 条件チェック結果:', !!(stateRef.current?.audioEnabled && audioRef.current));
 
       // 音を再生（再生中でも常に音を鳴らす）（refから取得）
       if (stateRef.current.audioEnabled && audioRef.current) {
@@ -679,6 +789,9 @@ const EnhancedMidiEditor = ({
         // 音を再生（useMidiAudioを使用）
         const result = audioRef.current.playNote(midiNote, 0.8, 0.25); // useMidiAudioを使用
 
+        // チュートリアル用イベント発火: キーボードで音を鳴らした
+        window.dispatchEvent(new CustomEvent('tutorial:keyboard-play'))
+
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
         console.log(`🎹 [AUDIO_PLAYBACK_DEBUG] playNote() returned:`, result)
         console.log(`🎹 [AUDIO_PLAYBACK_DEBUG] Result type:`, typeof result)
@@ -695,7 +808,21 @@ const EnhancedMidiEditor = ({
           })
         }
       } else {
-        console.log(`🎹 Audio not enabled or audio not available. audioEnabled: ${stateRef.current.audioEnabled}, audio: ${!!audioRef.current}`)
+        console.log('🚨 [ENHANCED_DEBUG] =================================');
+        console.log('🚨 [ENHANCED_DEBUG] 音声再生処理がスキップされました');
+        console.log('🚨 [ENHANCED_DEBUG] =================================');
+        console.log(`🚨 [ENHANCED_DEBUG] audioEnabled: ${stateRef.current?.audioEnabled}`);
+        console.log(`🚨 [ENHANCED_DEBUG] audioRef exists: ${!!audioRef.current}`);
+        console.log(`🚨 [ENHANCED_DEBUG] stateRef exists: ${!!stateRef.current}`);
+        console.log('🚨 [ENHANCED_DEBUG] 詳細理由:');
+        if (!stateRef.current) {
+          console.log('🚨 [ENHANCED_DEBUG] - stateRef.current が null/undefined');
+        } else if (!stateRef.current.audioEnabled) {
+          console.log('🚨 [ENHANCED_DEBUG] - audioEnabled が false');
+        } else if (!audioRef.current) {
+          console.log('🚨 [ENHANCED_DEBUG] - audioRef.current が null/undefined');
+        }
+        console.log('🚨 [ENHANCED_DEBUG] =================================');
       }
 
       // キーボード入力でのノート作成（再生中・停止中両方で動作）（refから取得）
@@ -1571,7 +1698,28 @@ const EnhancedMidiEditor = ({
   const animationFrameRef = useRef(null)
   const lastGhostPredictionsRef = useRef([])
   const longPressTimerRef = useRef(null)
-  
+
+  // 🎯 [KEYBOARD_FIX] Piano Track viewがアクティブになった時にキャンバスにフォーカス移動
+  useEffect(() => {
+    if (isActive && dynamicCanvasRef?.current) {
+      console.log('🎹 [FOCUS_FIX] Piano Track viewがアクティブ - キャンバスにフォーカスを移動します')
+
+      // 短い遅延を入れてDOM更新完了を待つ
+      setTimeout(() => {
+        const canvas = dynamicCanvasRef.current
+        if (canvas) {
+          canvas.tabIndex = -1 // キャンバスをフォーカス可能にする
+          canvas.focus()
+          console.log('✅ [FOCUS_FIX] キャンバスフォーカス設定完了:', {
+            canvasElement: canvas.tagName,
+            focused: document.activeElement === canvas,
+            timestamp: Date.now()
+          })
+        }
+      }, 100)
+    }
+  }, [isActive, dynamicCanvasRef])
+
   // 再生関連のRefs
   const playbackRef = useRef(null)
   const metronomeRef = useRef(null)
@@ -2485,7 +2633,10 @@ const EnhancedMidiEditor = ({
     
     // 親コンポーネントに即座に通知
     if (onNoteAdd) onNoteAdd(newNote)
-    
+
+    // チュートリアル用イベント発火: ノートが追加された
+    window.dispatchEvent(new CustomEvent('tutorial:note-added'))
+
     // 親コンポーネントにMIDIデータ更新を通知
     setTimeout(() => {
       if (onMidiDataUpdate) {
@@ -2701,6 +2852,11 @@ const EnhancedMidiEditor = ({
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
     console.log('🎲 [DIVERSITY_DEBUG] acceptNextGhostNote completed')
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+
+    // チュートリアル用イベント発火: Ghost Textが承認された
+    if (result && result.success) {
+      window.dispatchEvent(new CustomEvent('tutorial:completion-accepted'))
+    }
   }, [ghostText, state.notes, addNote, weightedRandomSelect])
 
   // ノート削除関数
@@ -2895,6 +3051,13 @@ const EnhancedMidiEditor = ({
 
           if (result && result.success) {
             console.log('🎯 Phrase note approved successfully')
+
+            // 🎓 [TUTORIAL_FIX] チュートリアル実行中は承認イベントを発火
+            const isTutorialActive = !localStorage.getItem('dawai_tutorial_completed')
+            if (isTutorialActive) {
+              console.log('🎓 [TUTORIAL_FIX] チュートリアル実行中 - tutorial:completion-acceptedイベントを発火 (Phrase)')
+              window.dispatchEvent(new CustomEvent('tutorial:completion-accepted'))
+            }
           } else {
             console.log('⚠️ Failed to approve phrase note:', result)
           }
@@ -2908,6 +3071,13 @@ const EnhancedMidiEditor = ({
           const result = ghostText.acceptNextGhostNote(state.notes, addNote)
           if (result && result.success) {
             console.log('🎯 Ghost note approved successfully')
+
+            // 🎓 [TUTORIAL_FIX] チュートリアル実行中は承認イベントを発火
+            const isTutorialActive = !localStorage.getItem('dawai_tutorial_completed')
+            if (isTutorialActive) {
+              console.log('🎓 [TUTORIAL_FIX] チュートリアル実行中 - tutorial:completion-acceptedイベントを発火 (Ghost)')
+              window.dispatchEvent(new CustomEvent('tutorial:completion-accepted'))
+            }
           } else {
             console.log('⚠️ Failed to approve ghost note:', result)
           }
@@ -3156,12 +3326,16 @@ const EnhancedMidiEditor = ({
   // 選択されたノートをコピー
 
   return (
-    <div 
+    <div
       className="flex flex-col bg-gray-900 text-white midi-editor-container h-full"
-      style={{ 
+      data-tutorial="piano-roll"
+      style={{
         overscrollBehavior: 'none'
       }}
     >
+      {/* Piano track専用: 初期化進捗表示 */}
+      {trackType === 'piano' && <AudioInitializationProgress />}
+
       {/* ツールバー */}
       {!hideHeader && (
         <MidiEditorToolbar
@@ -3351,50 +3525,15 @@ const EnhancedMidiEditor = ({
           console.log('✅ [SHIFT_TAB_EMULATION] Shift+TABキーエミュレーション完了')
         }}
         onCyclePhraseSet={() => {
-          console.log('🔄 [TOOLBAR] フレーズ切り替えボタン - 上矢印キーイベントをトリガー')
-          // 上矢印キーと同じフレーズセット切り替えを実行
+          console.log('🔄 [TOOLBAR] フレーズ切り替えボタン - フレーズセット切り替えをトリガー')
+          // 上下キーと同じフレーズセット切り替えを実行
           if (ghostText.selectNextPhraseSet) {
             ghostText.selectNextPhraseSet()
           }
+          // チュートリアルイベント発火
+          window.dispatchEvent(new CustomEvent('tutorial:phrase-switched'))
         }}
-        hasPredictions={(() => {
-          // 🚨 [CRITICAL_FIX] useGhostTextフックの同期問題を回避し、window.ghostTextHookを直接参照
-
-          // フォールバック: window.ghostTextHookのデータを使用
-          const windowHook = window.ghostTextHook;
-
-          let hasGhost = false;
-          let hasPhrase = false;
-
-          if (windowHook) {
-            // window.ghostTextHookのデータを使用
-            hasGhost = (windowHook.ghostPredictions?.length || 0) > 0;
-            hasPhrase = (windowHook.phraseSets?.length || 0) > 0 &&
-                       (windowHook.phraseSets[windowHook.selectedPhraseSetIndex || 0]?.length || 0) > 0;
-          } else {
-            // フォールバック: ghostTextフックのデータを使用
-            hasGhost = (ghostText.ghostPredictions?.length || 0) > 0;
-            hasPhrase = (ghostText.phraseSets?.length || 0) > 0 &&
-                       (ghostText.phraseSets[ghostText.selectedPhraseSetIndex || 0]?.length || 0) > 0;
-          }
-
-          const finalResult = hasGhost || hasPhrase;
-
-          // 🔧 [DEBUG] 同期状況確認（window.ghostTextHook優先版）
-          console.log('🔍 [SYNC_DEBUG_FIXED] EnhancedMidiEditor hasPredictions 計算 (window.ghostTextHook優先):', {
-            'windowHook_exists': !!windowHook,
-            'windowHook.ghostPredictions?.length': windowHook?.ghostPredictions?.length || 0,
-            'windowHook.phraseSets?.length': windowHook?.phraseSets?.length || 0,
-            'windowHook.selectedPhraseSetIndex': windowHook?.selectedPhraseSetIndex,
-            'ghostText.ghostPredictions?.length': ghostText.ghostPredictions?.length || 0,
-            'ghostText.phraseSets?.length': ghostText.phraseSets?.length || 0,
-            hasGhost,
-            hasPhrase,
-            'final_result': finalResult
-          })
-
-          return finalResult;
-        })()}
+        hasPredictions={hasPredictions}
       />
       )}
 
@@ -3535,6 +3674,10 @@ const EnhancedMidiEditor = ({
               // デフォルトはピアノ音
               await window.unifiedAudioSystem.playPianoNote(pitch, 0.24);
             }
+
+            // チュートリアル用イベント発火: 鍵盤クリックで音を鳴らした
+            console.log('🎹 [TUTORIAL] 鍵盤クリックによるtutorial:keyboard-playイベント発火');
+            window.dispatchEvent(new CustomEvent('tutorial:keyboard-play'));
           }
         }}
       />
